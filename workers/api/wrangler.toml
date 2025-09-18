@@ -9,7 +9,7 @@ SESSION_SECRET = "replace-with-production-secret"
 [[d1_databases]]
 binding = "MAPS_DB"
 database_name = "maps-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "042c8ce4-9fd5-4670-94f3-ba91eda4fa36"
 
 [[r2_buckets]]
 binding = "MAPS_BUCKET"
