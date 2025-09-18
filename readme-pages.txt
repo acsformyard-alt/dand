@@ -18,10 +18,11 @@ Project creation
 
 Environment variables
 ---------------------
-Create the same variables for both **Production** and **Preview** environments:
-- `VITE_API_BASE_URL` → URL to your API Worker route (e.g., `https://dand-api.yourdomain.com`). Include the `/api` prefix.
+1. In the Cloudflare dashboard, navigate to **Workers & Pages → your Pages project → Settings → Environment Variables**.
+2. On the **Production** tab, click **Add variable**, set **Variable name** to `VITE_API_BASE_URL`, and set **Value** to your API Worker URL including the `/api` suffix (e.g., `https://dand-api.yourdomain.com/api`). Save the production environment.
+3. Switch to the **Preview** tab and add the same variable name and value so previews use the identical API base URL. Save the preview environment as well, and redeploy if needed so existing previews pick up the variable.
 
-(Optional) secrets or additional vars can be added through the Pages dashboard as needed.
+Each environment saves independently; make sure both are configured so future deployments inherit the correct settings. (Optional) secrets or additional vars can be added through the Pages dashboard as needed.
 
 Connecting to the Workers backend
 ---------------------------------
