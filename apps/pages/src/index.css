@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+a {
+  @apply text-primary hover:text-primary-light;
+}
+
+button {
+  @apply transition-colors;
+}
+
+body.dark {
+  @apply bg-slate-900 text-slate-100;
+}

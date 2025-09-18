@@ -1,0 +1,103 @@
+{
+  "users": [
+    {
+      "email": "demo@dandmaps.example",
+      "displayName": "Demo DM",
+      "password": "demo-password"
+    }
+  ],
+  "campaigns": [
+    {
+      "name": "Goblin Warrens",
+      "description": "A twisting cave complex filled with mischievous goblins.",
+      "isPublic": true
+    }
+  ],
+  "maps": [
+    {
+      "campaignName": "Goblin Warrens",
+      "name": "Warren Overview",
+      "originalKey": "maps/demo-campaign/demo-map/original.png",
+      "displayKey": "maps/demo-campaign/demo-map/display.png",
+      "width": 2400,
+      "height": 1800
+    }
+  ],
+  "regions": [
+    {
+      "mapName": "Warren Overview",
+      "name": "Entrance Tunnel",
+      "polygon": [
+        {"x": 0.12, "y": 0.18},
+        {"x": 0.18, "y": 0.17},
+        {"x": 0.21, "y": 0.26},
+        {"x": 0.15, "y": 0.28}
+      ],
+      "notes": "Crumbling stone stairs lead into the earth.",
+      "revealOrder": 1
+    },
+    {
+      "mapName": "Warren Overview",
+      "name": "Goblin Market",
+      "polygon": [
+        {"x": 0.42, "y": 0.45},
+        {"x": 0.51, "y": 0.44},
+        {"x": 0.56, "y": 0.52},
+        {"x": 0.48, "y": 0.56},
+        {"x": 0.41, "y": 0.52}
+      ],
+      "notes": "Bartering goblins trade junk and trinkets.",
+      "revealOrder": 2
+    },
+    {
+      "mapName": "Warren Overview",
+      "name": "Boss Lair",
+      "polygon": [
+        {"x": 0.72, "y": 0.22},
+        {"x": 0.8, "y": 0.22},
+        {"x": 0.83, "y": 0.28},
+        {"x": 0.79, "y": 0.34},
+        {"x": 0.71, "y": 0.32}
+      ],
+      "notes": "The goblin boss plans his raids here.",
+      "revealOrder": 3
+    }
+  ],
+  "markers": [
+    {
+      "mapName": "Warren Overview",
+      "label": "Watch Post",
+      "description": "Two goblins keep watch from above.",
+      "iconKey": "assets/demo/marker-watch.png",
+      "x": 0.34,
+      "y": 0.22,
+      "color": "#f97316"
+    },
+    {
+      "mapName": "Warren Overview",
+      "label": "Captured Villager",
+      "description": "A villager tied up near the market.",
+      "iconKey": "assets/demo/marker-villager.png",
+      "x": 0.49,
+      "y": 0.48,
+      "color": "#f43f5e"
+    }
+  ],
+  "sessions": [
+    {
+      "campaignName": "Goblin Warrens",
+      "mapName": "Warren Overview",
+      "name": "Demo Session",
+      "status": "active",
+      "revealedRegions": ["Entrance Tunnel"],
+      "markers": [
+        {
+          "label": "Scout",
+          "x": 0.26,
+          "y": 0.19,
+          "color": "#38bdf8"
+        }
+      ]
+    }
+  ]
+}
