@@ -1,7 +1,7 @@
 name = "dand-api"
 main = "src/index.ts"
 compatibility_date = "2024-04-24"
-usage_model = "standard"
+usage_model = "unbound"
 
 [vars]
 SESSION_SECRET = "replace-with-production-secret"
