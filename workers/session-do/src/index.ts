@@ -1,46 +1,92 @@
-function jsonResponse(data, init = {}) {
+interface JsonResponseInit extends ResponseInit {}
+
+interface SessionMarker {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  color: string;
+  iconKey: string | null;
+  notes: string | null;
+}
+
+interface SessionData {
+  sessionId: string | null;
+  campaignId: string | null;
+  mapId: string | null;
+  hostId: string | null;
+  name: string | null;
+  status: string;
+  revealedRegions: string[];
+  markers: Record<string, SessionMarker>;
+  metadata: Record<string, unknown>;
+  lastUpdated: string;
+}
+
+interface PresenceMeta {
+  id: string;
+  role: string;
+  name: string;
+  connectedAt: string;
+}
+
+interface BroadcastMessage {
+  type: string;
+  payload?: unknown;
+  [key: string]: unknown;
+}
+
+function jsonResponse<T>(data: T, init: JsonResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   return new Response(JSON.stringify(data), {
-    status: init.status || 200,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers || {})
-    }
+    ...init,
+    headers,
   });
 }
 
 export default {
-  async fetch(request) {
+  async fetch(_request: Request): Promise<Response> {
     return new Response('Session Durable Object', { status: 200 });
-  }
+  },
 };
 
 export class SessionHub {
-  constructor(state, env) {
+  private readonly state: DurableObjectState;
+
+  private readonly env: Env;
+
+  private readonly connections = new Map<string, WebSocket>();
+
+  private readonly presence = new Map<string, PresenceMeta>();
+
+  private data: SessionData = {
+    sessionId: null,
+    campaignId: null,
+    mapId: null,
+    hostId: null,
+    name: null,
+    status: 'idle',
+    revealedRegions: [],
+    markers: {},
+    metadata: {},
+    lastUpdated: new Date().toISOString(),
+  };
+
+  constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
-    this.connections = new Map();
-    this.presence = new Map();
-    this.data = {
-      sessionId: null,
-      campaignId: null,
-      mapId: null,
-      hostId: null,
-      name: null,
-      status: 'idle',
-      revealedRegions: [],
-      markers: {},
-      metadata: {},
-      lastUpdated: new Date().toISOString(),
-    };
     this.state.blockConcurrencyWhile(async () => {
-      const stored = await this.state.storage.get('state');
+      const stored = await this.state.storage.get<SessionData>('state');
       if (stored) {
         this.data = stored;
       }
     });
   }
 
-  async fetch(request) {
+  async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.headers.get('Upgrade') === 'websocket') {
       return this.handleWebSocket(request, url);
@@ -60,25 +106,25 @@ export class SessionHub {
     }
   }
 
-  async handleSetup(request) {
-    const body = await request.json();
-    this.data.sessionId = body.sessionId;
-    this.data.campaignId = body.campaignId;
-    this.data.mapId = body.mapId;
-    this.data.hostId = body.hostId;
-    this.data.name = body.name;
+  private async handleSetup(request: Request): Promise<Response> {
+    const body = await request.json() as Record<string, unknown>;
+    this.data.sessionId = (body.sessionId as string) || null;
+    this.data.campaignId = (body.campaignId as string) || null;
+    this.data.mapId = (body.mapId as string) || null;
+    this.data.hostId = (body.hostId as string) || null;
+    this.data.name = (body.name as string) || null;
     this.data.status = 'active';
     this.data.revealedRegions = [];
     this.data.markers = {};
-    this.data.metadata = body.metadata || {};
+    this.data.metadata = (body.metadata as Record<string, unknown>) || {};
     this.data.lastUpdated = new Date().toISOString();
     await this.persist();
     await this.broadcast({ type: 'state', payload: await this.exportState() });
     return jsonResponse({ success: true });
   }
 
-  async handleRestore(request) {
-    const body = await request.json();
+  private async handleRestore(request: Request): Promise<Response> {
+    const body = await request.json() as { state?: Partial<SessionData>; clone?: boolean };
     if (body?.state) {
       this.data = {
         ...this.data,
@@ -98,7 +144,7 @@ export class SessionHub {
     return jsonResponse({ success: true });
   }
 
-  async handleEnd() {
+  private async handleEnd(): Promise<Response> {
     this.data.status = 'ended';
     this.data.lastUpdated = new Date().toISOString();
     await this.persist();
@@ -107,21 +153,22 @@ export class SessionHub {
     return jsonResponse({ success: true });
   }
 
-  async handleWebSocket(request, url) {
+  private async handleWebSocket(request: Request, url: URL): Promise<Response> {
     const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
+    const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
     server.accept();
 
     const connectionId = crypto.randomUUID();
     const role = url.searchParams.get('role') || 'player';
     const name = url.searchParams.get('name') || (role === 'dm' ? 'Dungeon Master' : 'Player');
 
-    const meta = { id: connectionId, role, name, connectedAt: new Date().toISOString() };
+    const meta: PresenceMeta = { id: connectionId, role, name, connectedAt: new Date().toISOString() };
     this.connections.set(connectionId, server);
     this.presence.set(connectionId, meta);
 
     server.addEventListener('message', (event) => {
-      this.handleMessage(connectionId, server, event).catch((err) => {
+      const messageEvent = event as MessageEvent;
+      this.handleMessage(connectionId, server, messageEvent).catch((err) => {
         console.error('Message handling error', err);
         try {
           server.send(JSON.stringify({ type: 'error', error: 'Internal error' }));
@@ -131,17 +178,17 @@ export class SessionHub {
       });
     });
 
-    const cleanup = () => {
+    const cleanup = (): void => {
       this.connections.delete(connectionId);
       this.presence.delete(connectionId);
-      this.broadcastPlayers();
+      void this.broadcastPlayers();
     };
 
     server.addEventListener('close', cleanup);
     server.addEventListener('error', cleanup);
 
     server.send(JSON.stringify({ type: 'state', payload: await this.exportState() }));
-    this.broadcastPlayers();
+    void this.broadcastPlayers();
 
     return new Response(null, {
       status: 101,
@@ -149,10 +196,11 @@ export class SessionHub {
     });
   }
 
-  async handleMessage(connectionId, socket, event) {
-    let data;
+  private async handleMessage(connectionId: string, socket: WebSocket, event: MessageEvent): Promise<void> {
+    const dataRaw = typeof event.data === 'string' ? event.data : '';
+    let data: BroadcastMessage;
     try {
-      data = JSON.parse(event.data);
+      data = JSON.parse(dataRaw) as BroadcastMessage;
     } catch (err) {
       socket.send(JSON.stringify({ type: 'error', error: 'Invalid message' }));
       return;
@@ -160,20 +208,21 @@ export class SessionHub {
 
     switch (data.type) {
       case 'join':
-        if (data.name) {
+        if (typeof (data as any).name === 'string') {
           const meta = this.presence.get(connectionId);
           if (meta) {
-            meta.name = data.name;
-            meta.role = data.role || meta.role;
+            meta.name = (data as any).name;
+            meta.role = (data as any).role || meta.role;
             this.presence.set(connectionId, meta);
-            this.broadcastPlayers();
+            void this.broadcastPlayers();
           }
         }
         socket.send(JSON.stringify({ type: 'state', payload: await this.exportState() }));
         break;
-      case 'revealRegions':
-        if (Array.isArray(data.regionIds)) {
-          const newIds = data.regionIds.filter((id) => !this.data.revealedRegions.includes(id));
+      case 'revealRegions': {
+        const regionIds = Array.isArray((data as any).regionIds) ? (data as any).regionIds as string[] : [];
+        if (regionIds.length) {
+          const newIds = regionIds.filter((id) => !this.data.revealedRegions.includes(id));
           if (newIds.length) {
             this.data.revealedRegions = [...this.data.revealedRegions, ...newIds];
             this.data.lastUpdated = new Date().toISOString();
@@ -182,55 +231,64 @@ export class SessionHub {
           }
         }
         break;
-      case 'hideRegions':
-        if (Array.isArray(data.regionIds)) {
-          const removed = this.data.revealedRegions.filter((id) => !data.regionIds.includes(id));
-          if (removed.length !== this.data.revealedRegions.length) {
-            this.data.revealedRegions = this.data.revealedRegions.filter((id) => !data.regionIds.includes(id));
+      }
+      case 'hideRegions': {
+        const regionIds = Array.isArray((data as any).regionIds) ? (data as any).regionIds as string[] : [];
+        if (regionIds.length) {
+          const remaining = this.data.revealedRegions.filter((id) => !regionIds.includes(id));
+          if (remaining.length !== this.data.revealedRegions.length) {
+            this.data.revealedRegions = remaining;
             this.data.lastUpdated = new Date().toISOString();
             await this.persist();
-            await this.broadcast({ type: 'regionsHidden', payload: { regionIds: data.regionIds } });
+            await this.broadcast({ type: 'regionsHidden', payload: { regionIds } });
           }
         }
         break;
-      case 'placeMarker':
-        if (data.marker && typeof data.marker === 'object') {
-          const markerId = data.marker.id || crypto.randomUUID();
+      }
+      case 'placeMarker': {
+        const marker = (data as any).marker as Partial<SessionMarker> | undefined;
+        if (marker && typeof marker === 'object') {
+          const markerId = marker.id || crypto.randomUUID();
           this.data.markers[markerId] = {
             id: markerId,
-            label: data.marker.label || 'Marker',
-            x: data.marker.x ?? 0,
-            y: data.marker.y ?? 0,
-            color: data.marker.color || '#facc15',
-            iconKey: data.marker.iconKey || null,
-            notes: data.marker.notes || null,
+            label: marker.label || 'Marker',
+            x: marker.x ?? 0,
+            y: marker.y ?? 0,
+            color: marker.color || '#facc15',
+            iconKey: marker.iconKey ?? null,
+            notes: marker.notes ?? null,
           };
           this.data.lastUpdated = new Date().toISOString();
           await this.persist();
           await this.broadcast({ type: 'markerAdded', payload: { marker: this.data.markers[markerId] } });
         }
         break;
-      case 'updateMarker':
-        if (data.marker && data.marker.id && this.data.markers[data.marker.id]) {
-          const marker = this.data.markers[data.marker.id];
-          this.data.markers[data.marker.id] = {
+      }
+      case 'updateMarker': {
+        const marker = (data as any).marker as Partial<SessionMarker> | undefined;
+        if (marker?.id && this.data.markers[marker.id]) {
+          this.data.markers[marker.id] = {
+            ...this.data.markers[marker.id],
             ...marker,
-            ...data.marker,
+            id: marker.id,
           };
           this.data.lastUpdated = new Date().toISOString();
           await this.persist();
-          await this.broadcast({ type: 'markerUpdated', payload: { marker: this.data.markers[data.marker.id] } });
+          await this.broadcast({ type: 'markerUpdated', payload: { marker: this.data.markers[marker.id] } });
         }
         break;
-      case 'removeMarker':
-        if (data.markerId && this.data.markers[data.markerId]) {
-          const marker = this.data.markers[data.markerId];
-          delete this.data.markers[data.markerId];
+      }
+      case 'removeMarker': {
+        const markerId = (data as any).markerId as string | undefined;
+        if (markerId && this.data.markers[markerId]) {
+          const marker = this.data.markers[markerId];
+          delete this.data.markers[markerId];
           this.data.lastUpdated = new Date().toISOString();
           await this.persist();
-          await this.broadcast({ type: 'markerRemoved', payload: { markerId: data.markerId, marker } });
+          await this.broadcast({ type: 'markerRemoved', payload: { markerId, marker } });
         }
         break;
+      }
       case 'ping':
         socket.send(JSON.stringify({ type: 'pong', payload: { now: Date.now() } }));
         break;
@@ -239,7 +297,7 @@ export class SessionHub {
     }
   }
 
-  async exportState() {
+  private async exportState(): Promise<Record<string, unknown>> {
     return {
       sessionId: this.data.sessionId,
       campaignId: this.data.campaignId,
@@ -255,11 +313,11 @@ export class SessionHub {
     };
   }
 
-  async persist() {
+  private async persist(): Promise<void> {
     await this.state.storage.put('state', this.data);
   }
 
-  async broadcast(message) {
+  private async broadcast(message: BroadcastMessage | string): Promise<void> {
     const payload = typeof message === 'string' ? message : JSON.stringify(message);
     for (const [id, socket] of this.connections.entries()) {
       try {
@@ -270,12 +328,12 @@ export class SessionHub {
     }
   }
 
-  broadcastPlayers() {
+  private async broadcastPlayers(): Promise<void> {
     const players = Array.from(this.presence.values()).map((p) => ({ id: p.id, role: p.role, name: p.name }));
-    this.broadcast({ type: 'players', payload: { players } });
+    await this.broadcast({ type: 'players', payload: { players } });
   }
 
-  closeAll(code = 1000, reason = 'closing') {
+  private closeAll(code = 1000, reason = 'closing'): void {
     for (const socket of this.connections.values()) {
       try {
         socket.close(code, reason);

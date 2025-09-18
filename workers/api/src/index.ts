@@ -1,56 +1,107 @@
 const textEncoder = new TextEncoder();
 
-function jsonResponse(data, init = {}) {
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    ...init.headers,
-  });
+interface JsonResponseInit extends ResponseInit {}
+
+type JsonValue = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
+
+type JwtPayload = Record<string, unknown> & {
+  sub?: string;
+  exp?: number;
+};
+
+interface SessionUser {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+interface MapRecord {
+  id: string;
+  campaignId: string;
+  ownerId: string;
+  name: string;
+  originalKey: string;
+  displayKey: string;
+  width: number | null;
+  height: number | null;
+  metadata: unknown;
+}
+
+interface RegionRecord {
+  id: string;
+  mapId: string;
+  name: string;
+  polygon: unknown;
+  notes: string | null;
+  revealOrder: number | null;
+}
+
+interface MarkerRecord {
+  id: string;
+  mapId: string;
+  label: string;
+  description: string | null;
+  iconKey: string | null;
+  x: number | null;
+  y: number | null;
+  color: string | null;
+  data: unknown;
+}
+
+function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, init: JsonResponseInit = {}): Response {
+  const { headers: initHeaders, ...rest } = init;
+  const headers = new Headers(initHeaders);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (!headers.has('Access-Control-Allow-Origin')) {
-    headers.set('Access-Control-Allow-Origin', init.origin || '*');
+    headers.set('Access-Control-Allow-Origin', '*');
   }
   headers.set('Access-Control-Allow-Credentials', 'true');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  return new Response(JSON.stringify(data), {
-    ...init,
+  const responseInit: ResponseInit = {
+    ...rest,
     headers,
-  });
+  };
+  return new Response(JSON.stringify(data), responseInit);
 }
 
-function errorResponse(message, status = 400, init = {}) {
+function errorResponse(message: string, status = 400, init: JsonResponseInit = {}): Response {
   return jsonResponse({ error: message }, { ...init, status });
 }
 
-async function parseJSON(request) {
+async function parseJSON<T = unknown>(request: Request): Promise<T | null> {
   try {
-    return await request.json();
+    return (await request.json()) as T;
   } catch (err) {
+    console.error('Failed to parse JSON body', err);
     return null;
   }
 }
 
-function base64UrlEncode(buffer) {
-  const bytes = new Uint8Array(buffer);
+function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let string = '';
-  bytes.forEach((b) => { string += String.fromCharCode(b); });
+  bytes.forEach((b) => {
+    string += String.fromCharCode(b);
+  });
   return btoa(string).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function base64UrlDecode(str) {
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = str.length % 4;
-  if (pad) {
-    str += '='.repeat(4 - pad);
-  }
-  const binary = atob(str);
+function base64UrlDecode(str: string): Uint8Array {
+  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = normalized.length % 4;
+  const padded = pad ? normalized + '='.repeat(4 - pad) : normalized;
+  const binary = atob(padded);
   const buffer = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
+  for (let i = 0; i < binary.length; i += 1) {
     buffer[i] = binary.charCodeAt(i);
   }
   return buffer;
 }
 
-async function hashPassword(password, salt) {
+async function hashPassword(password: string, salt?: string): Promise<{ salt: string; hash: string }> {
   const saltBytes = salt ? base64UrlDecode(salt) : crypto.getRandomValues(new Uint8Array(16));
   const combined = new Uint8Array(saltBytes.length + password.length);
   combined.set(saltBytes, 0);
@@ -62,7 +113,7 @@ async function hashPassword(password, salt) {
   };
 }
 
-async function createJwt(payload, secret, expiresInSeconds = 60 * 60 * 24 * 30) {
+async function createJwt(payload: Record<string, unknown>, secret: string, expiresInSeconds = 60 * 60 * 24 * 30): Promise<string> {
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const exp = now + expiresInSeconds;
@@ -74,26 +125,27 @@ async function createJwt(payload, secret, expiresInSeconds = 60 * 60 * 24 * 30) 
     textEncoder.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
   const signatureBuffer = await crypto.subtle.sign(
     'HMAC',
     key,
-    textEncoder.encode(`${encodedHeader}.${encodedPayload}`)
+    textEncoder.encode(`${encodedHeader}.${encodedPayload}`),
   );
   const signature = base64UrlEncode(signatureBuffer);
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-async function verifyJwt(token, secret) {
+async function verifyJwt(token: string | null, secret: string): Promise<JwtPayload | null> {
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [encodedHeader, encodedPayload, signature] = parts;
-  let payload;
+  let payload: JwtPayload;
   try {
-    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(encodedPayload)));
+    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(encodedPayload))) as JwtPayload;
   } catch (err) {
+    console.error('Failed to decode JWT payload', err);
     return null;
   }
   const key = await crypto.subtle.importKey(
@@ -101,13 +153,13 @@ async function verifyJwt(token, secret) {
     textEncoder.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['verify']
+    ['verify'],
   );
   const valid = await crypto.subtle.verify(
     'HMAC',
     key,
     base64UrlDecode(signature),
-    textEncoder.encode(`${encodedHeader}.${encodedPayload}`)
+    textEncoder.encode(`${encodedHeader}.${encodedPayload}`),
   );
   if (!valid) return null;
   if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
@@ -116,55 +168,55 @@ async function verifyJwt(token, secret) {
   return payload;
 }
 
-async function requireUser(env, request) {
+async function requireUser(env: Env, request: Request): Promise<SessionUser | null> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) {
     return null;
   }
   const token = authHeader.replace(/Bearer\s+/i, '').trim();
   const payload = await verifyJwt(token, env.SESSION_SECRET);
-  if (!payload) return null;
+  if (!payload?.sub) return null;
   const stmt = env.MAPS_DB.prepare('SELECT id, email, display_name as displayName FROM users WHERE id = ?');
-  const result = await stmt.bind(payload.sub).first();
+  const result = await stmt.bind(payload.sub).first<SessionUser>();
   return result || null;
 }
 
-function createCorsHeaders(request) {
+function createCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get('Origin') || '*';
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Credentials': 'true',
-    'Vary': 'Origin'
+    'Vary': 'Origin',
   };
 }
 
-async function ensureCampaignOwnership(env, campaignId, userId) {
+async function ensureCampaignOwnership(env: Env, campaignId: string, userId: string): Promise<boolean> {
   const stmt = env.MAPS_DB.prepare('SELECT id FROM campaigns WHERE id = ? AND owner_id = ?');
   const result = await stmt.bind(campaignId, userId).first();
   return !!result;
 }
 
-async function ensureMapOwnership(env, mapId, userId) {
+async function ensureMapOwnership(env: Env, mapId: string, userId: string): Promise<boolean> {
   const stmt = env.MAPS_DB.prepare('SELECT id FROM maps WHERE id = ? AND owner_id = ?');
   const result = await stmt.bind(mapId, userId).first();
   return !!result;
 }
 
-async function createSignedUpload(bucket, key, method = 'PUT', expiration = 900) {
+async function createSignedUpload(bucket: R2Bucket, key: string, method: 'GET' | 'PUT' | 'POST' = 'PUT', expiration = 900): Promise<URL | string> {
   return bucket.createSignedUrl({
     key,
-    expiration,
     method,
+    expiration,
   });
 }
 
-async function getSessionStub(env, sessionId) {
+async function getSessionStub(env: Env, sessionId: string): Promise<DurableObjectStub> {
   const id = env.SESSION_HUB.idFromName(sessionId);
   return env.SESSION_HUB.get(id);
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const corsHeaders = createCorsHeaders(request);
 
@@ -175,8 +227,8 @@ export default {
           ...corsHeaders,
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-          'Access-Control-Max-Age': '86400'
-        }
+          'Access-Control-Max-Age': '86400',
+        },
       });
     }
 
@@ -192,7 +244,7 @@ export default {
 
     try {
       if (url.pathname === '/api/auth/signup' && request.method === 'POST') {
-        const body = await parseJSON(request);
+        const body = await parseJSON<Record<string, string>>(request);
         if (!body || !body.email || !body.password || !body.displayName) {
           return errorResponse('Missing required fields', 400, { headers: corsHeaders });
         }
@@ -203,23 +255,23 @@ export default {
         const { salt, hash } = await hashPassword(body.password);
         const userId = crypto.randomUUID();
         await env.MAPS_DB.prepare(
-          'INSERT INTO users (id, email, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)'
+          'INSERT INTO users (id, email, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)',
         ).bind(userId, body.email, body.displayName, hash, salt).run();
         const token = await createJwt({ sub: userId, email: body.email }, env.SESSION_SECRET);
         return jsonResponse({
           token,
-          user: { id: userId, email: body.email, displayName: body.displayName }
+          user: { id: userId, email: body.email, displayName: body.displayName },
         }, { status: 201, headers: corsHeaders });
       }
 
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
-        const body = await parseJSON(request);
+        const body = await parseJSON<Record<string, string>>(request);
         if (!body || !body.email || !body.password) {
           return errorResponse('Missing credentials', 400, { headers: corsHeaders });
         }
         const user = await env.MAPS_DB.prepare('SELECT id, email, display_name as displayName, password_hash, password_salt FROM users WHERE email = ?')
           .bind(body.email)
-          .first();
+          .first<any>();
         if (!user) {
           return errorResponse('Invalid email or password', 401, { headers: corsHeaders });
         }
@@ -239,22 +291,22 @@ export default {
         if (!user) {
           return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         }
-        const body = await parseJSON(request);
-        if (!body || !body.name) {
+        const body = await parseJSON<Record<string, unknown>>(request);
+        if (!body || typeof body.name !== 'string') {
           return errorResponse('Missing campaign name', 400, { headers: corsHeaders });
         }
         const id = crypto.randomUUID();
         await env.MAPS_DB.prepare(
-          'INSERT INTO campaigns (id, owner_id, name, description, is_public) VALUES (?, ?, ?, ?, ?)'
-        ).bind(id, user.id, body.name, body.description || null, body.isPublic ? 1 : 0).run();
-        return jsonResponse({ id, name: body.name, description: body.description || null, isPublic: !!body.isPublic }, { status: 201, headers: corsHeaders });
+          'INSERT INTO campaigns (id, owner_id, name, description, is_public) VALUES (?, ?, ?, ?, ?)',
+        ).bind(id, user.id, body.name, (body.description as string | null) || null, body.isPublic ? 1 : 0).run();
+        return jsonResponse({ id, name: body.name, description: (body.description as string | null) || null, isPublic: !!body.isPublic }, { status: 201, headers: corsHeaders });
       }
 
       if (url.pathname === '/api/campaigns' && request.method === 'GET') {
         const isPublic = url.searchParams.get('public') === '1';
         if (isPublic) {
           const result = await env.MAPS_DB.prepare(
-            'SELECT id, name, description, is_public as isPublic, created_at as createdAt FROM campaigns WHERE is_public = 1 ORDER BY created_at DESC'
+            'SELECT id, name, description, is_public as isPublic, created_at as createdAt FROM campaigns WHERE is_public = 1 ORDER BY created_at DESC',
           ).all();
           return jsonResponse({ campaigns: result.results }, { headers: corsHeaders });
         }
@@ -262,7 +314,7 @@ export default {
           return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         }
         const result = await env.MAPS_DB.prepare(
-          'SELECT id, name, description, is_public as isPublic, created_at as createdAt FROM campaigns WHERE owner_id = ? ORDER BY created_at DESC'
+          'SELECT id, name, description, is_public as isPublic, created_at as createdAt FROM campaigns WHERE owner_id = ? ORDER BY created_at DESC',
         ).bind(user.id).all();
         return jsonResponse({ campaigns: result.results }, { headers: corsHeaders });
       }
@@ -277,9 +329,12 @@ export default {
           return errorResponse('Campaign not found', 404, { headers: corsHeaders });
         }
         const result = await env.MAPS_DB.prepare(
-          'SELECT id, campaign_id as campaignId, owner_id as ownerId, name, original_key as originalKey, display_key as displayKey, width, height, metadata FROM maps WHERE campaign_id = ? ORDER BY created_at DESC'
+          'SELECT id, campaign_id as campaignId, owner_id as ownerId, name, original_key as originalKey, display_key as displayKey, width, height, metadata FROM maps WHERE campaign_id = ? ORDER BY created_at DESC',
         ).bind(campaignId).all();
-        const maps = result.results.map((m) => ({ ...m, metadata: m.metadata ? JSON.parse(m.metadata) : null }));
+        const maps = (result.results as MapRecord[]).map((m) => ({
+          ...m,
+          metadata: typeof m.metadata === 'string' ? JSON.parse(m.metadata) : null,
+        }));
         return jsonResponse({ maps }, { headers: corsHeaders });
       }
 
@@ -287,8 +342,8 @@ export default {
         if (!user) {
           return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         }
-        const body = await parseJSON(request);
-        if (!body || !body.campaignId || !body.name || !body.originalExtension) {
+        const body = await parseJSON<Record<string, unknown>>(request);
+        if (!body || typeof body.campaignId !== 'string' || typeof body.name !== 'string' || typeof body.originalExtension !== 'string') {
           return errorResponse('Missing required fields', 400, { headers: corsHeaders });
         }
         const ownsCampaign = await ensureCampaignOwnership(env, body.campaignId, user.id);
@@ -299,7 +354,7 @@ export default {
         const originalKey = `maps/${body.campaignId}/${mapId}/original.${body.originalExtension}`;
         const displayKey = `maps/${body.campaignId}/${mapId}/display.${body.originalExtension}`;
         await env.MAPS_DB.prepare(
-          'INSERT INTO maps (id, campaign_id, owner_id, name, original_key, display_key, width, height, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO maps (id, campaign_id, owner_id, name, original_key, display_key, width, height, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         ).bind(
           mapId,
           body.campaignId,
@@ -307,9 +362,9 @@ export default {
           body.name,
           originalKey,
           displayKey,
-          body.width || null,
-          body.height || null,
-          body.metadata ? JSON.stringify(body.metadata) : null
+          typeof body.width === 'number' ? body.width : null,
+          typeof body.height === 'number' ? body.height : null,
+          body.metadata ? JSON.stringify(body.metadata) : null,
         ).run();
         const originalUrl = await createSignedUpload(env.MAPS_BUCKET, originalKey, 'PUT', 900);
         const displayUrl = await createSignedUpload(env.MAPS_BUCKET, displayKey, 'PUT', 900);
@@ -319,30 +374,30 @@ export default {
             campaignId: body.campaignId,
             name: body.name,
             originalKey,
-            displayKey
+            displayKey,
           },
           uploads: {
             original: originalUrl.toString(),
-            display: displayUrl.toString()
-          }
+            display: displayUrl.toString(),
+          },
         }, { status: 201, headers: corsHeaders });
       }
 
       if (url.pathname.match(/^\/api\/maps\/[a-z0-9-]+$/) && request.method === 'GET') {
         const mapId = url.pathname.split('/')[3];
         const map = await env.MAPS_DB.prepare(
-          'SELECT id, campaign_id as campaignId, owner_id as ownerId, name, original_key as originalKey, display_key as displayKey, width, height, metadata FROM maps WHERE id = ?'
-        ).bind(mapId).first();
+          'SELECT id, campaign_id as campaignId, owner_id as ownerId, name, original_key as originalKey, display_key as displayKey, width, height, metadata FROM maps WHERE id = ?',
+        ).bind(mapId).first<MapRecord & { metadata: string | null }>();
         if (!map) {
           return errorResponse('Map not found', 404, { headers: corsHeaders });
         }
-        map.metadata = map.metadata ? JSON.parse(map.metadata) : null;
-        return jsonResponse({ map }, { headers: corsHeaders });
+        const metadata = map.metadata ? JSON.parse(map.metadata) : null;
+        return jsonResponse({ map: { ...map, metadata } }, { headers: corsHeaders });
       }
 
       if (url.pathname.match(/^\/api\/maps\/[a-z0-9-]+\/display$/) && request.method === 'GET') {
         const mapId = url.pathname.split('/')[3];
-        const map = await env.MAPS_DB.prepare('SELECT display_key as displayKey FROM maps WHERE id = ?').bind(mapId).first();
+        const map = await env.MAPS_DB.prepare('SELECT display_key as displayKey FROM maps WHERE id = ?').bind(mapId).first<{ displayKey: string }>();
         if (!map?.displayKey) {
           return errorResponse('Map image not found', 404, { headers: corsHeaders });
         }
@@ -363,9 +418,14 @@ export default {
         const mapId = url.pathname.split('/')[3];
         if (request.method === 'GET') {
           const result = await env.MAPS_DB.prepare(
-            'SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC'
+            'SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC',
           ).bind(mapId).all();
-          return jsonResponse({ regions: result.results.map(r => ({ ...r, polygon: JSON.parse(r.polygon) })) }, { headers: corsHeaders });
+          return jsonResponse({
+            regions: (result.results as RegionRecord[]).map((r) => ({
+              ...r,
+              polygon: typeof r.polygon === 'string' ? JSON.parse(r.polygon) : r.polygon,
+            })),
+          }, { headers: corsHeaders });
         }
         if (request.method === 'POST') {
           if (!user) {
@@ -375,20 +435,20 @@ export default {
           if (!ownsMap) {
             return errorResponse('Map not found', 404, { headers: corsHeaders });
           }
-          const body = await parseJSON(request);
-          if (!body || !body.name || !Array.isArray(body.polygon)) {
+          const body = await parseJSON<Record<string, unknown>>(request);
+          if (!body || typeof body.name !== 'string' || !Array.isArray(body.polygon)) {
             return errorResponse('Invalid region', 400, { headers: corsHeaders });
           }
           const regionId = crypto.randomUUID();
           await env.MAPS_DB.prepare(
-            'INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order) VALUES (?, ?, ?, ?, ?, ?)',
           ).bind(
             regionId,
             mapId,
             body.name,
             JSON.stringify(body.polygon),
-            body.notes || null,
-            typeof body.revealOrder === 'number' ? body.revealOrder : null
+            (body.notes as string | null) || null,
+            typeof body.revealOrder === 'number' ? body.revealOrder : null,
           ).run();
           return jsonResponse({
             region: {
@@ -396,9 +456,9 @@ export default {
               mapId,
               name: body.name,
               polygon: body.polygon,
-              notes: body.notes || null,
-              revealOrder: typeof body.revealOrder === 'number' ? body.revealOrder : null
-            }
+              notes: (body.notes as string | null) || null,
+              revealOrder: typeof body.revealOrder === 'number' ? body.revealOrder : null,
+            },
           }, { status: 201, headers: corsHeaders });
         }
       }
@@ -407,25 +467,25 @@ export default {
         const regionId = url.pathname.split('/')[3];
         if (request.method === 'PUT') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-          const body = await parseJSON(request);
-          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM regions WHERE id = ?').bind(regionId).first();
+          const body = await parseJSON<Record<string, unknown>>(request);
+          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM regions WHERE id = ?').bind(regionId).first<{ mapId: string }>();
           if (!existing) return errorResponse('Region not found', 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap) return errorResponse('Forbidden', 403, { headers: corsHeaders });
           await env.MAPS_DB.prepare(
-            'UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ? WHERE id = ?'
+            'UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ? WHERE id = ?',
           ).bind(
-            body.name || null,
-            body.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
-            body.notes || null,
-            typeof body.revealOrder === 'number' ? body.revealOrder : null,
-            regionId
+            (body?.name as string | null) || null,
+            body?.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
+            (body?.notes as string | null) || null,
+            typeof body?.revealOrder === 'number' ? body.revealOrder : null,
+            regionId,
           ).run();
           return jsonResponse({ success: true }, { headers: corsHeaders });
         }
         if (request.method === 'DELETE') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM regions WHERE id = ?').bind(regionId).first();
+          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM regions WHERE id = ?').bind(regionId).first<{ mapId: string }>();
           if (!existing) return errorResponse('Region not found', 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap) return errorResponse('Forbidden', 403, { headers: corsHeaders });
@@ -438,44 +498,49 @@ export default {
         const mapId = url.pathname.split('/')[3];
         if (request.method === 'GET') {
           const result = await env.MAPS_DB.prepare(
-            'SELECT id, map_id as mapId, label, description, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC'
+            'SELECT id, map_id as mapId, label, description, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC',
           ).bind(mapId).all();
-          return jsonResponse({ markers: result.results.map(m => ({ ...m, data: m.data ? JSON.parse(m.data) : null })) }, { headers: corsHeaders });
+          return jsonResponse({
+            markers: (result.results as MarkerRecord[]).map((m) => ({
+              ...m,
+              data: typeof m.data === 'string' ? JSON.parse(m.data) : m.data,
+            })),
+          }, { headers: corsHeaders });
         }
         if (request.method === 'POST') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, mapId, user.id);
           if (!ownsMap) return errorResponse('Map not found', 404, { headers: corsHeaders });
-          const body = await parseJSON(request);
-          if (!body || !body.label || typeof body.x !== 'number' || typeof body.y !== 'number') {
+          const body = await parseJSON<Record<string, unknown>>(request);
+          if (!body || typeof body.label !== 'string' || typeof body.x !== 'number' || typeof body.y !== 'number') {
             return errorResponse('Invalid marker', 400, { headers: corsHeaders });
           }
           const markerId = crypto.randomUUID();
           await env.MAPS_DB.prepare(
-            'INSERT INTO markers (id, map_id, label, description, icon_key, x, y, color, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO markers (id, map_id, label, description, icon_key, x, y, color, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           ).bind(
             markerId,
             mapId,
             body.label,
-            body.description || null,
-            body.iconKey || null,
+            (body.description as string | null) || null,
+            (body.iconKey as string | null) || null,
             body.x,
             body.y,
-            body.color || null,
-            body.data ? JSON.stringify(body.data) : null
+            (body.color as string | null) || null,
+            body.data ? JSON.stringify(body.data) : null,
           ).run();
           return jsonResponse({
             marker: {
               id: markerId,
               mapId,
               label: body.label,
-              description: body.description || null,
-              iconKey: body.iconKey || null,
+              description: (body.description as string | null) || null,
+              iconKey: (body.iconKey as string | null) || null,
               x: body.x,
               y: body.y,
-              color: body.color || null,
-              data: body.data || null
-            }
+              color: (body.color as string | null) || null,
+              data: body.data || null,
+            },
           }, { status: 201, headers: corsHeaders });
         }
       }
@@ -484,28 +549,28 @@ export default {
         const markerId = url.pathname.split('/')[3];
         if (request.method === 'PUT') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM markers WHERE id = ?').bind(markerId).first();
+          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM markers WHERE id = ?').bind(markerId).first<{ mapId: string }>();
           if (!existing) return errorResponse('Marker not found', 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap) return errorResponse('Forbidden', 403, { headers: corsHeaders });
-          const body = await parseJSON(request);
+          const body = await parseJSON<Record<string, unknown>>(request);
           await env.MAPS_DB.prepare(
-            'UPDATE markers SET label = ?, description = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ? WHERE id = ?'
+            'UPDATE markers SET label = ?, description = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ? WHERE id = ?',
           ).bind(
-            body.label || null,
-            body.description || null,
-            body.iconKey || null,
-            typeof body.x === 'number' ? body.x : null,
-            typeof body.y === 'number' ? body.y : null,
-            body.color || null,
-            body.data ? JSON.stringify(body.data) : null,
-            markerId
+            (body?.label as string | null) || null,
+            (body?.description as string | null) || null,
+            (body?.iconKey as string | null) || null,
+            typeof body?.x === 'number' ? body.x : null,
+            typeof body?.y === 'number' ? body.y : null,
+            (body?.color as string | null) || null,
+            body?.data ? JSON.stringify(body.data) : null,
+            markerId,
           ).run();
           return jsonResponse({ success: true }, { headers: corsHeaders });
         }
         if (request.method === 'DELETE') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM markers WHERE id = ?').bind(markerId).first();
+          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM markers WHERE id = ?').bind(markerId).first<{ mapId: string }>();
           if (!existing) return errorResponse('Marker not found', 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap) return errorResponse('Forbidden', 403, { headers: corsHeaders });
@@ -516,8 +581,8 @@ export default {
 
       if (url.pathname === '/api/assets/marker' && request.method === 'POST') {
         if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-        const body = await parseJSON(request);
-        const fileName = body?.fileName || `${crypto.randomUUID()}.png`;
+        const body = await parseJSON<Record<string, unknown>>(request);
+        const fileName = (body?.fileName as string) || `${crypto.randomUUID()}.png`;
         const key = `assets/${user.id}/${fileName}`;
         const uploadUrl = await createSignedUpload(env.MAPS_BUCKET, key, 'PUT', 900);
         await env.MAPS_DB.prepare('INSERT INTO assets (id, owner_id, key, type) VALUES (?, ?, ?, ?)')
@@ -537,14 +602,14 @@ export default {
         }
         return new Response(object.body, {
           status: 200,
-          headers
+          headers,
         });
       }
 
       if (url.pathname === '/api/sessions' && request.method === 'POST') {
         if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-        const body = await parseJSON(request);
-        if (!body || !body.campaignId || !body.mapId || !body.name) {
+        const body = await parseJSON<Record<string, unknown>>(request);
+        if (!body || typeof body.campaignId !== 'string' || typeof body.mapId !== 'string' || typeof body.name !== 'string') {
           return errorResponse('Missing session fields', 400, { headers: corsHeaders });
         }
         const ownsCampaign = await ensureCampaignOwnership(env, body.campaignId, user.id);
@@ -554,7 +619,7 @@ export default {
         }
         const sessionId = crypto.randomUUID();
         await env.MAPS_DB.prepare(
-          'INSERT INTO sessions (id, campaign_id, map_id, host_id, name, status) VALUES (?, ?, ?, ?, ?, ?)'
+          'INSERT INTO sessions (id, campaign_id, map_id, host_id, name, status) VALUES (?, ?, ?, ?, ?, ?)',
         ).bind(sessionId, body.campaignId, body.mapId, user.id, body.name, 'active').run();
         const stub = await getSessionStub(env, sessionId);
         await stub.fetch('https://session/setup', {
@@ -564,8 +629,9 @@ export default {
             campaignId: body.campaignId,
             mapId: body.mapId,
             hostId: user.id,
-            name: body.name
-          })
+            name: body.name,
+            metadata: body.metadata || {},
+          }),
         });
         return jsonResponse({ session: { id: sessionId, campaignId: body.campaignId, mapId: body.mapId, name: body.name, status: 'active' } }, { status: 201, headers: corsHeaders });
       }
@@ -579,7 +645,7 @@ export default {
            FROM sessions s
            LEFT JOIN campaigns c ON s.campaign_id = c.id
            LEFT JOIN maps m ON s.map_id = m.id
-           WHERE s.id = ?`
+           WHERE s.id = ?`,
         ).bind(sessionId).first();
         if (!session) {
           return errorResponse('Session not found', 404, { headers: corsHeaders });
@@ -606,7 +672,7 @@ export default {
         if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         const sessionId = url.pathname.split('/')[3];
         const session = await env.MAPS_DB.prepare('SELECT id, campaign_id as campaignId FROM sessions WHERE id = ? AND host_id = ?')
-          .bind(sessionId, user.id).first();
+          .bind(sessionId, user.id).first<{ id: string; campaignId: string }>();
         if (!session) return errorResponse('Session not found', 404, { headers: corsHeaders });
         const stub = await getSessionStub(env, sessionId);
         const stateResp = await stub.fetch('https://session/state');
@@ -625,9 +691,9 @@ export default {
         if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         const sessionId = url.pathname.split('/')[3];
         const session = await env.MAPS_DB.prepare('SELECT id FROM sessions WHERE id = ? AND host_id = ?')
-          .bind(sessionId, user.id).first();
+          .bind(sessionId, user.id).first<{ id: string }>();
         if (!session) return errorResponse('Session not found', 404, { headers: corsHeaders });
-        await env.MAPS_DB.prepare('UPDATE sessions SET status = ?, ended_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\') WHERE id = ?')
+        await env.MAPS_DB.prepare("UPDATE sessions SET status = ?, ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
           .bind('ended', sessionId).run();
         const stub = await getSessionStub(env, sessionId);
         await stub.fetch('https://session/end', { method: 'POST' });
@@ -637,12 +703,12 @@ export default {
       if (url.pathname.match(/^\/api\/sessions\/[a-z0-9-]+\/restore$/) && request.method === 'POST') {
         if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
         const sessionId = url.pathname.split('/')[3];
-        const body = await parseJSON(request);
+        const body = await parseJSON<Record<string, unknown>>(request);
         if (!body?.backupKey) return errorResponse('Missing backupKey', 400, { headers: corsHeaders });
         const session = await env.MAPS_DB.prepare('SELECT id, host_id FROM sessions WHERE id = ?')
-          .bind(sessionId).first();
+          .bind(sessionId).first<{ id: string; host_id: string }>();
         if (!session || session.host_id !== user.id) return errorResponse('Session not found', 404, { headers: corsHeaders });
-        const object = await env.MAPS_BUCKET.get(body.backupKey);
+        const object = await env.MAPS_BUCKET.get(body.backupKey as string);
         if (!object) return errorResponse('Backup not found', 404, { headers: corsHeaders });
         const state = await object.json();
         const stub = await getSessionStub(env, sessionId);
@@ -655,5 +721,5 @@ export default {
       console.error('API error', err);
       return errorResponse('Internal Server Error', 500, { headers: corsHeaders });
     }
-  }
+  },
 };

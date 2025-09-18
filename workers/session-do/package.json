@@ -1,13 +1,16 @@
 {
   "name": "@dand/session-hub-do",
-  "version": "1.0.0",
+  "version": "0.2.0",
+  "private": true,
   "type": "module",
-  "main": "worker.js",
-  "module": "worker.js",
-  "exports": {
-    ".": "./worker.js"
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
   },
-  "files": [
-    "worker.js"
-  ]
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240314.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.40.0"
+  }
 }

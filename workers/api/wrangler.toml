@@ -1,0 +1,22 @@
+name = "dand-api"
+main = "src/index.ts"
+compatibility_date = "2024-04-24"
+usage_model = "standard"
+
+[vars]
+SESSION_SECRET = "replace-with-production-secret"
+
+[[d1_databases]]
+binding = "MAPS_DB"
+database_name = "maps-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "MAPS_BUCKET"
+bucket_name = "maps-bucket"
+preview_bucket_name = "maps-bucket-preview"
+
+[[durable_objects.bindings]]
+name = "SESSION_HUB"
+class_name = "SessionHub"
+script_name = "dand-session-do"
