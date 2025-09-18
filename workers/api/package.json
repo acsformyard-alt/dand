@@ -1,0 +1,13 @@
+{
+  "name": "@dand/workers-api",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "worker.js",
+  "module": "worker.js",
+  "exports": {
+    ".": "./worker.js"
+  },
+  "files": [
+    "worker.js"
+  ]
+}

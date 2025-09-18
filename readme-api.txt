@@ -1,7 +1,7 @@
 Cloudflare Worker: API (REST + Auth + R2 + D1)
 ================================================
 
-This guide walks through deploying `cloudflare/api.js` as a Worker using only the
+This guide walks through deploying `workers/api/worker.js` as a Worker using only the
 Cloudflare dashboard.
 
 Prerequisites
@@ -14,7 +14,11 @@ Step-by-step
 ------------
 1. In the Cloudflare dashboard, go to **Workers & Pages → Create application → Create Worker**.
 2. Name the Worker (example: `dand-api`). Choose **Quick Edit**.
-3. Replace the default script with the contents of `cloudflare/api.js`. Save.
+3. Replace the default script with the contents of `workers/api/worker.js`.
+   - If you prefer to consume the Worker as a module from another repository,
+     you can import `@dand/workers-api` directly from this repo using
+     `npm install git+https://github.com/your-org/dand.git#path:workers/api` and
+     re-export it from your Wrangler project. Save.
 4. Open the Worker’s **Settings → Variables** tab and configure bindings:
    - **D1 Database Binding**
      - Type: D1 Database

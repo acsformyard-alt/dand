@@ -1,14 +1,17 @@
 Cloudflare Worker: Durable Object Session Hub
 =============================================
 
-Deploy `cloudflare/session-do.js` as the Durable Object that manages live session
+Deploy `workers/session-do/worker.js` as the Durable Object that manages live session
 state and WebSocket fan-out.
 
 Steps
 -----
 1. In the dashboard, go to **Workers & Pages → Create application → Create Worker**.
 2. Name it `session-do` (or similar). Choose **Quick Edit** and replace the script
-   with the contents of `cloudflare/session-do.js`. Save.
+   with the contents of `workers/session-do/worker.js`. Save.
+   - Alternatively install the package with
+     `npm install git+https://github.com/your-org/dand.git#path:workers/session-do`
+     and re-export `@dand/session-hub-do` from your own Worker project.
 3. Open **Settings → Durable Objects** and configure:
    - Class name: `SessionHub`
    - Script: (this worker)
