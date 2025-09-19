@@ -37,6 +37,14 @@ interface DraftRoom {
   tool: 'lasso' | 'smart';
 }
 
+interface RoomAdjustmentState {
+  roomId: string;
+  brushRadius: number;
+  startedInside: boolean | null;
+  isPointerActive: boolean;
+  originalPolygon: Array<{ x: number; y: number }>;
+}
+
 const distanceBetweenPoints = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -102,6 +110,87 @@ const normalisePolygon = (points: Array<{ x: number; y: number }>) => {
   return filtered;
 };
 
+const computeSignedArea = (polygon: Array<{ x: number; y: number }>) => {
+  let area = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return area / 2;
+};
+
+const normalizeVector = (vector: { x: number; y: number }) => {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length < 1e-6) {
+    return { x: 0, y: 0 };
+  }
+  return { x: vector.x / length, y: vector.y / length };
+};
+
+const applyPolygonBrushAdjustment = (
+  polygon: Array<{ x: number; y: number }>,
+  path: Array<{ x: number; y: number }>,
+  options: { brushRadius: number; mode: 'expand' | 'shrink' }
+) => {
+  if (polygon.length < 3 || path.length === 0 || options.brushRadius <= 0) {
+    return polygon;
+  }
+
+  const activePoint = path[path.length - 1];
+  const orientation = computeSignedArea(polygon) >= 0 ? 1 : -1;
+  const directionMultiplier = options.mode === 'expand' ? 1 : -1;
+  const normals = polygon.map((point, index) => {
+    const previous = polygon[(index - 1 + polygon.length) % polygon.length];
+    const next = polygon[(index + 1) % polygon.length];
+    const edgePrev = { x: point.x - previous.x, y: point.y - previous.y };
+    const edgeNext = { x: next.x - point.x, y: next.y - point.y };
+    const normalPrev = normalizeVector({
+      x: edgePrev.y * orientation,
+      y: -edgePrev.x * orientation,
+    });
+    const normalNext = normalizeVector({
+      x: edgeNext.y * orientation,
+      y: -edgeNext.x * orientation,
+    });
+    let combined = { x: normalPrev.x + normalNext.x, y: normalPrev.y + normalNext.y };
+    if (Math.hypot(combined.x, combined.y) < 1e-6) {
+      combined = normalPrev.x !== 0 || normalPrev.y !== 0 ? normalPrev : normalNext;
+    }
+    return normalizeVector(combined);
+  });
+
+  const brushRadius = options.brushRadius;
+  const baseStrength = brushRadius * 0.6;
+  const adjusted = polygon.map((point, index) => {
+    const distance = distanceBetweenPoints(point, activePoint);
+    if (distance > brushRadius) {
+      return point;
+    }
+    const falloff = Math.pow(1 - distance / brushRadius, 2);
+    const offsetAmount = baseStrength * falloff * directionMultiplier;
+    const normal = normals[index];
+    return {
+      x: point.x + normal.x * offsetAmount,
+      y: point.y + normal.y * offsetAmount,
+    };
+  });
+
+  const clamped = adjusted.map((point) => ({
+    x: clamp(point.x, 0, 1),
+    y: clamp(point.y, 0, 1),
+  }));
+  let normalised = normalisePolygon(clamped);
+  if (normalised.length >= 3) {
+    normalised = simplifyPolygon(normalised, 0.0015);
+    normalised = normalisePolygon(normalised);
+  }
+  if (normalised.length < 3) {
+    return polygon;
+  }
+  return normalised.map((point) => ({ ...point }));
+};
+
 const computeCentroid = (polygon: Array<{ x: number; y: number }>) => {
   if (polygon.length === 0) {
     return { x: 0.5, y: 0.5 };
@@ -155,6 +244,8 @@ const steps: Array<{ title: string; description: string }> = [
 ];
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const DEFAULT_ROOM_ADJUST_BRUSH_RADIUS = 0.035;
 
 const resolveNormalizedPointWithinImage = (
   event: { clientX: number; clientY: number },
@@ -277,10 +368,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [isOutliningRoom, setIsOutliningRoom] = useState(false);
   const [isDrawingRoom, setIsDrawingRoom] = useState(false);
   const [draftRoomPoints, setDraftRoomPoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [adjustingRoom, setAdjustingRoom] = useState<RoomAdjustmentState | null>(null);
 
   const roomsMapRef = useRef<HTMLDivElement>(null);
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const edgeMapRef = useRef<EdgeMap | null>(null);
+  const adjustmentPathRef = useRef<Array<{ x: number; y: number }>>([]);
+  const adjustmentPointerIdRef = useRef<number | null>(null);
 
   const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
@@ -374,6 +468,85 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   }, [finalizeRoomOutline, isDrawingRoom, resolveRelativePoint]);
 
   useEffect(() => {
+    if (!adjustingRoom || !adjustingRoom.isPointerActive || adjustingRoom.startedInside === null) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const point = resolveRelativePoint(event);
+      if (!point) return;
+      const last = adjustmentPathRef.current[adjustmentPathRef.current.length - 1];
+      const threshold = Math.max(0.0002, adjustingRoom.brushRadius * 0.2);
+      if (!last || distanceBetweenPoints(last, point) > threshold) {
+        const nextPath = [...adjustmentPathRef.current, point];
+        if (nextPath.length > 64) {
+          nextPath.splice(0, nextPath.length - 64);
+        }
+        adjustmentPathRef.current = nextPath;
+        const mode = adjustingRoom.startedInside ? 'expand' : 'shrink';
+        setRooms((current) =>
+          current.map((room) => {
+            if (room.id !== adjustingRoom.roomId) return room;
+            const nextPolygon = applyPolygonBrushAdjustment(room.polygon, nextPath, {
+              brushRadius: adjustingRoom.brushRadius,
+              mode,
+            });
+            return { ...room, polygon: nextPolygon };
+          })
+        );
+      }
+    };
+
+    const handlePointerUp = () => {
+      finalizeRoomAdjustment(adjustingRoom);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [adjustingRoom, finalizeRoomAdjustment, resolveRelativePoint]);
+
+  useEffect(() => {
+    if (!adjustingRoom) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
+          const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
+          if (release) {
+            try {
+              release(adjustmentPointerIdRef.current);
+            } catch {
+              // ignore release errors
+            }
+          }
+        }
+        adjustmentPointerIdRef.current = null;
+        adjustmentPathRef.current = [];
+        setRooms((current) =>
+          current.map((room) =>
+            room.id === adjustingRoom.roomId
+              ? {
+                  ...room,
+                  polygon: adjustingRoom.originalPolygon.map((point) => ({ ...point })),
+                }
+              : room
+          )
+        );
+        setAdjustingRoom(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [adjustingRoom]);
+
+  useEffect(() => {
     if (!isOutliningRoom) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -395,8 +568,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     }
   }, [activeRoomId, rooms]);
 
+  useEffect(() => {
+    if (!adjustingRoom) return;
+    if (!rooms.some((room) => room.id === adjustingRoom.roomId)) {
+      adjustmentPathRef.current = [];
+      adjustmentPointerIdRef.current = null;
+      setAdjustingRoom(null);
+    }
+  }, [adjustingRoom, rooms]);
+
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId) ?? null, [activeRoomId, rooms]);
   const activeRoomCenter = useMemo(() => computeCentroid(activeRoom?.polygon ?? []), [activeRoom]);
+  const isAdjustingActiveRoom = adjustingRoom?.roomId === activeRoom?.id;
 
   const overlayWidth = imageDimensions?.width ?? 1000;
   const overlayHeight = imageDimensions?.height ?? 1000;
@@ -414,6 +597,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     x: clamp(activeRoomAnchor.x, 0.12, 0.88),
     y: clamp(activeRoomAnchor.y, 0.18, 0.85),
   };
+
+  const handleStartRoomAdjustment = useCallback(() => {
+    if (!activeRoom) return;
+    adjustmentPathRef.current = [];
+    adjustmentPointerIdRef.current = null;
+    setAdjustingRoom({
+      roomId: activeRoom.id,
+      brushRadius: DEFAULT_ROOM_ADJUST_BRUSH_RADIUS,
+      startedInside: null,
+      isPointerActive: false,
+      originalPolygon: activeRoom.polygon.map((point) => ({ ...point })),
+    });
+    setIsOutliningRoom(false);
+    setIsDrawingRoom(false);
+    setDraftRoomPoints([]);
+    drawingPointsRef.current = [];
+  }, [activeRoom]);
 
   useEffect(() => {
     if (!file) {
@@ -525,6 +725,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const handleStartRoomOutline = () => {
     if (!previewUrl) return;
     setActiveRoomId(null);
+    setAdjustingRoom(null);
+    adjustmentPathRef.current = [];
+    adjustmentPointerIdRef.current = null;
     setIsOutliningRoom(true);
     setIsDrawingRoom(false);
     setDraftRoomPoints([]);
@@ -536,9 +739,37 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setIsDrawingRoom(false);
     setDraftRoomPoints([]);
     drawingPointsRef.current = [];
+    adjustmentPathRef.current = [];
+    adjustmentPointerIdRef.current = null;
   };
 
   const handleRoomPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (adjustingRoom) {
+      const room = rooms.find((candidate) => candidate.id === adjustingRoom.roomId);
+      if (!room) {
+        setAdjustingRoom(null);
+        return;
+      }
+      const point = resolveRelativePoint(event.nativeEvent);
+      if (!point) return;
+      event.preventDefault();
+      event.stopPropagation();
+      adjustmentPathRef.current = [point];
+      adjustmentPointerIdRef.current = event.pointerId;
+      if (typeof event.currentTarget.setPointerCapture === 'function') {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // ignore capture errors
+        }
+      }
+      const startedInside = pointInPolygon(point, room.polygon);
+      setAdjustingRoom((current) => {
+        if (!current || current.roomId !== room.id) return current;
+        return { ...current, startedInside, isPointerActive: true };
+      });
+      return;
+    }
     if (!isOutliningRoom) return;
     event.preventDefault();
     const point = resolveRelativePoint(event.nativeEvent);
@@ -549,7 +780,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   };
 
   const handleRoomClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (isOutliningRoom || isDrawingRoom) return;
+    if (isOutliningRoom || isDrawingRoom || adjustingRoom) return;
     const point = resolveRelativePoint(event.nativeEvent);
     if (!point) return;
     let matched: DraftRoom | null = null;
@@ -563,6 +794,54 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setActiveRoomId(matched ? matched.id : null);
   };
 
+  const finalizeRoomAdjustment = useCallback(
+    (state: RoomAdjustmentState | null) => {
+      if (!state) return;
+      if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
+        const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
+        if (release) {
+          try {
+            release(adjustmentPointerIdRef.current);
+          } catch {
+            // ignore release errors
+          }
+        }
+      }
+      adjustmentPointerIdRef.current = null;
+      adjustmentPathRef.current = [];
+      const edgeMap = edgeMapRef.current;
+      setRooms((current) =>
+        current.map((room) => {
+          if (room.id !== state.roomId) return room;
+          let polygon = normalisePolygon(room.polygon);
+          if (room.tool === 'smart') {
+            if (edgeMap && imageDimensions) {
+              polygon = snapPolygonToEdges(polygon, {
+                edgeMap,
+                imageWidth: imageDimensions.width,
+                imageHeight: imageDimensions.height,
+              });
+              polygon = smoothPolygon(polygon, 2);
+            }
+            polygon = normalisePolygon(polygon);
+            polygon = simplifyPolygon(polygon, 0.0025);
+            polygon = normalisePolygon(polygon);
+          } else {
+            polygon = simplifyPolygon(polygon, 0.0015);
+            polygon = normalisePolygon(polygon);
+          }
+          polygon = polygon.map((point) => ({
+            x: clamp(point.x, 0, 1),
+            y: clamp(point.y, 0, 1),
+          }));
+          return { ...room, polygon };
+        })
+      );
+      setAdjustingRoom((current) => (current && current.roomId === state.roomId ? null : current));
+    },
+    [imageDimensions]
+  );
+
   const handleRoomFieldChange = (roomId: string, field: 'name' | 'notes' | 'tagsInput', value: string) => {
     setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, [field]: value } : room)));
   };
@@ -572,6 +851,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   };
 
   const handleAutoSnapRoom = (roomId: string) => {
+    setAdjustingRoom((current) => (current && current.roomId === roomId ? null : current));
+    adjustmentPathRef.current = [];
+    adjustmentPointerIdRef.current = null;
     const edgeMap = edgeMapRef.current;
     setRooms((current) =>
       current.map((room) => {
@@ -597,6 +879,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const handleRemoveRoom = (roomId: string) => {
     setRooms((current) => current.filter((room) => room.id !== roomId));
     setActiveRoomId((current) => (current === roomId ? null : current));
+    setAdjustingRoom((current) => (current && current.roomId === roomId ? null : current));
   };
 
   const handleMarkerChange = (markerId: string, field: keyof DraftMarker, value: string) => {
@@ -1092,13 +1375,34 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                             <p className="text-[10px] uppercase tracking-[0.35em] text-teal-300">Room Details</p>
                             <h4 className="mt-1 text-sm font-semibold text-white">{activeRoom.name || 'Unnamed Area'}</h4>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleAutoSnapRoom(activeRoom.id)}
-                            className="rounded-full border border-teal-400/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-teal-100 transition hover:bg-teal-400/20"
-                          >
-                            Auto Snap
-                          </button>
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAutoSnapRoom(activeRoom.id)}
+                                className="rounded-full border border-teal-400/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-teal-100 transition hover:bg-teal-400/20"
+                              >
+                                Auto Snap
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleStartRoomAdjustment}
+                                disabled={isAdjustingActiveRoom}
+                                className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  isAdjustingActiveRoom
+                                    ? 'border-amber-400/70 bg-amber-500/20 text-amber-200'
+                                    : 'border-teal-400/40 text-teal-100 hover:bg-teal-400/20'
+                                }`}
+                              >
+                                Adjust Boundary
+                              </button>
+                            </div>
+                            {isAdjustingActiveRoom && (
+                              <span className="text-[10px] uppercase tracking-[0.35em] text-amber-200">
+                                Adjusting — drag on the map to refine
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <label className="mt-3 block text-[10px] uppercase tracking-[0.35em] text-slate-400">
                           Area Name
