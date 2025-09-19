@@ -49,6 +49,8 @@ export interface EdgeMap {
   width: number;
   height: number;
   magnitudes: Float32Array;
+  gradientX: Float32Array;
+  gradientY: Float32Array;
   maxMagnitude: number;
 }
 
@@ -85,6 +87,8 @@ export const buildEdgeMap = (data: Uint8ClampedArray, width: number, height: num
   }
 
   const magnitudes = new Float32Array(totalPixels);
+  const gradientX = new Float32Array(totalPixels);
+  const gradientY = new Float32Array(totalPixels);
   let maxMagnitude = 0;
 
   for (let y = 0; y < height; y += 1) {
@@ -104,17 +108,23 @@ export const buildEdgeMap = (data: Uint8ClampedArray, width: number, height: num
       }
       const magnitude = Math.hypot(gx, gy);
       magnitudes[y * width + x] = magnitude;
+      gradientX[y * width + x] = gx;
+      gradientY[y * width + x] = gy;
       if (magnitude > maxMagnitude) {
         maxMagnitude = magnitude;
       }
     }
   }
 
-  return { width, height, magnitudes, maxMagnitude };
+  return { width, height, magnitudes, gradientX, gradientY, maxMagnitude };
 };
 
-const sampleEdgeMagnitude = (edgeMap: EdgeMap, x: number, y: number) => {
-  if (edgeMap.maxMagnitude === 0) return 0;
+const bilinearSample = (
+  values: Float32Array,
+  edgeMap: EdgeMap,
+  x: number,
+  y: number
+) => {
   const clampedX = clamp(x, 0, edgeMap.width - 1);
   const clampedY = clamp(y, 0, edgeMap.height - 1);
   const x0 = Math.floor(clampedX);
@@ -127,10 +137,20 @@ const sampleEdgeMagnitude = (edgeMap: EdgeMap, x: number, y: number) => {
   const index10 = y0 * edgeMap.width + x1;
   const index01 = y1 * edgeMap.width + x0;
   const index11 = y1 * edgeMap.width + x1;
-  const top = edgeMap.magnitudes[index00] * (1 - tx) + edgeMap.magnitudes[index10] * tx;
-  const bottom = edgeMap.magnitudes[index01] * (1 - tx) + edgeMap.magnitudes[index11] * tx;
+  const top = values[index00] * (1 - tx) + values[index10] * tx;
+  const bottom = values[index01] * (1 - tx) + values[index11] * tx;
   return top * (1 - ty) + bottom * ty;
 };
+
+const sampleEdgeMagnitude = (edgeMap: EdgeMap, x: number, y: number) => {
+  if (edgeMap.maxMagnitude === 0) return 0;
+  return bilinearSample(edgeMap.magnitudes, edgeMap, x, y);
+};
+
+const sampleEdgeGradient = (edgeMap: EdgeMap, x: number, y: number) => ({
+  x: bilinearSample(edgeMap.gradientX, edgeMap, x, y),
+  y: bilinearSample(edgeMap.gradientY, edgeMap, x, y),
+});
 
 const normalise = (vector: { x: number; y: number }) => {
   const length = Math.hypot(vector.x, vector.y);
@@ -162,6 +182,8 @@ export const snapPolygonToEdges = (
   const step = Math.max(1, Math.round(maxDistance / 24));
   const distancePenalty = edgeMap.maxMagnitude / Math.max(maxDistance, 1) / 6;
   const minimumGain = edgeMap.maxMagnitude * 0.05;
+  const perpendicularityThreshold = 0.3;
+  const orientationPenaltyFactor = 0.6;
 
   return polygon.map((point, index) => {
     const prev = polygon[(index - 1 + polygon.length) % polygon.length];
@@ -190,8 +212,31 @@ export const snapPolygonToEdges = (
     }
 
     const baseMagnitude = sampleEdgeMagnitude(edgeMap, currentPx.x, currentPx.y);
+    let baseStrength = baseMagnitude;
+    let baseScore = baseMagnitude;
+    normals.forEach((normalVector) => {
+      const normal = normalise(normalVector);
+      if (normal.x === 0 && normal.y === 0) return;
+      const gradient = sampleEdgeGradient(edgeMap, currentPx.x, currentPx.y);
+      const gradientLength = Math.hypot(gradient.x, gradient.y);
+      if (gradientLength === 0) return;
+      const normalizedGradient = { x: gradient.x / gradientLength, y: gradient.y / gradientLength };
+      const alignment = Math.abs(normal.x * normalizedGradient.x + normal.y * normalizedGradient.y);
+      const penaltyRatio = Math.max(0, alignment - perpendicularityThreshold) / Math.max(1 - perpendicularityThreshold, 1e-6);
+      const strength = baseMagnitude * (1 - penaltyRatio * orientationPenaltyFactor);
+      const orientationPenalty = penaltyRatio * orientationPenaltyFactor * edgeMap.maxMagnitude;
+      if (strength > baseStrength) {
+        baseStrength = strength;
+      }
+      const score = strength - orientationPenalty;
+      if (score > baseScore) {
+        baseScore = score;
+      }
+    });
+
+    let bestStrength = baseStrength;
     let bestMagnitude = baseMagnitude;
-    let bestScore = baseMagnitude;
+    let bestScore = baseScore;
     let bestPoint = { ...currentPx };
 
     normals.forEach((normalVector) => {
@@ -204,9 +249,33 @@ export const snapPolygonToEdges = (
             y: clamp(currentPx.y + normal.y * distance * direction, 0, imageHeight - 1),
           };
           const magnitude = sampleEdgeMagnitude(edgeMap, candidate.x, candidate.y);
-          const score = magnitude - distance * distancePenalty;
+          if (magnitude <= 0) continue;
+          const displacement = {
+            x: candidate.x - currentPx.x,
+            y: candidate.y - currentPx.y,
+          };
+          const displacementLength = Math.hypot(displacement.x, displacement.y);
+          if (displacementLength === 0) continue;
+          const directionVector = {
+            x: displacement.x / displacementLength,
+            y: displacement.y / displacementLength,
+          };
+          const gradient = sampleEdgeGradient(edgeMap, candidate.x, candidate.y);
+          const gradientLength = Math.hypot(gradient.x, gradient.y);
+          if (gradientLength === 0) continue;
+          const normalizedGradient = { x: gradient.x / gradientLength, y: gradient.y / gradientLength };
+          const alignment = Math.abs(
+            directionVector.x * normalizedGradient.x + directionVector.y * normalizedGradient.y
+          );
+          const penaltyRatio = Math.max(0, alignment - perpendicularityThreshold) /
+            Math.max(1 - perpendicularityThreshold, 1e-6);
+          const strength = magnitude * (1 - penaltyRatio * orientationPenaltyFactor);
+          if (strength <= 0) continue;
+          const orientationPenalty = penaltyRatio * orientationPenaltyFactor * edgeMap.maxMagnitude;
+          const score = strength - orientationPenalty - distance * distancePenalty;
           if (score > bestScore) {
             bestScore = score;
+            bestStrength = strength;
             bestMagnitude = magnitude;
             bestPoint = candidate;
           }
