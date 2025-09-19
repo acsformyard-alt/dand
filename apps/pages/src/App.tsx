@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthPanel from './components/AuthPanel';
 import SessionViewer from './components/SessionViewer';
-import RegionList from './components/RegionList';
-import MarkerPanel from './components/MarkerPanel';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
+import MapCreationWizard from './components/MapCreationWizard';
+import MapFolderList from './components/MapFolderList';
 import type {
   AuthResponse,
   Campaign,
@@ -15,6 +15,25 @@ import type {
   SessionRecord,
   User,
 } from './types';
+
+const getMapMetadataString = (map: MapRecord | null, key: string) => {
+  const value = map?.metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const getMapMetadataStringArray = (map: MapRecord | null, key: string) => {
+  const value = map?.metadata?.[key];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  return [];
+};
 
 const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
@@ -43,6 +62,7 @@ const App: React.FC = () => {
   const [newCampaignDescription, setNewCampaignDescription] = useState('');
   const [newCampaignPublic, setNewCampaignPublic] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showMapWizard, setShowMapWizard] = useState(false);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -119,6 +139,29 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchMapsForSelectedCampaign = useCallback(async () => {
+    if (!selectedCampaign) return;
+    try {
+      const campaignMaps = await apiClient.getMapsForCampaign(selectedCampaign.id);
+      setMaps(campaignMaps);
+      if (campaignMaps.length > 0) {
+        setSelectedMap((previous) => {
+          if (!previous) {
+            return campaignMaps[0];
+          }
+          const existing = campaignMaps.find((map) => map.id === previous.id);
+          return existing ?? campaignMaps[0];
+        });
+      } else {
+        setSelectedMap(null);
+        setRegions([]);
+        setMarkers([]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedCampaign]);
+
   useEffect(() => {
     if (token) {
       refreshCampaigns();
@@ -127,24 +170,8 @@ const App: React.FC = () => {
   }, [token]);
 
   useEffect(() => {
-    const loadForCampaign = async () => {
-      if (!selectedCampaign) return;
-      try {
-        const campaignMaps = await apiClient.getMapsForCampaign(selectedCampaign.id);
-        setMaps(campaignMaps);
-        if (campaignMaps.length > 0) {
-          setSelectedMap(campaignMaps[0]);
-        } else {
-          setSelectedMap(null);
-          setRegions([]);
-          setMarkers([]);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    loadForCampaign();
-  }, [selectedCampaign?.id]);
+    fetchMapsForSelectedCampaign();
+  }, [fetchMapsForSelectedCampaign]);
 
   useEffect(() => {
     const loadMapDetails = async () => {
@@ -194,61 +221,26 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateMap = async () => {
+  const handleOpenMapWizard = () => {
     if (!selectedCampaign) return;
-    const name = window.prompt('Map name');
-    if (!name) return;
-    const extension = window.prompt('Original file extension (png, jpg, webp)', 'png') || 'png';
-    const width = Number(window.prompt('Map width (px, optional)', '2048')) || undefined;
-    const height = Number(window.prompt('Map height (px, optional)', '2048')) || undefined;
-    try {
-      const result = await apiClient.createMap({
-        campaignId: selectedCampaign.id,
-        name,
-        originalExtension: extension,
-        width,
-        height,
-      });
-      setMaps((prev) => [result.map, ...prev]);
-      setSelectedMap(result.map);
-      window.alert(`Upload your map using the following URL (PUT request):\n${result.uploads.original}`);
-      setStatusMessage('Map created. Upload via signed URL.');
-    } catch (err) {
-      setStatusMessage((err as Error).message);
-    }
+    setShowMapWizard(true);
   };
 
-  const handleCreateRegion = async () => {
-    if (!selectedMap) return;
-    const name = window.prompt('Region name');
-    if (!name) return;
-    const polygonInput = window.prompt('Polygon points as x,y pairs (e.g. 0.1,0.2;0.2,0.25;0.15,0.3)');
-    if (!polygonInput) return;
-    const polygon = polygonInput.split(';').map((pair) => {
-      const [x, y] = pair.split(',').map((value) => Number(value.trim()));
-      return { x, y };
+  const handleCloseMapWizard = () => {
+    setShowMapWizard(false);
+  };
+
+  const handleMapWizardComplete = (map: MapRecord, createdMarkers: Marker[]) => {
+    setMaps((previous) => {
+      const without = previous.filter((entry) => entry.id !== map.id);
+      return [map, ...without];
     });
-    try {
-      const region = await apiClient.createRegion(selectedMap.id, { name, polygon });
-      setRegions((prev) => [...prev, region]);
-    } catch (err) {
-      setStatusMessage((err as Error).message);
-    }
-  };
-
-  const handleCreateMarker = async () => {
-    if (!selectedMap) return;
-    const label = window.prompt('Marker label');
-    if (!label) return;
-    const x = Number(window.prompt('X coordinate (0-1)', '0.5'));
-    const y = Number(window.prompt('Y coordinate (0-1)', '0.5'));
-    const color = window.prompt('Color', '#facc15') || '#facc15';
-    try {
-      const marker = await apiClient.createMarker(selectedMap.id, { label, x, y, color });
-      setMarkers((prev) => [...prev, marker]);
-    } catch (err) {
-      setStatusMessage((err as Error).message);
-    }
+    setSelectedMap(map);
+    setRegions([]);
+    setMarkers(createdMarkers);
+    fetchMapsForSelectedCampaign();
+    setStatusMessage('Map created successfully.');
+    setShowMapWizard(false);
   };
 
   const handleJoinByKey = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -288,6 +280,13 @@ const App: React.FC = () => {
   };
 
   const mySessions = useMemo(() => lobbySessions.filter((session) => session.hostId === user?.id), [lobbySessions, user?.id]);
+  const mapDescription = useMemo(() => getMapMetadataString(selectedMap, 'description'), [selectedMap]);
+  const mapNotes = useMemo(() => getMapMetadataString(selectedMap, 'notes'), [selectedMap]);
+  const mapGrouping = useMemo(() => {
+    const groupingValue = getMapMetadataString(selectedMap, 'grouping') ?? getMapMetadataString(selectedMap, 'group');
+    return groupingValue ?? 'Ungrouped Maps';
+  }, [selectedMap]);
+  const mapTags = useMemo(() => getMapMetadataStringArray(selectedMap, 'tags'), [selectedMap]);
 
   const handleStartSession = async () => {
     if (!selectedCampaign || !selectedMap) {
@@ -701,152 +700,137 @@ const App: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
-                  <div className="space-y-6">
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">Maps</h3>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
-                          onClick={handleCreateMap}
-                        >
-                          New Map
-                        </button>
-                      </div>
-                      <ul className="space-y-2 text-sm">
-                        {maps.map((map) => (
-                          <li key={map.id}>
-                            <button
-                              onClick={() => setSelectedMap(map)}
-                              className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                                selectedMap?.id === map.id
-                                  ? 'border-teal-400 bg-teal-500/20 text-teal-100'
-                                  : 'border-slate-800/70 bg-slate-950/60 text-slate-300 hover:border-teal-400/60 hover:text-teal-100'
-                              }`}
-                            >
-                              {map.name}
-                            </button>
-                          </li>
-                        ))}
-                        {maps.length === 0 && (
-                          <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
-                            No maps yet. Create one to begin.
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">My Sessions</h3>
-                      </div>
-                      <ul className="space-y-2 text-sm">
-                        {mySessions.map((session) => (
-                          <li key={session.id}>
-                            <button
-                              onClick={() => handleJoinSession(session)}
-                              className="w-full rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-left text-slate-300 transition hover:border-teal-400/60 hover:text-teal-100"
-                            >
-                              {session.name}
-                            </button>
-                          </li>
-                        ))}
-                        {mySessions.length === 0 && (
-                          <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
-                            No active sessions.
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">Lobby</h3>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
-                          onClick={refreshLobby}
-                        >
-                          Refresh
-                        </button>
-                      </div>
-                      <ul className="space-y-2 text-sm">
-                        {lobbySessions.map((session) => (
-                          <li key={session.id} className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-3">
-                            <p className="font-semibold text-slate-100">{session.name}</p>
-                            <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Campaign: {session.campaignName ?? 'Unknown'}</p>
-                            <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Map: {session.mapName ?? 'Unknown'}</p>
-                            <button
-                              type="button"
-                              className="mt-3 w-full rounded-xl border border-teal-400/60 bg-teal-500/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
-                              onClick={() => handleJoinSession(session)}
-                            >
-                              Join as {session.hostId === user.id ? 'DM' : 'Player'}
-                            </button>
-                          </li>
-                        ))}
-                        {lobbySessions.length === 0 && (
-                          <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
-                            No active sessions available.
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                  <div className="space-y-6">
-                    {selectedMap ? (
-                      <>
-                        <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                            <h3 className="text-xl font-semibold text-white">{selectedMap.name}</h3>
-                            <div className="flex items-center gap-4 text-xs text-slate-400">
+                <div className="space-y-6">
+                  <MapFolderList
+                    maps={maps}
+                    selectedMapId={selectedMap?.id ?? null}
+                    onSelect={(map) => setSelectedMap(map)}
+                    onCreateMap={handleOpenMapWizard}
+                  />
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                    <div className="space-y-6">
+                      {selectedMap ? (
+                        <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-6">
+                          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-2xl font-semibold text-white">{selectedMap.name}</h3>
+                              {mapDescription && <p className="mt-2 text-sm text-slate-300">{mapDescription}</p>}
+                              {!mapDescription && mapNotes && <p className="mt-2 text-sm text-slate-400">{mapNotes}</p>}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.4em] text-slate-500">
                               <span>Regions: {regions.length}</span>
                               <span>Markers: {markers.length}</span>
+                              <span>
+                                Size: {selectedMap.width ?? '—'} × {selectedMap.height ?? '—'}
+                              </span>
                             </div>
                           </div>
-                          <MapMaskCanvas
-                            imageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
-                            width={selectedMap.width}
-                            height={selectedMap.height}
-                            regions={regions}
-                            revealedRegionIds={[]}
-                            markers={markers}
-                            mode="dm"
-                          />
+                          <div className="overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
+                            <MapMaskCanvas
+                              imageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
+                              width={selectedMap.width}
+                              height={selectedMap.height}
+                              regions={regions}
+                              revealedRegionIds={[]}
+                              markers={markers}
+                              mode="dm"
+                            />
+                          </div>
+                          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Grouping</p>
+                              <p className="mt-2 text-sm font-semibold text-teal-200">{mapGrouping}</p>
+                              {mapNotes && mapDescription && (
+                                <p className="mt-3 text-xs text-slate-400">Notes: {mapNotes}</p>
+                              )}
+                            </div>
+                            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Tags</p>
+                              {mapTags.length > 0 ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {mapTags.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-3 text-xs text-slate-500">No tags assigned yet.</p>
+                              )}
+                            </div>
+                          </div>
+                          {!mapDescription && !mapNotes && (
+                            <p className="mt-4 text-xs text-slate-500">
+                              Add details and notes through the map wizard to give your players extra context.
+                            </p>
+                          )}
                         </div>
-                        <div className="grid gap-6 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                            <div className="mb-3 flex items-center justify-between">
-                              <h4 className="text-xs uppercase tracking-[0.4em] text-slate-400">Regions</h4>
-                              <button
-                                type="button"
-                                className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
-                                onClick={handleCreateRegion}
-                              >
-                                Add Region
-                              </button>
-                            </div>
-                            <RegionList regions={regions} revealedRegionIds={[]} />
-                          </div>
-                          <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-                            <div className="mb-3 flex items-center justify-between">
-                              <h4 className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</h4>
-                              <button
-                                type="button"
-                                className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
-                                onClick={handleCreateMarker}
-                              >
-                                Add Marker
-                              </button>
-                            </div>
-                            <MarkerPanel markers={markers} />
-                          </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-700/70 p-12 text-center text-sm text-slate-400">
+                          Select or create a map to begin shaping your encounter.
                         </div>
-                      </>
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-slate-700/70 p-12 text-center text-sm text-slate-400">
-                        Select or create a map to begin shaping your encounter.
+                      )}
+                    </div>
+                    <div className="space-y-6">
+                      <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">My Sessions</h3>
+                        </div>
+                        <ul className="space-y-2 text-sm">
+                          {mySessions.map((session) => (
+                            <li key={session.id}>
+                              <button
+                                onClick={() => handleJoinSession(session)}
+                                className="w-full rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-left text-slate-300 transition hover:border-teal-400/60 hover:text-teal-100"
+                              >
+                                {session.name}
+                              </button>
+                            </li>
+                          ))}
+                          {mySessions.length === 0 && (
+                            <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
+                              No active sessions.
+                            </li>
+                          )}
+                        </ul>
                       </div>
-                    )}
+                      <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">Lobby</h3>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
+                            onClick={refreshLobby}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        <ul className="space-y-2 text-sm">
+                          {lobbySessions.map((session) => (
+                            <li key={session.id} className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-3">
+                              <p className="font-semibold text-slate-100">{session.name}</p>
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Campaign: {session.campaignName ?? 'Unknown'}</p>
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Map: {session.mapName ?? 'Unknown'}</p>
+                              <button
+                                type="button"
+                                className="mt-3 w-full rounded-xl border border-teal-400/60 bg-teal-500/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                                onClick={() => handleJoinSession(session)}
+                              >
+                                Join as {session.hostId === user.id ? 'DM' : 'Player'}
+                              </button>
+                            </li>
+                          ))}
+                          {lobbySessions.length === 0 && (
+                            <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
+                              No active sessions available.
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -858,6 +842,13 @@ const App: React.FC = () => {
             )}
           </div>
         </section>
+        {showMapWizard && selectedCampaign && (
+          <MapCreationWizard
+            campaign={selectedCampaign}
+            onClose={handleCloseMapWizard}
+            onComplete={handleMapWizardComplete}
+          />
+        )}
       </div>
     </div>
   );
