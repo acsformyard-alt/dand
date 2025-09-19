@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildEdgeMap, computeDisplayMetrics, snapPolygonToEdges } from './imageProcessing';
+import {
+  buildEdgeMap,
+  computeDisplayMetrics,
+  snapPolygonToEdges,
+  smoothPolygon,
+} from './imageProcessing';
 import type { EdgeMap } from './imageProcessing';
 
 describe('computeDisplayMetrics', () => {
@@ -132,6 +137,47 @@ describe('snapPolygonToEdges', () => {
     });
 
     expect(snapped[1].x).toBeCloseTo(polygon[1].x, 1);
+  });
+});
+
+describe('smoothPolygon', () => {
+  it('averages vertices with their neighbours while clamping output', () => {
+    const polygon = [
+      { x: -0.2, y: 0.1 },
+      { x: 0, y: 0 },
+      { x: 0.6, y: 0.8 },
+      { x: 1.3, y: 0.5 },
+    ];
+
+    const smoothed = smoothPolygon(polygon, 1);
+
+    expect(smoothed).toHaveLength(polygon.length);
+    smoothed.forEach((point) => {
+      expect(point.x).toBeGreaterThanOrEqual(0);
+      expect(point.x).toBeLessThanOrEqual(1);
+      expect(point.y).toBeGreaterThanOrEqual(0);
+      expect(point.y).toBeLessThanOrEqual(1);
+    });
+
+    expect(smoothed[1].x).toBeGreaterThan(polygon[1].x);
+    expect(smoothed[1].x).toBeLessThan(0.4);
+    expect(smoothed[1].y).toBeGreaterThan(polygon[1].y);
+    expect(smoothed[1].y).toBeLessThan(polygon[2].y);
+  });
+
+  it('supports multiple iterations of smoothing', () => {
+    const polygon = [
+      { x: 0, y: 0 },
+      { x: 0.25, y: 0.75 },
+      { x: 0.5, y: 0.9 },
+      { x: 1, y: 0.4 },
+    ];
+
+    const once = smoothPolygon(polygon, 1);
+    const twice = smoothPolygon(polygon, 2);
+
+    expect(twice[1].x).toBeCloseTo((once[0].x + once[1].x * 2 + once[2].x) / 4, 5);
+    expect(twice[1].y).toBeLessThan(once[1].y);
   });
 });
 
