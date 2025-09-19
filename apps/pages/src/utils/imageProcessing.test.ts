@@ -50,7 +50,7 @@ describe('buildEdgeMap', () => {
 });
 
 describe('snapPolygonToEdges', () => {
-  it('snaps vertices towards well-aligned edges', () => {
+  it('prefers well-aligned edges over misaligned high-contrast candidates', () => {
     const width = 5;
     const height = 5;
     const size = width * height;
@@ -96,11 +96,12 @@ describe('snapPolygonToEdges', () => {
       searchRadius: 4,
     });
 
-    expect(snapped[1].x).toBeGreaterThan(0.4);
-    expect(snapped[1].x).toBeLessThan(0.7);
+    expect(snapped[1].x).toBeLessThan(polygon[1].x);
+    expect(snapped[1].x).toBeCloseTo(0, 5);
+    expect(snapped[1].x).toBeLessThan(0.1);
   });
 
-  it('penalises candidates whose gradients align with the polygon normal', () => {
+  it('penalises candidates with misaligned gradients despite strong magnitudes', () => {
     const width = 5;
     const height = 5;
     const size = width * height;
@@ -110,8 +111,8 @@ describe('snapPolygonToEdges', () => {
 
     const index = 2 * width + 0;
     magnitudes[index] = 1;
-    gradientX[index] = 1;
-    gradientY[index] = 0;
+    gradientX[index] = 0;
+    gradientY[index] = 1;
 
     const edgeMap: EdgeMap = {
       width,
@@ -136,7 +137,9 @@ describe('snapPolygonToEdges', () => {
       searchRadius: 4,
     });
 
-    expect(snapped[1].x).toBeCloseTo(polygon[1].x, 1);
+    expect(snapped[1].x).toBeCloseTo(polygon[1].x, 3);
+    expect(snapped[1].x).toBeLessThan(0.3);
+    expect(snapped[1].x).toBeGreaterThan(0.1);
   });
 });
 

@@ -182,8 +182,8 @@ export const snapPolygonToEdges = (
   const step = Math.max(1, Math.round(maxDistance / 24));
   const distancePenalty = edgeMap.maxMagnitude / Math.max(maxDistance, 1) / 6;
   const minimumGain = edgeMap.maxMagnitude * 0.05;
-  const perpendicularityThreshold = 0.3;
-  const orientationPenaltyFactor = 0.6;
+  const alignmentThreshold = 0.55;
+  const misalignmentPenaltyFactor = 0.85;
 
   return polygon.map((point, index) => {
     const prev = polygon[(index - 1 + polygon.length) % polygon.length];
@@ -214,6 +214,16 @@ export const snapPolygonToEdges = (
     const baseMagnitude = sampleEdgeMagnitude(edgeMap, currentPx.x, currentPx.y);
     let baseStrength = baseMagnitude;
     let baseScore = baseMagnitude;
+    const adjustForAlignment = (alignment: number, magnitude: number) => {
+      const misalignmentRatio =
+        Math.max(0, alignmentThreshold - alignment) /
+        Math.max(alignmentThreshold, 1e-6);
+      const penalty = misalignmentRatio * misalignmentPenaltyFactor;
+      const strength = magnitude * Math.max(0, 1 - penalty);
+      const orientationPenalty = penalty * edgeMap.maxMagnitude;
+      return { strength, orientationPenalty };
+    };
+
     normals.forEach((normalVector) => {
       const normal = normalise(normalVector);
       if (normal.x === 0 && normal.y === 0) return;
@@ -222,9 +232,7 @@ export const snapPolygonToEdges = (
       if (gradientLength === 0) return;
       const normalizedGradient = { x: gradient.x / gradientLength, y: gradient.y / gradientLength };
       const alignment = Math.abs(normal.x * normalizedGradient.x + normal.y * normalizedGradient.y);
-      const penaltyRatio = Math.max(0, alignment - perpendicularityThreshold) / Math.max(1 - perpendicularityThreshold, 1e-6);
-      const strength = baseMagnitude * (1 - penaltyRatio * orientationPenaltyFactor);
-      const orientationPenalty = penaltyRatio * orientationPenaltyFactor * edgeMap.maxMagnitude;
+      const { strength, orientationPenalty } = adjustForAlignment(alignment, baseMagnitude);
       if (strength > baseStrength) {
         baseStrength = strength;
       }
@@ -267,11 +275,8 @@ export const snapPolygonToEdges = (
           const alignment = Math.abs(
             directionVector.x * normalizedGradient.x + directionVector.y * normalizedGradient.y
           );
-          const penaltyRatio = Math.max(0, alignment - perpendicularityThreshold) /
-            Math.max(1 - perpendicularityThreshold, 1e-6);
-          const strength = magnitude * (1 - penaltyRatio * orientationPenaltyFactor);
+          const { strength, orientationPenalty } = adjustForAlignment(alignment, magnitude);
           if (strength <= 0) continue;
-          const orientationPenalty = penaltyRatio * orientationPenaltyFactor * edgeMap.maxMagnitude;
           const score = strength - orientationPenalty - distance * distancePenalty;
           if (score > bestScore) {
             bestScore = score;
