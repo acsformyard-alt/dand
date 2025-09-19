@@ -4,7 +4,7 @@ compatibility_date = "2024-04-24"
 usage_model = "unbound"
 
 [vars]
-SESSION_SECRET = "replace-with-production-secret"
+SESSION_SECRET = "3qP7hY9j!mR$ZwL6xV^tBnE@u8#KdF%o2pQjG0lHcXyTnVzAwRb6D$Pq7Jf9U#xM"
 
 [[d1_databases]]
 binding = "MAPS_DB"
