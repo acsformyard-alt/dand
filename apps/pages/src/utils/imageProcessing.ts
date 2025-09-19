@@ -297,3 +297,37 @@ export const snapPolygonToEdges = (
   });
 };
 
+export const smoothPolygon = (
+  polygon: Array<{ x: number; y: number }>,
+  iterations = 1
+) => {
+  if (polygon.length < 3 || iterations <= 0) {
+    return polygon.map((point) => ({
+      x: clamp(point.x, 0, 1),
+      y: clamp(point.y, 0, 1),
+    }));
+  }
+
+  let current = polygon.map((point) => ({
+    x: clamp(point.x, 0, 1),
+    y: clamp(point.y, 0, 1),
+  }));
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const next: Array<{ x: number; y: number }> = [];
+    for (let index = 0; index < current.length; index += 1) {
+      const point = current[index];
+      const previous = current[(index - 1 + current.length) % current.length];
+      const following = current[(index + 1) % current.length];
+      const smoothed = {
+        x: clamp((previous.x + point.x * 2 + following.x) / 4, 0, 1),
+        y: clamp((previous.y + point.y * 2 + following.y) / 4, 0, 1),
+      };
+      next.push(smoothed);
+    }
+    current = next;
+  }
+
+  return current;
+};
+

@@ -4,6 +4,7 @@ import {
   buildEdgeMap,
   computeDisplayMetrics,
   snapPolygonToEdges,
+  smoothPolygon,
   type EdgeMap,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
@@ -307,9 +308,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             imageWidth: imageDimensions.width,
             imageHeight: imageDimensions.height,
           });
+          polygon = smoothPolygon(polygon, 2);
         }
         polygon = normalisePolygon(polygon);
         polygon = simplifyPolygon(polygon, 0.0025);
+        polygon = normalisePolygon(polygon);
       }
       polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
       const newRoomId = `room-${Date.now()}-${Math.round(Math.random() * 10000)}`;
@@ -580,9 +583,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             imageWidth: imageDimensions.width,
             imageHeight: imageDimensions.height,
           });
+          polygon = smoothPolygon(polygon, 2);
         }
         polygon = normalisePolygon(polygon);
         polygon = simplifyPolygon(polygon, 0.0025);
+        polygon = normalisePolygon(polygon);
         polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
         return { ...room, polygon };
       })
