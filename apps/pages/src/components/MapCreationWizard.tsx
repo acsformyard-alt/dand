@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
+import {
+  buildEdgeMap,
+  computeDisplayMetrics,
+  snapPolygonToEdges,
+  type EdgeMap,
+  type ImageDisplayMetrics,
+} from '../utils/imageProcessing';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -148,6 +155,103 @@ const steps: Array<{ title: string; description: string }> = [
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+const resolveNormalizedPointWithinImage = (
+  event: { clientX: number; clientY: number },
+  container: HTMLDivElement | null,
+  imageDimensions: { width: number; height: number } | null
+) => {
+  if (!container || !imageDimensions) return null;
+  const rect = container.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const metrics = computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height);
+  const relativeX = clamp(event.clientX - rect.left - metrics.offsetX, 0, metrics.displayWidth);
+  const relativeY = clamp(event.clientY - rect.top - metrics.offsetY, 0, metrics.displayHeight);
+  const normalisedX = metrics.displayWidth === 0 ? 0 : relativeX / metrics.displayWidth;
+  const normalisedY = metrics.displayHeight === 0 ? 0 : relativeY / metrics.displayHeight;
+  return { x: normalisedX, y: normalisedY };
+};
+
+const useImageDisplayMetrics = (
+  ref: React.RefObject<HTMLDivElement>,
+  imageDimensions: { width: number; height: number } | null
+) => {
+  const [metrics, setMetrics] = useState<ImageDisplayMetrics | null>(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !imageDimensions) {
+      setMetrics(null);
+      return;
+    }
+
+    let animationFrame: number | null = null;
+
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      setMetrics(
+        computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height)
+      );
+    };
+
+    update();
+
+    const scheduleUpdate = () => {
+      if (typeof window === 'undefined') {
+        update();
+        return;
+      }
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null;
+        update();
+      });
+    };
+
+    window.addEventListener('resize', scheduleUpdate);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(scheduleUpdate);
+      observer.observe(element);
+    }
+
+    return () => {
+      window.removeEventListener('resize', scheduleUpdate);
+      if (observer) observer.disconnect();
+      if (animationFrame !== null) {
+        if (typeof window !== 'undefined') {
+          window.cancelAnimationFrame(animationFrame);
+        }
+        animationFrame = null;
+      }
+    };
+  }, [ref, imageDimensions]);
+
+  return metrics;
+};
+
+const normalisedToContainerPoint = (
+  point: { x: number; y: number },
+  metrics: ImageDisplayMetrics | null
+) => {
+  if (!metrics || metrics.containerWidth === 0 || metrics.containerHeight === 0) {
+    return { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) };
+  }
+  const pixelX = metrics.offsetX + point.x * metrics.displayWidth;
+  const pixelY = metrics.offsetY + point.y * metrics.displayHeight;
+  return {
+    x: clamp(pixelX / metrics.containerWidth, 0, 1),
+    y: clamp(pixelY / metrics.containerHeight, 0, 1),
+  };
+};
+
+const containerPointToStyle = (point: { x: number; y: number }): React.CSSProperties => ({
+  left: `${point.x * 100}%`,
+  top: `${point.y * 100}%`,
+});
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose, onComplete }) => {
   const [step, setStep] = useState<WizardStep>(0);
   const [file, setFile] = useState<File | null>(null);
@@ -175,18 +279,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const roomsMapRef = useRef<HTMLDivElement>(null);
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const edgeMapRef = useRef<EdgeMap | null>(null);
+
+  const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
+  const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
   const resolveRelativePoint = useCallback(
-    (event: { clientX: number; clientY: number }) => {
-      const container = roomsMapRef.current;
-      if (!container) return null;
-      const rect = container.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return null;
-      const relativeX = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-      const relativeY = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-      return { x: relativeX, y: relativeY };
-    },
-    []
+    (event: { clientX: number; clientY: number }) =>
+      resolveNormalizedPointWithinImage(event, roomsMapRef.current, imageDimensions),
+    [imageDimensions]
   );
 
   const finalizeRoomOutline = useCallback(
@@ -199,8 +300,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         return;
       }
       if (selectedRoomTool === 'smart') {
-        polygon = simplifyPolygon(polygon, 0.0035);
+        const edgeMap = edgeMapRef.current;
+        if (edgeMap && imageDimensions) {
+          polygon = snapPolygonToEdges(polygon, {
+            edgeMap,
+            imageWidth: imageDimensions.width,
+            imageHeight: imageDimensions.height,
+          });
+        }
+        polygon = normalisePolygon(polygon);
+        polygon = simplifyPolygon(polygon, 0.0025);
       }
+      polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
       const newRoomId = `room-${Date.now()}-${Math.round(Math.random() * 10000)}`;
       setRooms((current) => {
         const nextIndex = current.length + 1;
@@ -222,7 +333,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setDraftRoomPoints([]);
       drawingPointsRef.current = [];
     },
-    [selectedRoomTool]
+    [imageDimensions, selectedRoomTool]
   );
 
   useEffect(() => {
@@ -284,6 +395,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId) ?? null, [activeRoomId, rooms]);
   const activeRoomCenter = useMemo(() => computeCentroid(activeRoom?.polygon ?? []), [activeRoom]);
 
+  const overlayWidth = imageDimensions?.width ?? 1000;
+  const overlayHeight = imageDimensions?.height ?? 1000;
+  const overlayScale = Math.max(overlayWidth, overlayHeight);
+  const roomOverlayStyle = roomsDisplayMetrics
+    ? {
+        left: `${(roomsDisplayMetrics.offsetX / roomsDisplayMetrics.containerWidth) * 100}%`,
+        top: `${(roomsDisplayMetrics.offsetY / roomsDisplayMetrics.containerHeight) * 100}%`,
+        width: `${(roomsDisplayMetrics.displayWidth / roomsDisplayMetrics.containerWidth) * 100}%`,
+        height: `${(roomsDisplayMetrics.displayHeight / roomsDisplayMetrics.containerHeight) * 100}%`,
+      }
+    : { left: '0%', top: '0%', width: '100%', height: '100%' };
+  const activeRoomAnchor = normalisedToContainerPoint(activeRoomCenter, roomsDisplayMetrics);
+  const clampedActiveAnchor = {
+    x: clamp(activeRoomAnchor.x, 0.12, 0.88),
+    y: clamp(activeRoomAnchor.y, 0.18, 0.85),
+  };
+
   useEffect(() => {
     if (!file) {
       setPreviewUrl((previous) => {
@@ -293,6 +421,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         return null;
       });
       setImageDimensions(null);
+      edgeMapRef.current = null;
       return;
     }
     const objectUrl = URL.createObjectURL(file);
@@ -305,6 +434,21 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     const image = new Image();
     image.onload = () => {
       setImageDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.drawImage(image, 0, 0);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          edgeMapRef.current = buildEdgeMap(imageData.data, canvas.width, canvas.height);
+        } else {
+          edgeMapRef.current = null;
+        }
+      } catch {
+        edgeMapRef.current = null;
+      }
     };
     image.src = objectUrl;
     return () => {
@@ -324,14 +468,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     if (!draggingId) return;
 
     const handlePointerMove = (event: PointerEvent) => {
-      const container = mapAreaRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      const relativeX = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-      const relativeY = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      const point = resolveNormalizedPointWithinImage(event, mapAreaRef.current, imageDimensions);
+      if (!point) return;
       setMarkers((current) =>
-        current.map((marker) => (marker.id === draggingId ? { ...marker, x: relativeX, y: relativeY } : marker))
+        current.map((marker) => (marker.id === draggingId ? { ...marker, x: point.x, y: point.y } : marker))
       );
     };
 
@@ -345,7 +485,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [draggingId]);
+  }, [draggingId, imageDimensions]);
 
   const allowNext = useMemo(() => {
     if (step === 0) {
@@ -429,11 +569,21 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   };
 
   const handleAutoSnapRoom = (roomId: string) => {
+    const edgeMap = edgeMapRef.current;
     setRooms((current) =>
       current.map((room) => {
         if (room.id !== roomId) return room;
         let polygon = normalisePolygon(room.polygon);
-        polygon = simplifyPolygon(polygon, 0.0035);
+        if (edgeMap && imageDimensions) {
+          polygon = snapPolygonToEdges(polygon, {
+            edgeMap,
+            imageWidth: imageDimensions.width,
+            imageHeight: imageDimensions.height,
+          });
+        }
+        polygon = normalisePolygon(polygon);
+        polygon = simplifyPolygon(polygon, 0.0025);
+        polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
         return { ...room, polygon };
       })
     );
@@ -851,22 +1001,30 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                       className="h-full w-full select-none object-contain"
                       draggable={false}
                     />
-                    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+                    <svg
+                      className="pointer-events-none absolute"
+                      viewBox={`0 0 ${overlayWidth} ${overlayHeight}`}
+                      preserveAspectRatio="xMidYMid meet"
+                      style={roomOverlayStyle}
+                    >
                       {rooms.map((room) => {
                         const isActive = room.id === activeRoomId;
-                        const polygonPoints = room.polygon.map((point) => `${point.x * 1000},${point.y * 1000}`).join(' ');
+                        const polygonPoints = room.polygon
+                          .map((point) => `${point.x * overlayWidth},${point.y * overlayHeight}`)
+                          .join(' ');
                         const center = computeCentroid(room.polygon);
+                        const strokeWidth = isActive ? overlayScale * 0.006 : overlayScale * 0.004;
                         return (
                           <g key={room.id}>
                             <polygon
                               points={polygonPoints}
                               fill={isActive ? 'rgba(45, 212, 191, 0.28)' : 'rgba(59, 130, 246, 0.22)'}
                               stroke={isActive ? 'rgba(45, 212, 191, 0.9)' : 'rgba(148, 163, 184, 0.9)'}
-                              strokeWidth={isActive ? 6 : 4}
+                              strokeWidth={strokeWidth}
                             />
                             <text
-                              x={center.x * 1000}
-                              y={center.y * 1000}
+                              x={center.x * overlayWidth}
+                              y={center.y * overlayHeight}
                               textAnchor="middle"
                               dominantBaseline="middle"
                               className="fill-white text-[26px] font-semibold"
@@ -879,16 +1037,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                       })}
                       {draftRoomPoints.length > 1 && (
                         <polyline
-                          points={[...draftRoomPoints, draftRoomPoints[0]].map((point) => `${point.x * 1000},${point.y * 1000}`).join(' ')}
+                          points={[...draftRoomPoints, draftRoomPoints[0]]
+                            .map((point) => `${point.x * overlayWidth},${point.y * overlayHeight}`)
+                            .join(' ')}
                           fill="rgba(45, 212, 191, 0.18)"
                           stroke="rgba(45, 212, 191, 0.8)"
-                          strokeWidth={5}
+                          strokeWidth={overlayScale * 0.005}
                           strokeLinejoin="round"
                           strokeLinecap="round"
                         />
                       )}
                       {draftRoomPoints.length === 1 && (
-                        <circle cx={draftRoomPoints[0].x * 1000} cy={draftRoomPoints[0].y * 1000} r={12} fill="rgba(45, 212, 191, 0.8)" />
+                        <circle
+                          cx={draftRoomPoints[0].x * overlayWidth}
+                          cy={draftRoomPoints[0].y * overlayHeight}
+                          r={overlayScale * 0.012}
+                          fill="rgba(45, 212, 191, 0.8)"
+                        />
                       )}
                     </svg>
                     {isOutliningRoom && (
@@ -913,10 +1078,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     {activeRoom && (
                       <div
                         className="pointer-events-auto absolute z-20 w-80 max-w-[90%] -translate-x-1/2 -translate-y-full rounded-2xl border border-teal-400/40 bg-slate-950/95 p-4 shadow-2xl"
-                        style={{
-                          left: `${clamp(activeRoomCenter.x, 0.12, 0.88) * 100}%`,
-                          top: `${clamp(activeRoomCenter.y, 0.18, 0.85) * 100}%`,
-                        }}
+                        style={containerPointToStyle(clampedActiveAnchor)}
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                       >
@@ -1078,7 +1240,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                           event.preventDefault();
                           setDraggingId(marker.id);
                         }}
-                        style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}
+                        style={containerPointToStyle(
+                          normalisedToContainerPoint({ x: marker.x, y: marker.y }, markerDisplayMetrics)
+                        )}
                         className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
                       >
                         {marker.label || 'Marker'}
