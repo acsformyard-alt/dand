@@ -230,13 +230,13 @@ const App: React.FC = () => {
     setShowMapWizard(false);
   };
 
-  const handleMapWizardComplete = (map: MapRecord, createdMarkers: Marker[]) => {
+  const handleMapWizardComplete = (map: MapRecord, createdMarkers: Marker[], createdRegions: Region[]) => {
     setMaps((previous) => {
       const without = previous.filter((entry) => entry.id !== map.id);
       return [map, ...without];
     });
     setSelectedMap(map);
-    setRegions([]);
+    setRegions(createdRegions);
     setMarkers(createdMarkers);
     fetchMapsForSelectedCampaign();
     setStatusMessage('Map created successfully.');
