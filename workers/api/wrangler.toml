@@ -19,4 +19,4 @@ preview_bucket_name = "maps-bucket-preview"
 [[durable_objects.bindings]]
 name = "SESSION_HUB"
 class_name = "SessionHub"
-script_name = "dand-session-do"
+script_name = "session-do"
