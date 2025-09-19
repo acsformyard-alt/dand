@@ -20,3 +20,7 @@ preview_bucket_name = "maps-bucket-preview"
 name = "SESSION_HUB"
 class_name = "SessionHub"
 script_name = "session-do"
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
