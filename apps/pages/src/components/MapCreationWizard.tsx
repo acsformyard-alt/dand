@@ -59,6 +59,12 @@ interface RoomAdjustmentState {
   originalPolygon: Array<{ x: number; y: number }>;
 }
 
+const DEFAULT_POINT_MIN_DISTANCE = 0.0015;
+const SMART_SNAP_POINT_MIN_DISTANCE = 0.00075;
+
+const getPointMinimumDistance = (tool?: RoomTool | null) =>
+  tool === 'smartSnap' ? SMART_SNAP_POINT_MIN_DISTANCE : DEFAULT_POINT_MIN_DISTANCE;
+
 const distanceBetweenPoints = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -116,10 +122,14 @@ const simplifyPolygon = (points: Array<{ x: number; y: number }>, tolerance = 0.
   return simplified.length >= 3 ? simplified : points;
 };
 
-const normalisePolygon = (points: Array<{ x: number; y: number }>) => {
+const normalisePolygon = (
+  points: Array<{ x: number; y: number }>,
+  minimumDistance = DEFAULT_POINT_MIN_DISTANCE
+) => {
+  if (points.length === 0) return [];
   const filtered = points.filter((point, index) => {
     if (index === 0) return true;
-    return distanceBetweenPoints(point, points[index - 1]) > 0.0015;
+    return distanceBetweenPoints(point, points[index - 1]) > minimumDistance;
   });
   return filtered;
 };
@@ -408,7 +418,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const finalizeRoomOutline = useCallback(
     (points: Array<{ x: number; y: number }>) => {
       const activeTool = outlineToolRef.current;
-      let polygon = normalisePolygon(points);
+      const minimumDistance = getPointMinimumDistance(activeTool);
+      let polygon = normalisePolygon(points, minimumDistance);
       if (polygon.length < 3) {
         setIsOutliningRoom(false);
         setDraftRoomPoints([]);
@@ -418,16 +429,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       if (activeTool === 'smartSnap' || activeTool === 'smartWand') {
         const edgeMap = edgeMapRef.current;
         if (edgeMap && imageDimensions) {
+          const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
           polygon = snapPolygonToEdges(polygon, {
             edgeMap,
             imageWidth: imageDimensions.width,
             imageHeight: imageDimensions.height,
+            searchRadius:
+              activeTool === 'smartSnap'
+                ? Math.max(24, Math.round(maxDimension * 0.035))
+                : undefined,
           });
           polygon = smoothPolygon(polygon, 2);
         }
-        polygon = normalisePolygon(polygon);
-        polygon = simplifyPolygon(polygon, 0.0025);
-        polygon = normalisePolygon(polygon);
+        polygon = normalisePolygon(polygon, minimumDistance);
+        const simplifyTolerance = activeTool === 'smartSnap' ? 0.0015 : 0.0025;
+        polygon = simplifyPolygon(polygon, simplifyTolerance);
+        polygon = normalisePolygon(polygon, minimumDistance);
       }
       polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
       const newRoomId = `room-${Date.now()}-${Math.round(Math.random() * 10000)}`;
@@ -591,22 +608,29 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setRooms((current) =>
         current.map((room) => {
           if (room.id !== state.roomId) return room;
-          let polygon = normalisePolygon(room.polygon);
+          const minimumDistance = getPointMinimumDistance(room.tool);
+          let polygon = normalisePolygon(room.polygon, minimumDistance);
           if (room.tool === 'smartSnap' || room.tool === 'smartWand') {
             if (edgeMap && imageDimensions) {
+              const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
               polygon = snapPolygonToEdges(polygon, {
                 edgeMap,
                 imageWidth: imageDimensions.width,
                 imageHeight: imageDimensions.height,
+                searchRadius:
+                  room.tool === 'smartSnap'
+                    ? Math.max(24, Math.round(maxDimension * 0.035))
+                    : undefined,
               });
               polygon = smoothPolygon(polygon, 2);
             }
-            polygon = normalisePolygon(polygon);
-            polygon = simplifyPolygon(polygon, 0.0025);
-            polygon = normalisePolygon(polygon);
+            polygon = normalisePolygon(polygon, minimumDistance);
+            const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : 0.0025;
+            polygon = simplifyPolygon(polygon, simplifyTolerance);
+            polygon = normalisePolygon(polygon, minimumDistance);
           } else {
             polygon = simplifyPolygon(polygon, 0.0015);
-            polygon = normalisePolygon(polygon);
+            polygon = normalisePolygon(polygon, minimumDistance);
           }
           polygon = polygon.map((point) => ({
             x: clamp(point.x, 0, 1),
@@ -1023,18 +1047,25 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setRooms((current) =>
       current.map((room) => {
         if (room.id !== roomId) return room;
-        let polygon = normalisePolygon(room.polygon);
+        const minimumDistance = getPointMinimumDistance(room.tool);
+        let polygon = normalisePolygon(room.polygon, minimumDistance);
         if (edgeMap && imageDimensions) {
+          const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
           polygon = snapPolygonToEdges(polygon, {
             edgeMap,
             imageWidth: imageDimensions.width,
             imageHeight: imageDimensions.height,
+            searchRadius:
+              room.tool === 'smartSnap'
+                ? Math.max(24, Math.round(maxDimension * 0.035))
+                : undefined,
           });
           polygon = smoothPolygon(polygon, 2);
         }
-        polygon = normalisePolygon(polygon);
-        polygon = simplifyPolygon(polygon, 0.0025);
-        polygon = normalisePolygon(polygon);
+        polygon = normalisePolygon(polygon, minimumDistance);
+        const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : 0.0025;
+        polygon = simplifyPolygon(polygon, simplifyTolerance);
+        polygon = normalisePolygon(polygon, minimumDistance);
         polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
         return { ...room, polygon };
       })
