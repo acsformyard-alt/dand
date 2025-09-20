@@ -113,19 +113,28 @@ const App: React.FC = () => {
     await refreshLobby();
   };
 
-  const refreshCampaigns = async () => {
+  const refreshCampaigns = useCallback(async () => {
     if (!token) return;
     try {
       const list = await apiClient.getCampaigns();
       setCampaigns(list);
-      if (list.length > 0 && !selectedCampaign) {
-        setSelectedCampaign(list[0]);
-      }
+      setSelectedCampaign((previous) => {
+        if (list.length === 0) {
+          return null;
+        }
+        if (previous) {
+          const existing = list.find((campaign) => campaign.id === previous.id);
+          if (existing) {
+            return existing;
+          }
+        }
+        return list[0];
+      });
     } catch (err) {
       console.error(err);
       setStatusMessage((err as Error).message);
     }
-  };
+  }, [token]);
 
   const refreshLobby = async () => {
     try {
@@ -167,7 +176,14 @@ const App: React.FC = () => {
       refreshCampaigns();
       refreshLobby();
     }
-  }, [token]);
+  }, [refreshCampaigns, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (activeView === 'manage' || activeView === 'admin') {
+      refreshCampaigns();
+    }
+  }, [activeView, refreshCampaigns, token]);
 
   useEffect(() => {
     fetchMapsForSelectedCampaign();
