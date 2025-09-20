@@ -104,30 +104,35 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  const handleAuthenticated = async (response: AuthResponse) => {
-    setToken(response.token);
-    setUser(response.user);
-    setStatusMessage('Welcome back!');
-    setActiveView('join');
-    await refreshCampaigns();
-    await refreshLobby();
-  };
-
-  const refreshCampaigns = async () => {
-    if (!token) return;
-    try {
-      const list = await apiClient.getCampaigns();
-      setCampaigns(list);
-      if (list.length > 0 && !selectedCampaign) {
-        setSelectedCampaign(list[0]);
+  const refreshCampaigns = useCallback(
+    async (authToken?: string) => {
+      const effectiveToken = authToken ?? token;
+      if (!effectiveToken) return;
+      if (authToken && authToken !== token) {
+        apiClient.setToken(authToken);
       }
-    } catch (err) {
-      console.error(err);
-      setStatusMessage((err as Error).message);
-    }
-  };
+      try {
+        const list = await apiClient.getCampaigns();
+        setCampaigns(list);
+        setSelectedCampaign((current) => {
+          if (list.length === 0) {
+            return null;
+          }
+          if (!current) {
+            return list[0];
+          }
+          const existing = list.find((entry) => entry.id === current.id);
+          return existing ?? list[0];
+        });
+      } catch (err) {
+        console.error(err);
+        setStatusMessage((err as Error).message);
+      }
+    },
+    [token]
+  );
 
-  const refreshLobby = async () => {
+  const refreshLobby = useCallback(async () => {
     try {
       const sessions = await apiClient.getLobby();
       setLobbySessions(sessions);
@@ -137,6 +142,16 @@ const App: React.FC = () => {
       setStatusMessage((err as Error).message);
       return [] as LobbySessionSummary[];
     }
+  }, []);
+
+  const handleAuthenticated = async (response: AuthResponse) => {
+    apiClient.setToken(response.token);
+    setToken(response.token);
+    setUser(response.user);
+    setStatusMessage('Welcome back!');
+    setActiveView('join');
+    await refreshCampaigns(response.token);
+    await refreshLobby();
   };
 
   const fetchMapsForSelectedCampaign = useCallback(async () => {
@@ -167,7 +182,7 @@ const App: React.FC = () => {
       refreshCampaigns();
       refreshLobby();
     }
-  }, [token]);
+  }, [refreshCampaigns, refreshLobby, token]);
 
   useEffect(() => {
     fetchMapsForSelectedCampaign();
@@ -359,6 +374,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    apiClient.setToken(null);
     setToken(null);
     setUser(null);
     setCampaigns([]);
@@ -588,7 +604,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     className="rounded-full border border-teal-400/60 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:bg-teal-500/20"
-                    onClick={refreshCampaigns}
+                    onClick={() => refreshCampaigns()}
                   >
                     Refresh
                   </button>
