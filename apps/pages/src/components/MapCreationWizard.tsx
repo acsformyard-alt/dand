@@ -8,6 +8,20 @@ import {
   type EdgeMap,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
+import {
+  ROOM_TOOL_INSTRUCTIONS,
+  ROOM_TOOL_OPTIONS,
+  DEFAULT_ROOM_TOOL,
+  getRoomToolOption,
+  type RoomTool,
+} from './roomToolOptions';
+import {
+  applyBrushToMask,
+  dilateMask,
+  extractLargestPolygonFromMask,
+  floodFillRoomMask,
+  type RasterImageData,
+} from '../utils/roomToolUtils';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -34,7 +48,7 @@ interface DraftRoom {
   tagsInput: string;
   polygon: Array<{ x: number; y: number }>;
   isVisible: boolean;
-  tool: 'lasso' | 'smart';
+  tool: RoomTool;
 }
 
 interface RoomAdjustmentState {
@@ -364,7 +378,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [rooms, setRooms] = useState<DraftRoom[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [selectedRoomTool, setSelectedRoomTool] = useState<'lasso' | 'smart'>('lasso');
+  const [selectedRoomTool, setSelectedRoomTool] = useState<RoomTool>(DEFAULT_ROOM_TOOL);
+  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const [isOutliningRoom, setIsOutliningRoom] = useState(false);
   const [isDrawingRoom, setIsDrawingRoom] = useState(false);
   const [draftRoomPoints, setDraftRoomPoints] = useState<Array<{ x: number; y: number }>>([]);
@@ -373,8 +388,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const roomsMapRef = useRef<HTMLDivElement>(null);
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const edgeMapRef = useRef<EdgeMap | null>(null);
+  const sourceImageRef = useRef<RasterImageData | null>(null);
+  const outlineToolRef = useRef<RoomTool>(DEFAULT_ROOM_TOOL);
   const adjustmentPathRef = useRef<Array<{ x: number; y: number }>>([]);
   const adjustmentPointerIdRef = useRef<number | null>(null);
+  const toolMenuRef = useRef<HTMLDivElement>(null);
+  const toolButtonRef = useRef<HTMLButtonElement>(null);
+  const paintbrushMaskRef = useRef<Uint8Array | null>(null);
+  const paintbrushDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+  const paintbrushRadiusRef = useRef<number>(0);
+  const paintbrushLastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
@@ -387,6 +410,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const finalizeRoomOutline = useCallback(
     (points: Array<{ x: number; y: number }>) => {
+      const activeTool = outlineToolRef.current;
       let polygon = normalisePolygon(points);
       if (polygon.length < 3) {
         setIsOutliningRoom(false);
@@ -394,7 +418,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         drawingPointsRef.current = [];
         return;
       }
-      if (selectedRoomTool === 'smart') {
+      if (activeTool === 'smartSnap' || activeTool === 'smartWand') {
         const edgeMap = edgeMapRef.current;
         if (edgeMap && imageDimensions) {
           polygon = snapPolygonToEdges(polygon, {
@@ -421,7 +445,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             tagsInput: '',
             polygon,
             isVisible: false,
-            tool: selectedRoomTool,
+            tool: activeTool,
           },
         ];
       });
@@ -430,7 +454,46 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setDraftRoomPoints([]);
       drawingPointsRef.current = [];
     },
-    [imageDimensions, selectedRoomTool]
+    [imageDimensions]
+  );
+
+  const handleSmartWandSelection = useCallback(
+    (point: { x: number; y: number }) => {
+      const source = sourceImageRef.current;
+      if (!source) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      const { width, height } = source;
+      if (width <= 0 || height <= 0) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      drawingPointsRef.current = [];
+      setDraftRoomPoints([]);
+      setIsDrawingRoom(false);
+      const px = clamp(point.x * width, 0, width - 1);
+      const py = clamp(point.y * height, 0, height - 1);
+      const startX = Math.floor(px);
+      const startY = Math.floor(py);
+      const edgeMap = edgeMapRef.current ?? null;
+      const result = floodFillRoomMask(source, edgeMap, startX, startY, {
+        colorTolerance: 48,
+        gradientThreshold: edgeMap ? edgeMap.maxMagnitude * 0.36 : undefined,
+        maxPixels: Math.max(512, Math.floor(width * height * 0.65)),
+      });
+      if (!result) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      const polygon = extractLargestPolygonFromMask(result.mask, width, height);
+      if (polygon.length >= 3) {
+        finalizeRoomOutline(polygon);
+      } else {
+        setIsOutliningRoom(false);
+      }
+    },
+    [finalizeRoomOutline]
   );
 
   useEffect(() => {
@@ -439,8 +502,33 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     const handlePointerMove = (event: PointerEvent) => {
       const point = resolveRelativePoint(event);
       if (!point) return;
-      const last = drawingPointsRef.current[drawingPointsRef.current.length - 1];
-      if (!last || distanceBetweenPoints(last, point) > 0.001) {
+      const activeTool = outlineToolRef.current;
+      if (activeTool === 'paintbrush') {
+        const dimensions = paintbrushDimensionsRef.current;
+        const mask = paintbrushMaskRef.current;
+        const radius = paintbrushRadiusRef.current;
+        if (!dimensions || !mask || radius <= 0) return;
+        const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
+        const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
+        const last = paintbrushLastPointRef.current;
+        const distance = last ? Math.hypot(px - last.x, py - last.y) : 0;
+        const steps = last ? Math.max(1, Math.ceil(distance / Math.max(radius * 0.6, 1))) : 1;
+        for (let step = 0; step <= steps; step += 1) {
+          const t = steps === 0 ? 0 : step / steps;
+          const sampleX = last ? last.x + (px - last.x) * t : px;
+          const sampleY = last ? last.y + (py - last.y) * t : py;
+          applyBrushToMask(mask, dimensions.width, dimensions.height, sampleX, sampleY, radius);
+        }
+        paintbrushLastPointRef.current = { x: px, y: py };
+        drawingPointsRef.current = [...drawingPointsRef.current, point];
+        if (drawingPointsRef.current.length > 256) {
+          drawingPointsRef.current = drawingPointsRef.current.slice(-256);
+        }
+        setDraftRoomPoints([...drawingPointsRef.current]);
+        return;
+      }
+      const lastPoint = drawingPointsRef.current[drawingPointsRef.current.length - 1];
+      if (!lastPoint || distanceBetweenPoints(lastPoint, point) > 0.001) {
         drawingPointsRef.current = [...drawingPointsRef.current, point];
         setDraftRoomPoints(drawingPointsRef.current);
       }
@@ -448,10 +536,30 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
     const handlePointerUp = (event: PointerEvent) => {
       event.preventDefault();
+      const activeTool = outlineToolRef.current;
       const completed = drawingPointsRef.current;
       drawingPointsRef.current = [];
       setDraftRoomPoints([]);
       setIsDrawingRoom(false);
+      if (activeTool === 'paintbrush') {
+        const mask = paintbrushMaskRef.current;
+        const dimensions = paintbrushDimensionsRef.current;
+        const radius = paintbrushRadiusRef.current;
+        paintbrushMaskRef.current = null;
+        paintbrushDimensionsRef.current = null;
+        paintbrushRadiusRef.current = 0;
+        paintbrushLastPointRef.current = null;
+        if (mask && dimensions) {
+          const dilated = dilateMask(mask, dimensions.width, dimensions.height, radius);
+          const polygon = extractLargestPolygonFromMask(dilated, dimensions.width, dimensions.height);
+          if (polygon.length >= 3) {
+            finalizeRoomOutline(polygon);
+            return;
+          }
+        }
+        setIsOutliningRoom(false);
+        return;
+      }
       if (completed.length >= 3) {
         finalizeRoomOutline(completed);
       } else {
@@ -487,7 +595,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         current.map((room) => {
           if (room.id !== state.roomId) return room;
           let polygon = normalisePolygon(room.polygon);
-          if (room.tool === 'smart') {
+          if (room.tool === 'smartSnap' || room.tool === 'smartWand') {
             if (edgeMap && imageDimensions) {
               polygon = snapPolygonToEdges(polygon, {
                 edgeMap,
@@ -560,6 +668,37 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   }, [adjustingRoom, finalizeRoomAdjustment, resolveRelativePoint]);
 
   useEffect(() => {
+    if (!isToolMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!toolMenuRef.current || !toolButtonRef.current) return;
+      if (
+        !toolMenuRef.current.contains(target) &&
+        !toolButtonRef.current.contains(target)
+      ) {
+        setIsToolMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [isToolMenuOpen]);
+
+  useEffect(() => {
+    if (!isToolMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsToolMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isToolMenuOpen]);
+
+  useEffect(() => {
     if (!adjustingRoom) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -628,6 +767,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId) ?? null, [activeRoomId, rooms]);
   const activeRoomCenter = useMemo(() => computeCentroid(activeRoom?.polygon ?? []), [activeRoom]);
   const isAdjustingActiveRoom = adjustingRoom?.roomId === activeRoom?.id;
+  const activeToolOption = getRoomToolOption(selectedRoomTool);
 
   const overlayWidth = imageDimensions?.width ?? 1000;
   const overlayHeight = imageDimensions?.height ?? 1000;
@@ -661,6 +801,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setIsDrawingRoom(false);
     setDraftRoomPoints([]);
     drawingPointsRef.current = [];
+    setIsToolMenuOpen(false);
   }, [activeRoom]);
 
   useEffect(() => {
@@ -673,6 +814,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       });
       setImageDimensions(null);
       edgeMapRef.current = null;
+      sourceImageRef.current = null;
       return;
     }
     const objectUrl = URL.createObjectURL(file);
@@ -693,12 +835,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         if (context) {
           context.drawImage(image, 0, 0);
           const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          edgeMapRef.current = buildEdgeMap(imageData.data, canvas.width, canvas.height);
+          const pixels = new Uint8ClampedArray(imageData.data);
+          sourceImageRef.current = { width: canvas.width, height: canvas.height, data: pixels };
+          edgeMapRef.current = buildEdgeMap(pixels, canvas.width, canvas.height);
         } else {
           edgeMapRef.current = null;
+          sourceImageRef.current = null;
         }
       } catch {
         edgeMapRef.current = null;
+        sourceImageRef.current = null;
       }
     };
     image.src = objectUrl;
@@ -770,17 +916,36 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     fileInputRef.current?.click();
   };
 
-  const handleStartRoomOutline = () => {
-    if (!previewUrl) return;
-    setActiveRoomId(null);
-    setAdjustingRoom(null);
-    adjustmentPathRef.current = [];
-    adjustmentPointerIdRef.current = null;
-    setIsOutliningRoom(true);
-    setIsDrawingRoom(false);
-    setDraftRoomPoints([]);
-    drawingPointsRef.current = [];
-  };
+  const handleStartRoomOutline = useCallback(
+    (nextTool?: RoomTool) => {
+      if (!previewUrl) return;
+      const tool = nextTool ?? selectedRoomTool;
+      outlineToolRef.current = tool;
+      setSelectedRoomTool(tool);
+      setActiveRoomId(null);
+      setAdjustingRoom(null);
+      adjustmentPathRef.current = [];
+      adjustmentPointerIdRef.current = null;
+      paintbrushMaskRef.current = null;
+      paintbrushDimensionsRef.current = null;
+      paintbrushRadiusRef.current = 0;
+      paintbrushLastPointRef.current = null;
+      setIsOutliningRoom(true);
+      setIsDrawingRoom(false);
+      setDraftRoomPoints([]);
+      drawingPointsRef.current = [];
+      setIsToolMenuOpen(false);
+    },
+    [previewUrl, selectedRoomTool]
+  );
+
+  const handleSelectRoomTool = useCallback(
+    (tool: RoomTool) => {
+      if (isOutliningRoom) return;
+      handleStartRoomOutline(tool);
+    },
+    [handleStartRoomOutline, isOutliningRoom]
+  );
 
   const handleCancelRoomOutline = () => {
     setIsOutliningRoom(false);
@@ -789,6 +954,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     drawingPointsRef.current = [];
     adjustmentPathRef.current = [];
     adjustmentPointerIdRef.current = null;
+    paintbrushMaskRef.current = null;
+    paintbrushDimensionsRef.current = null;
+    paintbrushRadiusRef.current = 0;
+    paintbrushLastPointRef.current = null;
   };
 
   const handleRoomPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -822,6 +991,39 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     event.preventDefault();
     const point = resolveRelativePoint(event.nativeEvent);
     if (!point) return;
+    const activeTool = outlineToolRef.current;
+    if (activeTool === 'smartWand') {
+      event.stopPropagation();
+      handleSmartWandSelection(point);
+      return;
+    }
+    if (activeTool === 'paintbrush') {
+      event.stopPropagation();
+      const dimensions = imageDimensions;
+      if (!dimensions) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      const total = dimensions.width * dimensions.height;
+      if (total <= 0) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      const mask = new Uint8Array(total);
+      paintbrushMaskRef.current = mask;
+      paintbrushDimensionsRef.current = { ...dimensions };
+      const maxDimension = Math.max(dimensions.width, dimensions.height);
+      const radius = Math.max(3, Math.round(maxDimension * 0.012));
+      paintbrushRadiusRef.current = radius;
+      const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
+      const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
+      applyBrushToMask(mask, dimensions.width, dimensions.height, px, py, radius);
+      paintbrushLastPointRef.current = { x: px, y: py };
+      drawingPointsRef.current = [point];
+      setDraftRoomPoints([point]);
+      setIsDrawingRoom(true);
+      return;
+    }
     drawingPointsRef.current = [point];
     setDraftRoomPoints([point]);
     setIsDrawingRoom(true);
@@ -1232,46 +1434,62 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                 <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
                 <h3 className="text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
                 <p className="text-xs text-slate-500">
-                  Outline rooms, corridors, and secret spaces to keep them hidden until you reveal them.
+                  Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to
+                  keep them hidden until you are ready to reveal them.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1 rounded-full border border-slate-800/70 bg-slate-950/70 p-1 text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                <div className="relative">
                   <button
+                    ref={toolButtonRef}
                     type="button"
-                    onClick={() => setSelectedRoomTool('lasso')}
-                    className={`rounded-full px-3 py-2 transition ${
-                      selectedRoomTool === 'lasso'
-                        ? 'border border-teal-400/70 bg-teal-500/80 text-slate-900'
-                        : 'border border-transparent text-slate-400 hover:text-teal-200'
+                    onClick={() => {
+                      if (!previewUrl || isOutliningRoom) return;
+                      setIsToolMenuOpen((current) => !current);
+                    }}
+                    disabled={!previewUrl || isOutliningRoom}
+                    title={activeToolOption.tooltip}
+                    className={`flex min-w-[180px] flex-col items-start rounded-2xl border px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                      previewUrl && !isOutliningRoom
+                        ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
+                        : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
                     }`}
                   >
-                    Lasso
+                    <span className="text-[11px]">+ Add Room</span>
+                    <span className="mt-1 text-[9px] tracking-[0.35em] opacity-80">
+                      {previewUrl ? `Use ${activeToolOption.label}` : 'Upload a map first'}
+                    </span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRoomTool('smart')}
-                    className={`rounded-full px-3 py-2 transition ${
-                      selectedRoomTool === 'smart'
-                        ? 'border border-teal-400/70 bg-teal-500/80 text-slate-900'
-                        : 'border border-transparent text-slate-400 hover:text-teal-200'
-                    }`}
-                  >
-                    Smart Select
-                  </button>
+                  {isToolMenuOpen && (
+                    <div
+                      ref={toolMenuRef}
+                      className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-2xl"
+                    >
+                      {ROOM_TOOL_OPTIONS.map((option) => {
+                        const isActive = option.id === selectedRoomTool;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => handleSelectRoomTool(option.id)}
+                            className={`w-full rounded-xl px-4 py-3 text-left transition ${
+                              isActive
+                                ? 'border border-teal-400/60 bg-teal-500/20 text-teal-100'
+                                : 'border border-transparent text-slate-300 hover:border-teal-400/40 hover:bg-slate-800/60 hover:text-teal-100'
+                            }`}
+                            title={option.tooltip}
+                          >
+                            <span className="text-sm font-semibold">{option.label}</span>
+                            <span className="mt-1 block text-[11px] text-slate-400">{option.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleStartRoomOutline}
-                  disabled={!previewUrl || isOutliningRoom}
-                  className={`rounded-full border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
-                    previewUrl && !isOutliningRoom
-                      ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
-                      : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
-                  }`}
-                >
-                  + Add Room
-                </button>
+                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                  Choose a capture tool to outline rooms quickly.
+                </p>
               </div>
             </div>
             <div className="grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -1359,7 +1577,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     {isOutliningRoom && !isDrawingRoom && (
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <div className="rounded-xl border border-teal-400/50 bg-slate-950/80 px-5 py-4 text-center text-[10px] uppercase tracking-[0.35em] text-teal-100">
-                          Click and drag to outline the room with the {selectedRoomTool === 'smart' ? 'smart select' : 'lasso'} tool
+                          {ROOM_TOOL_INSTRUCTIONS[selectedRoomTool]}
                         </div>
                       </div>
                     )}
