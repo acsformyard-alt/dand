@@ -467,6 +467,54 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     };
   }, [finalizeRoomOutline, isDrawingRoom, resolveRelativePoint]);
 
+  const finalizeRoomAdjustment = useCallback(
+    (state: RoomAdjustmentState | null) => {
+      if (!state) return;
+      if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
+        const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
+        if (release) {
+          try {
+            release(adjustmentPointerIdRef.current);
+          } catch {
+            // ignore release errors
+          }
+        }
+      }
+      adjustmentPointerIdRef.current = null;
+      adjustmentPathRef.current = [];
+      const edgeMap = edgeMapRef.current;
+      setRooms((current) =>
+        current.map((room) => {
+          if (room.id !== state.roomId) return room;
+          let polygon = normalisePolygon(room.polygon);
+          if (room.tool === 'smart') {
+            if (edgeMap && imageDimensions) {
+              polygon = snapPolygonToEdges(polygon, {
+                edgeMap,
+                imageWidth: imageDimensions.width,
+                imageHeight: imageDimensions.height,
+              });
+              polygon = smoothPolygon(polygon, 2);
+            }
+            polygon = normalisePolygon(polygon);
+            polygon = simplifyPolygon(polygon, 0.0025);
+            polygon = normalisePolygon(polygon);
+          } else {
+            polygon = simplifyPolygon(polygon, 0.0015);
+            polygon = normalisePolygon(polygon);
+          }
+          polygon = polygon.map((point) => ({
+            x: clamp(point.x, 0, 1),
+            y: clamp(point.y, 0, 1),
+          }));
+          return { ...room, polygon };
+        })
+      );
+      setAdjustingRoom((current) => (current && current.roomId === state.roomId ? null : current));
+    },
+    [imageDimensions]
+  );
+
   useEffect(() => {
     if (!adjustingRoom || !adjustingRoom.isPointerActive || adjustingRoom.startedInside === null) {
       return;
@@ -793,54 +841,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     }
     setActiveRoomId(matched ? matched.id : null);
   };
-
-  const finalizeRoomAdjustment = useCallback(
-    (state: RoomAdjustmentState | null) => {
-      if (!state) return;
-      if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
-        const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
-        if (release) {
-          try {
-            release(adjustmentPointerIdRef.current);
-          } catch {
-            // ignore release errors
-          }
-        }
-      }
-      adjustmentPointerIdRef.current = null;
-      adjustmentPathRef.current = [];
-      const edgeMap = edgeMapRef.current;
-      setRooms((current) =>
-        current.map((room) => {
-          if (room.id !== state.roomId) return room;
-          let polygon = normalisePolygon(room.polygon);
-          if (room.tool === 'smart') {
-            if (edgeMap && imageDimensions) {
-              polygon = snapPolygonToEdges(polygon, {
-                edgeMap,
-                imageWidth: imageDimensions.width,
-                imageHeight: imageDimensions.height,
-              });
-              polygon = smoothPolygon(polygon, 2);
-            }
-            polygon = normalisePolygon(polygon);
-            polygon = simplifyPolygon(polygon, 0.0025);
-            polygon = normalisePolygon(polygon);
-          } else {
-            polygon = simplifyPolygon(polygon, 0.0015);
-            polygon = normalisePolygon(polygon);
-          }
-          polygon = polygon.map((point) => ({
-            x: clamp(point.x, 0, 1),
-            y: clamp(point.y, 0, 1),
-          }));
-          return { ...room, polygon };
-        })
-      );
-      setAdjustingRoom((current) => (current && current.roomId === state.roomId ? null : current));
-    },
-    [imageDimensions]
-  );
 
   const handleRoomFieldChange = (roomId: string, field: 'name' | 'notes' | 'tagsInput', value: string) => {
     setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, [field]: value } : room)));
