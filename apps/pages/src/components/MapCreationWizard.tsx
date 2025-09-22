@@ -3,8 +3,6 @@ import { apiClient } from '../api/client';
 import {
   buildEdgeMap,
   computeDisplayMetrics,
-  snapPolygonToEdges,
-  smoothPolygon,
   type EdgeMap,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
@@ -19,9 +17,12 @@ import {
   applyBrushToMask,
   dilateMask,
   extractLargestPolygonFromMask,
-  floodFillRoomMask,
+  rasterizePolygonToMask,
   type RasterImageData,
 } from '../utils/roomToolUtils';
+import { vectorizeAndSnap } from '../workers/seg';
+import { MagneticLassoTool } from '../tools/magneticLasso';
+import { SmartWandTool } from '../tools/smartWand';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -132,41 +133,6 @@ const normalisePolygon = (
     return distanceBetweenPoints(point, points[index - 1]) > minimumDistance;
   });
   return filtered;
-};
-
-const DENSIFY_DISTANCE_MULTIPLIER = 3;
-
-const densifyPolygon = (
-  points: Array<{ x: number; y: number }>,
-  minimumDistance: number,
-  distanceMultiplier = DENSIFY_DISTANCE_MULTIPLIER
-) => {
-  if (points.length < 3) {
-    return points.map((point) => ({ ...point }));
-  }
-  const maxSegmentLength = minimumDistance * distanceMultiplier;
-  if (!(maxSegmentLength > 0)) {
-    return points.map((point) => ({ ...point }));
-  }
-  const densified: Array<{ x: number; y: number }> = [];
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    densified.push({ x: current.x, y: current.y });
-    const next = points[(index + 1) % points.length];
-    const distance = distanceBetweenPoints(current, next);
-    if (!Number.isFinite(distance) || distance <= maxSegmentLength) {
-      continue;
-    }
-    const segments = Math.max(1, Math.ceil(distance / maxSegmentLength));
-    for (let step = 1; step < segments; step += 1) {
-      const t = step / segments;
-      densified.push({
-        x: current.x + (next.x - current.x) * t,
-        y: current.y + (next.y - current.y) * t,
-      });
-    }
-  }
-  return densified;
 };
 
 const computeSignedArea = (polygon: Array<{ x: number; y: number }>) => {
@@ -440,9 +406,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const paintbrushDimensionsRef = useRef<{ width: number; height: number } | null>(null);
   const paintbrushRadiusRef = useRef<number>(0);
   const paintbrushLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const magneticLassoRef = useRef<MagneticLassoTool | null>(null);
+  const magneticLassoUnsubscribeRef = useRef<(() => void) | null>(null);
+  const smartWandToolRef = useRef<SmartWandTool | null>(null);
 
   const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
+  const segmentationCacheKey = useMemo(
+    () => (file ? `wizard:${file.name}:${file.size}:${file.lastModified}` : undefined),
+    [file]
+  );
 
   const resolveRelativePoint = useCallback(
     (event: { clientX: number; clientY: number }) =>
@@ -450,38 +423,60 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     [imageDimensions]
   );
 
+  const vectorizePolygonWithWorker = useCallback(
+    (polygon: Array<{ x: number; y: number }>, tool: RoomTool, options?: { snapSearchRadius?: number }) => {
+      const raster = sourceImageRef.current;
+      if (!raster || polygon.length < 3) {
+        return polygon;
+      }
+      try {
+        const maskWidth = raster.width;
+        const maskHeight = raster.height;
+        const mask = rasterizePolygonToMask(polygon, maskWidth, maskHeight);
+        const snapRadius =
+          options?.snapSearchRadius ?? Math.max(24, Math.round(Math.max(maskWidth, maskHeight) * 0.035));
+        const smoothingIterations = tool === 'smartSnap' ? 2 : 1;
+        const result = vectorizeAndSnap({
+          raster,
+          mask,
+          maskWidth,
+          maskHeight,
+          cacheKey: segmentationCacheKey,
+          smoothingIterations,
+          snapSearchRadius: snapRadius,
+        });
+        return result.snappedPolygon;
+      } catch (error) {
+        console.error('Failed to vectorize polygon', error);
+        return polygon;
+      }
+    },
+    [segmentationCacheKey]
+  );
+
   const finalizeRoomOutline = useCallback(
-    (points: Array<{ x: number; y: number }>) => {
-      const activeTool = outlineToolRef.current;
+    (
+      points: Array<{ x: number; y: number }>,
+      options?: { skipVectorize?: boolean; toolOverride?: RoomTool }
+    ) => {
+      const activeTool = options?.toolOverride ?? outlineToolRef.current;
       const minimumDistance = getPointMinimumDistance(activeTool);
       let polygon = normalisePolygon(points, minimumDistance);
       if (polygon.length < 3) {
+        magneticLassoRef.current?.reset();
         setIsOutliningRoom(false);
         setDraftRoomPoints([]);
         drawingPointsRef.current = [];
         return;
       }
-      if (activeTool === 'smartSnap' || activeTool === 'smartWand') {
-        const edgeMap = edgeMapRef.current;
-        if (edgeMap && imageDimensions) {
-          const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-          polygon = densifyPolygon(polygon, minimumDistance);
-          polygon = snapPolygonToEdges(polygon, {
-            edgeMap,
-            imageWidth: imageDimensions.width,
-            imageHeight: imageDimensions.height,
-            searchRadius:
-              activeTool === 'smartSnap'
-                ? Math.max(24, Math.round(maxDimension * 0.035))
-                : undefined,
-          });
-          polygon = smoothPolygon(polygon, 2);
-        }
-        polygon = normalisePolygon(polygon, minimumDistance);
-        const simplifyTolerance = activeTool === 'smartSnap' ? 0.0015 : 0.0025;
-        polygon = simplifyPolygon(polygon, simplifyTolerance);
-        polygon = normalisePolygon(polygon, minimumDistance);
+      if (!options?.skipVectorize) {
+        polygon = vectorizePolygonWithWorker(polygon, activeTool);
       }
+      polygon = normalisePolygon(polygon, minimumDistance);
+      const simplifyTolerance =
+        activeTool === 'smartSnap' ? 0.0015 : activeTool === 'smartWand' ? 0.0025 : 0.0015;
+      polygon = simplifyPolygon(polygon, simplifyTolerance);
+      polygon = normalisePolygon(polygon, minimumDistance);
       polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
       const newRoomId = `room-${Date.now()}-${Math.round(Math.random() * 10000)}`;
       setRooms((current) => {
@@ -503,45 +498,30 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setIsOutliningRoom(false);
       setDraftRoomPoints([]);
       drawingPointsRef.current = [];
+      if (activeTool === 'smartSnap') {
+        magneticLassoRef.current?.reset();
+      }
     },
-    [imageDimensions]
+    [vectorizePolygonWithWorker]
   );
 
   const handleSmartWandSelection = useCallback(
     (point: { x: number; y: number }) => {
+      const tool = smartWandToolRef.current;
       const source = sourceImageRef.current;
-      if (!source) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      const { width, height } = source;
-      if (width <= 0 || height <= 0) {
+      if (!tool || !source) {
         setIsOutliningRoom(false);
         return;
       }
       drawingPointsRef.current = [];
       setDraftRoomPoints([]);
       setIsDrawingRoom(false);
-      const px = clamp(point.x * width, 0, width - 1);
-      const py = clamp(point.y * height, 0, height - 1);
-      const startX = Math.floor(px);
-      const startY = Math.floor(py);
-      const edgeMap = edgeMapRef.current ?? null;
-      const result = floodFillRoomMask(source, edgeMap, startX, startY, {
-        colorTolerance: 48,
-        gradientThreshold: edgeMap ? edgeMap.maxMagnitude * 0.36 : undefined,
-        maxPixels: Math.max(512, Math.floor(width * height * 0.65)),
-      });
-      if (!result) {
+      const result = tool.select(point);
+      if (!result || result.polygon.length < 3) {
         setIsOutliningRoom(false);
         return;
       }
-      const polygon = extractLargestPolygonFromMask(result.mask, width, height);
-      if (polygon.length >= 3) {
-        finalizeRoomOutline(polygon);
-      } else {
-        setIsOutliningRoom(false);
-      }
+      finalizeRoomOutline(result.polygon, { skipVectorize: true, toolOverride: 'smartWand' });
     },
     [finalizeRoomOutline]
   );
@@ -553,6 +533,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       const point = resolveRelativePoint(event);
       if (!point) return;
       const activeTool = outlineToolRef.current;
+      if (activeTool === 'smartSnap') {
+        magneticLassoRef.current?.pointerMove(point);
+        return;
+      }
       if (activeTool === 'paintbrush') {
         const dimensions = paintbrushDimensionsRef.current;
         const mask = paintbrushMaskRef.current;
@@ -587,6 +571,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     const handlePointerUp = (event: PointerEvent) => {
       event.preventDefault();
       const activeTool = outlineToolRef.current;
+      if (activeTool === 'smartSnap') {
+        return;
+      }
       const completed = drawingPointsRef.current;
       drawingPointsRef.current = [];
       setDraftRoomPoints([]);
@@ -640,35 +627,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       }
       adjustmentPointerIdRef.current = null;
       adjustmentPathRef.current = [];
-      const edgeMap = edgeMapRef.current;
       setRooms((current) =>
         current.map((room) => {
           if (room.id !== state.roomId) return room;
           const minimumDistance = getPointMinimumDistance(room.tool);
           let polygon = normalisePolygon(room.polygon, minimumDistance);
-          if (room.tool === 'smartSnap' || room.tool === 'smartWand') {
-            if (edgeMap && imageDimensions) {
-              const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-              polygon = densifyPolygon(polygon, minimumDistance);
-              polygon = snapPolygonToEdges(polygon, {
-                edgeMap,
-                imageWidth: imageDimensions.width,
-                imageHeight: imageDimensions.height,
-                searchRadius:
-                  room.tool === 'smartSnap'
-                    ? Math.max(24, Math.round(maxDimension * 0.035))
-                    : undefined,
-              });
-              polygon = smoothPolygon(polygon, 2);
-            }
-            polygon = normalisePolygon(polygon, minimumDistance);
-            const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : 0.0025;
-            polygon = simplifyPolygon(polygon, simplifyTolerance);
-            polygon = normalisePolygon(polygon, minimumDistance);
-          } else {
-            polygon = simplifyPolygon(polygon, 0.0015);
-            polygon = normalisePolygon(polygon, minimumDistance);
-          }
+          polygon = vectorizePolygonWithWorker(polygon, room.tool);
+          polygon = normalisePolygon(polygon, minimumDistance);
+          const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : room.tool === 'smartWand' ? 0.0025 : 0.0015;
+          polygon = simplifyPolygon(polygon, simplifyTolerance);
+          polygon = normalisePolygon(polygon, minimumDistance);
           polygon = polygon.map((point) => ({
             x: clamp(point.x, 0, 1),
             y: clamp(point.y, 0, 1),
@@ -678,7 +646,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       );
       setAdjustingRoom((current) => (current && current.roomId === state.roomId ? null : current));
     },
-    [imageDimensions]
+    [vectorizePolygonWithWorker]
   );
 
   useEffect(() => {
@@ -881,6 +849,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   useEffect(() => {
     return () => {
+      magneticLassoUnsubscribeRef.current?.();
+      magneticLassoUnsubscribeRef.current = null;
+      magneticLassoRef.current = null;
+      smartWandToolRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
@@ -960,8 +937,56 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setIsDrawingRoom(false);
       setDraftRoomPoints([]);
       drawingPointsRef.current = [];
+      if (tool === 'smartSnap') {
+        const raster = sourceImageRef.current;
+        if (raster) {
+          if (!magneticLassoRef.current) {
+            magneticLassoRef.current = new MagneticLassoTool({ raster, cacheKey: segmentationCacheKey });
+          } else {
+            magneticLassoRef.current.configure({ raster, cacheKey: segmentationCacheKey });
+          }
+          magneticLassoUnsubscribeRef.current?.();
+          magneticLassoUnsubscribeRef.current = magneticLassoRef.current.subscribe(() => {
+            const instance = magneticLassoRef.current;
+            if (!instance) return;
+            const committed = instance.getCommittedPath();
+            const preview = instance.getPreview();
+            const anchors = instance.getAnchors();
+            const combined: Array<{ x: number; y: number }> = committed.length > 0 ? [...committed] : [...anchors];
+            if (preview && preview.path.length > 0) {
+              const previewPath = preview.path;
+              if (combined.length > 0) {
+                const lastCommitted = combined[combined.length - 1];
+                const firstPreview = previewPath[0];
+                const previewStart =
+                  lastCommitted && firstPreview && lastCommitted.x === firstPreview.x && lastCommitted.y === firstPreview.y
+                    ? 1
+                    : 0;
+                combined.push(...previewPath.slice(previewStart));
+              } else {
+                combined.push(...previewPath);
+              }
+            }
+            setDraftRoomPoints(combined);
+          });
+        }
+      } else {
+        magneticLassoUnsubscribeRef.current?.();
+        magneticLassoUnsubscribeRef.current = null;
+        magneticLassoRef.current?.reset();
+      }
+      if (tool === 'smartWand') {
+        const raster = sourceImageRef.current;
+        if (raster) {
+          if (!smartWandToolRef.current) {
+            smartWandToolRef.current = new SmartWandTool({ raster, cacheKey: segmentationCacheKey });
+          } else {
+            smartWandToolRef.current.configure({ raster, cacheKey: segmentationCacheKey });
+          }
+        }
+      }
     },
-    [previewUrl, selectedRoomTool]
+    [previewUrl, segmentationCacheKey, selectedRoomTool]
   );
 
   const handleSelectRoomTool = useCallback(
@@ -982,11 +1007,34 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     paintbrushDimensionsRef.current = null;
     paintbrushRadiusRef.current = 0;
     paintbrushLastPointRef.current = null;
+    magneticLassoUnsubscribeRef.current?.();
+    magneticLassoUnsubscribeRef.current = null;
+    magneticLassoRef.current?.reset();
+    smartWandToolRef.current?.setLockedEntranceId(null);
   }, []);
 
   const handleFinishRoomOutline = useCallback(() => {
     if (!isOutliningRoom) return;
     const activeTool = outlineToolRef.current;
+    if (activeTool === 'smartSnap') {
+      const tool = magneticLassoRef.current;
+      magneticLassoUnsubscribeRef.current?.();
+      magneticLassoUnsubscribeRef.current = null;
+      setIsDrawingRoom(false);
+      if (!tool) {
+        handleCancelRoomOutline();
+        return;
+      }
+      const result = tool.finalize({ smoothingIterations: 2 });
+      drawingPointsRef.current = [];
+      setDraftRoomPoints([]);
+      if (result && result.snappedPolygon.length >= 3) {
+        finalizeRoomOutline(result.snappedPolygon, { skipVectorize: true, toolOverride: 'smartSnap' });
+      } else {
+        handleCancelRoomOutline();
+      }
+      return;
+    }
     if (activeTool === 'paintbrush') {
       const mask = paintbrushMaskRef.current;
       const dimensions = paintbrushDimensionsRef.current;
@@ -1062,6 +1110,19 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       handleSmartWandSelection(point);
       return;
     }
+    if (activeTool === 'smartSnap') {
+      event.stopPropagation();
+      const tool = magneticLassoRef.current;
+      if (!tool) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      drawingPointsRef.current = [];
+      setDraftRoomPoints([]);
+      tool.pointerDown(point);
+      setIsDrawingRoom(true);
+      return;
+    }
     if (activeTool === 'paintbrush') {
       event.stopPropagation();
       const dimensions = imageDimensions;
@@ -1121,28 +1182,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setAdjustingRoom((current) => (current && current.roomId === roomId ? null : current));
     adjustmentPathRef.current = [];
     adjustmentPointerIdRef.current = null;
-    const edgeMap = edgeMapRef.current;
     setRooms((current) =>
       current.map((room) => {
         if (room.id !== roomId) return room;
         const minimumDistance = getPointMinimumDistance(room.tool);
         let polygon = normalisePolygon(room.polygon, minimumDistance);
-        if (edgeMap && imageDimensions) {
-          const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-          polygon = densifyPolygon(polygon, minimumDistance);
-          polygon = snapPolygonToEdges(polygon, {
-            edgeMap,
-            imageWidth: imageDimensions.width,
-            imageHeight: imageDimensions.height,
-            searchRadius:
-              room.tool === 'smartSnap'
-                ? Math.max(24, Math.round(maxDimension * 0.035))
-                : undefined,
-          });
-          polygon = smoothPolygon(polygon, 2);
-        }
+        polygon = vectorizePolygonWithWorker(polygon, room.tool);
         polygon = normalisePolygon(polygon, minimumDistance);
-        const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : 0.0025;
+        const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : room.tool === 'smartWand' ? 0.0025 : 0.0015;
         polygon = simplifyPolygon(polygon, simplifyTolerance);
         polygon = normalisePolygon(polygon, minimumDistance);
         polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));

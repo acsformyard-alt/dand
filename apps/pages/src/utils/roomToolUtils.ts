@@ -1,5 +1,7 @@
 import type { EdgeMap } from './imageProcessing';
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 export interface RasterImageData {
   width: number;
   height: number;
@@ -27,6 +29,44 @@ export const applyBrushToMask = (
       mask[y * width + x] = 1;
     }
   }
+};
+
+export const rasterizePolygonToMask = (
+  points: Array<{ x: number; y: number }>,
+  width: number,
+  height: number
+) => {
+  const mask = new Uint8Array(width * height);
+  if (points.length < 3 || width <= 0 || height <= 0) {
+    return mask;
+  }
+  const pixels = points.map((point) => ({
+    x: clamp(point.x, 0, 1) * (width - 1),
+    y: clamp(point.y, 0, 1) * (height - 1),
+  }));
+  for (let y = 0; y < height; y += 1) {
+    const intersections: number[] = [];
+    for (let i = 0, j = pixels.length - 1; i < pixels.length; j = i, i += 1) {
+      const ay = pixels[i].y;
+      const by = pixels[j].y;
+      const ax = pixels[i].x;
+      const bx = pixels[j].x;
+      const intersects = (ay <= y && by > y) || (by <= y && ay > y);
+      if (!intersects) continue;
+      const ratio = (y - ay) / (by - ay + Number.EPSILON);
+      const x = ax + (bx - ax) * ratio;
+      intersections.push(x);
+    }
+    intersections.sort((a, b) => a - b);
+    for (let index = 0; index < intersections.length; index += 2) {
+      const start = Math.max(0, Math.floor(intersections[index]));
+      const end = Math.min(width - 1, Math.ceil(intersections[index + 1] ?? intersections[index]));
+      for (let x = start; x <= end; x += 1) {
+        mask[y * width + x] = 1;
+      }
+    }
+  }
+  return mask;
 };
 
 export const dilateMask = (mask: Uint8Array, width: number, height: number, radius: number) => {
