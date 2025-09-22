@@ -142,6 +142,10 @@ export class ApiClient {
     };
   }
 
+  async deleteCampaign(campaignId: string) {
+    await this.request(`/api/campaigns/${campaignId}`, { method: 'DELETE' });
+  }
+
   async getMapsForCampaign(campaignId: string): Promise<MapRecord[]> {
     const { maps } = await this.request<{ maps: MapRecord[] }>(`/api/campaigns/${campaignId}/maps`);
     return maps;

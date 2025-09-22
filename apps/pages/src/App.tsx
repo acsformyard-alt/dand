@@ -294,6 +294,28 @@ const App: React.FC = () => {
     setActiveView('manage');
   };
 
+  const handleDeleteCampaign = async () => {
+    if (!selectedCampaign) return;
+    const confirmDelete = window.confirm(
+      `Delete campaign "${selectedCampaign.name}"? This will remove all associated maps and sessions.`,
+    );
+    if (!confirmDelete) return;
+    try {
+      await apiClient.deleteCampaign(selectedCampaign.id);
+      await refreshCampaigns();
+      setSelectedCampaign(null);
+      setSelectedMap(null);
+      setMaps([]);
+      setRegions([]);
+      setMarkers([]);
+      setActiveView('manage');
+      setStatusMessage('Campaign deleted.');
+    } catch (err) {
+      console.error(err);
+      setStatusMessage((err as Error).message);
+    }
+  };
+
   const mySessions = useMemo(() => lobbySessions.filter((session) => session.hostId === user?.id), [lobbySessions, user?.id]);
   const mapDescription = useMemo(() => getMapMetadataString(selectedMap, 'description'), [selectedMap]);
   const mapNotes = useMemo(() => getMapMetadataString(selectedMap, 'notes'), [selectedMap]);
@@ -691,6 +713,13 @@ const App: React.FC = () => {
                       onClick={handleBackToManage}
                     >
                       Campaign List
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-rose-400/60 bg-rose-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                      onClick={handleDeleteCampaign}
+                    >
+                      Delete Campaign
                     </button>
                     <button
                       type="button"
