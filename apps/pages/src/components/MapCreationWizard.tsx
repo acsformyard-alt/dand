@@ -905,30 +905,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       if (activeTool === 'smartSnap') {
         return;
       }
+      if (activeTool === 'paintbrush') {
+        drawingPointsRef.current = [];
+        paintbrushLastPointRef.current = null;
+        setIsDrawingRoom(false);
+        return;
+      }
       const completed = drawingPointsRef.current;
       drawingPointsRef.current = [];
       setDraftRoomPoints([]);
       setIsDrawingRoom(false);
-      if (activeTool === 'paintbrush') {
-        const mask = paintbrushMaskRef.current;
-        const dimensions = paintbrushDimensionsRef.current;
-        const radius = paintbrushRadiusRef.current;
-        paintbrushMaskRef.current = null;
-        paintbrushDimensionsRef.current = null;
-        paintbrushRadiusRef.current = 0;
-        paintbrushModeRef.current = 'add';
-        paintbrushLastPointRef.current = null;
-        if (mask && dimensions) {
-          const dilated = dilateMask(mask, dimensions.width, dimensions.height, radius);
-          const polygon = extractLargestPolygonFromMask(dilated, dimensions.width, dimensions.height);
-          if (polygon.length >= 3) {
-            finalizeRoomOutline(polygon);
-            return;
-          }
-        }
-        setIsOutliningRoom(false);
-        return;
-      }
       if (completed.length >= 3) {
         finalizeRoomOutline(completed);
       } else {
@@ -1438,9 +1424,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const handleSelectRoomTool = useCallback(
     (tool: RoomTool) => {
+      if (tool === 'paintbrush' && isOutliningRoom && outlineToolRef.current === 'paintbrush') {
+        outlineToolRef.current = tool;
+        setSelectedRoomTool(tool);
+        return;
+      }
       handleStartRoomOutline(tool);
     },
-    [handleStartRoomOutline]
+    [handleStartRoomOutline, isOutliningRoom]
   );
 
   const handleCancelRoomOutline = useCallback(() => {
@@ -1487,23 +1478,20 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       const mask = paintbrushMaskRef.current;
       const dimensions = paintbrushDimensionsRef.current;
       const radius = paintbrushRadiusRef.current;
-      paintbrushMaskRef.current = null;
-      paintbrushDimensionsRef.current = null;
-      paintbrushRadiusRef.current = 0;
-      paintbrushModeRef.current = 'add';
-      paintbrushLastPointRef.current = null;
       setIsDrawingRoom(false);
-      const polygon =
-        mask && dimensions
-          ? extractLargestPolygonFromMask(dilateMask(mask, dimensions.width, dimensions.height, radius), dimensions.width, dimensions.height)
-          : [];
-      drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
+      if (!mask || !dimensions) {
+        handleCancelRoomOutline();
+        return;
+      }
+      const polygon = extractLargestPolygonFromMask(
+        dilateMask(mask, dimensions.width, dimensions.height, radius),
+        dimensions.width,
+        dimensions.height
+      );
       if (polygon.length >= 3) {
         finalizeRoomOutline(polygon);
-      } else {
-        handleCancelRoomOutline();
       }
+      handleCancelRoomOutline();
       return;
     }
     const sourcePoints = drawingPointsRef.current.length > 0 ? drawingPointsRef.current : draftRoomPoints;
