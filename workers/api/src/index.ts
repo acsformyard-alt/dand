@@ -319,6 +319,35 @@ export default {
         return jsonResponse({ campaigns: result.results }, { headers: corsHeaders });
       }
 
+      if (url.pathname.match(/^\/api\/campaigns\/[a-z0-9-]+$/) && request.method === 'DELETE') {
+        if (!user) {
+          return errorResponse('Unauthorized', 401, { headers: corsHeaders });
+        }
+        const campaignId = url.pathname.split('/')[3];
+        const ownsCampaign = await ensureCampaignOwnership(env, campaignId, user.id);
+        if (!ownsCampaign) {
+          return errorResponse('Campaign not found', 404, { headers: corsHeaders });
+        }
+        const mapKeyResults = await env.MAPS_DB.prepare(
+          'SELECT original_key as originalKey, display_key as displayKey FROM maps WHERE campaign_id = ?',
+        )
+          .bind(campaignId)
+          .all<{ originalKey: string | null; displayKey: string | null }>();
+        const mapKeys = mapKeyResults.results.flatMap((record) => {
+          const keys: string[] = [];
+          if (record.originalKey) {
+            keys.push(record.originalKey);
+          }
+          if (record.displayKey) {
+            keys.push(record.displayKey);
+          }
+          return keys;
+        });
+        await Promise.all(mapKeys.map((key) => env.MAPS_BUCKET.delete(key)));
+        await env.MAPS_DB.prepare('DELETE FROM campaigns WHERE id = ?').bind(campaignId).run();
+        return jsonResponse({ success: true }, { headers: corsHeaders });
+      }
+
       if (url.pathname.match(/^\/api\/campaigns\/[a-z0-9-]+\/maps$/) && request.method === 'GET') {
         if (!user) {
           return errorResponse('Unauthorized', 401, { headers: corsHeaders });
