@@ -971,7 +971,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     [handleStartRoomOutline]
   );
 
-  const handleCancelRoomOutline = () => {
+  const handleCancelRoomOutline = useCallback(() => {
     setIsOutliningRoom(false);
     setIsDrawingRoom(false);
     setDraftRoomPoints([]);
@@ -982,7 +982,48 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     paintbrushDimensionsRef.current = null;
     paintbrushRadiusRef.current = 0;
     paintbrushLastPointRef.current = null;
-  };
+  }, []);
+
+  const handleFinishRoomOutline = useCallback(() => {
+    if (!isOutliningRoom) return;
+    const activeTool = outlineToolRef.current;
+    if (activeTool === 'paintbrush') {
+      const mask = paintbrushMaskRef.current;
+      const dimensions = paintbrushDimensionsRef.current;
+      const radius = paintbrushRadiusRef.current;
+      paintbrushMaskRef.current = null;
+      paintbrushDimensionsRef.current = null;
+      paintbrushRadiusRef.current = 0;
+      paintbrushLastPointRef.current = null;
+      setIsDrawingRoom(false);
+      const polygon =
+        mask && dimensions
+          ? extractLargestPolygonFromMask(dilateMask(mask, dimensions.width, dimensions.height, radius), dimensions.width, dimensions.height)
+          : [];
+      drawingPointsRef.current = [];
+      setDraftRoomPoints([]);
+      if (polygon.length >= 3) {
+        finalizeRoomOutline(polygon);
+      } else {
+        handleCancelRoomOutline();
+      }
+      return;
+    }
+    const sourcePoints = drawingPointsRef.current.length > 0 ? drawingPointsRef.current : draftRoomPoints;
+    const polygon = sourcePoints.length > 0 ? [...sourcePoints] : [];
+    setIsDrawingRoom(false);
+    drawingPointsRef.current = [];
+    setDraftRoomPoints([]);
+    if (polygon.length >= 3) {
+      finalizeRoomOutline(polygon);
+    } else {
+      handleCancelRoomOutline();
+    }
+  }, [draftRoomPoints, finalizeRoomOutline, handleCancelRoomOutline, isOutliningRoom]);
+
+  const handleAddRoomClick = useCallback(() => {
+    handleStartRoomOutline();
+  }, [handleStartRoomOutline]);
 
   const handleRoomPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (adjustingRoom) {
@@ -1472,37 +1513,58 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
               </div>
               <div className="flex flex-col items-end gap-3">
                 {previewUrl ? (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {ROOM_TOOL_OPTIONS.map((option) => {
-                      const isActive = option.id === selectedRoomTool;
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => handleSelectRoomTool(option.id)}
-                          className={`flex min-w-[180px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                            isActive
-                              ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
-                              : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
-                          }`}
-                          title={option.tooltip}
-                          aria-pressed={isActive}
-                        >
-                          <span className="text-sm font-semibold">{option.label}</span>
-                          <span className={`text-[11px] ${isActive ? 'text-teal-100/80' : 'text-slate-400'}`}>
-                            {option.description}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={isOutliningRoom ? handleFinishRoomOutline : handleAddRoomClick}
+                        className={`rounded-full border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                          isOutliningRoom
+                            ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 hover:bg-teal-400/30'
+                            : 'border-teal-400/70 bg-teal-500/80 text-slate-900 hover:bg-teal-400/70 hover:text-slate-900'
+                        }`}
+                      >
+                        {isOutliningRoom ? 'Finish Room' : 'Add Room'}
+                      </button>
+                    </div>
+                    {isOutliningRoom && (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {ROOM_TOOL_OPTIONS.map((option) => {
+                          const isActive = option.id === selectedRoomTool;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => handleSelectRoomTool(option.id)}
+                              className={`flex min-w-[180px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                                isActive
+                                  ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
+                                  : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
+                              }`}
+                              title={option.tooltip}
+                              aria-pressed={isActive}
+                            >
+                              <span className="text-sm font-semibold">{option.label}</span>
+                              <span className={`text-[11px] ${isActive ? 'text-teal-100/80' : 'text-slate-400'}`}>
+                                {option.description}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-500">
                     Upload a map to choose a capture tool.
                   </div>
                 )}
                 <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                  {previewUrl ? `Active Tool: ${activeToolOption.label}` : 'Tools unlock after selecting a map.'}
+                  {previewUrl
+                    ? isOutliningRoom
+                      ? `Active Tool: ${activeToolOption.label}`
+                      : 'Press "Add Room" to choose a capture tool.'
+                    : 'Tools unlock after selecting a map.'}
                 </p>
               </div>
             </div>
