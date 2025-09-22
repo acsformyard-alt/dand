@@ -316,6 +316,52 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteMap = async (map: MapRecord) => {
+    const confirmDelete = window.confirm(
+      `Delete map "${map.name}"? This will remove all associated regions and markers.`,
+    );
+    if (!confirmDelete) {
+      return;
+    }
+    try {
+      await apiClient.deleteMap(map.id);
+      const wasSelected = selectedMap?.id === map.id;
+      let remainingMaps: MapRecord[] = [];
+      setMaps((previous) => {
+        const filtered = previous.filter((entry) => entry.id !== map.id);
+        remainingMaps = filtered;
+        return filtered;
+      });
+      if (wasSelected) {
+        const nextMap = remainingMaps[0] ?? null;
+        setSelectedMap(nextMap ?? null);
+        if (nextMap) {
+          setRegions([]);
+          setMarkers([]);
+          try {
+            const [nextRegions, nextMarkers] = await Promise.all([
+              apiClient.getRegions(nextMap.id),
+              apiClient.getMarkers(nextMap.id),
+            ]);
+            setRegions(nextRegions);
+            setMarkers(nextMarkers);
+          } catch (loadErr) {
+            console.error(loadErr);
+            setStatusMessage('Map deleted, but failed to load the next map details.');
+            return;
+          }
+        } else {
+          setRegions([]);
+          setMarkers([]);
+        }
+      }
+      setStatusMessage('Map deleted.');
+    } catch (err) {
+      console.error(err);
+      setStatusMessage((err as Error).message);
+    }
+  };
+
   const mySessions = useMemo(() => lobbySessions.filter((session) => session.hostId === user?.id), [lobbySessions, user?.id]);
   const mapDescription = useMemo(() => getMapMetadataString(selectedMap, 'description'), [selectedMap]);
   const mapNotes = useMemo(() => getMapMetadataString(selectedMap, 'notes'), [selectedMap]);
@@ -736,6 +782,7 @@ const App: React.FC = () => {
                     selectedMapId={selectedMap?.id ?? null}
                     onSelect={(map) => setSelectedMap(map)}
                     onCreateMap={handleOpenMapWizard}
+                    onDeleteMap={handleDeleteMap}
                   />
                   <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
                     <div className="space-y-6">
