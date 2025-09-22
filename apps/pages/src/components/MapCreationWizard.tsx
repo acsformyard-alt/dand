@@ -387,6 +387,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
+  const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [rooms, setRooms] = useState<DraftRoom[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [selectedRoomTool, setSelectedRoomTool] = useState<RoomTool>(DEFAULT_ROOM_TOOL);
@@ -887,6 +888,19 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     };
   }, [draggingId, imageDimensions]);
 
+  useEffect(() => {
+    if (markers.length === 0) {
+      if (expandedMarkerId !== null) {
+        setExpandedMarkerId(null);
+      }
+      return;
+    }
+
+    if (!markers.some((marker) => marker.id === expandedMarkerId)) {
+      setExpandedMarkerId(markers[markers.length - 1].id);
+    }
+  }, [markers, expandedMarkerId]);
+
   const allowNext = useMemo(() => {
     if (step === 0) {
       return !!file;
@@ -1219,6 +1233,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const handleRemoveMarker = (markerId: string) => {
     setMarkers((current) => current.filter((marker) => marker.id !== markerId));
+    setExpandedMarkerId((current) => (current === markerId ? null : current));
   };
 
   const handleAddMarker = () => {
@@ -1232,6 +1247,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       y: 0.5,
     };
     setMarkers((current) => [...current, newMarker]);
+    setExpandedMarkerId(newMarker.id);
   };
 
   const handleContinue = () => {
@@ -1407,150 +1423,156 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           })}
         </div>
       </header>
-      <main className="flex-1 overflow-auto px-6 py-8">
-        {step === 0 && (
-          <div className="mx-auto max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-10 text-center">
-            <div
-              onDragEnter={(event) => event.preventDefault()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={handleDrop}
-              className="group relative flex min-h-[240px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-10 transition hover:border-teal-400/60"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const selected = event.target.files?.[0];
-                  if (selected) {
-                    setFile(selected);
-                  }
-                }}
-              />
-              <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Drag & Drop</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">Drop your map image here</h3>
-              <p className="mt-2 max-w-xl text-sm text-slate-400">
-                We accept PNG, JPG, WEBP, and other common image formats. Drop the file or browse your computer to get started.
-              </p>
-              <button
-                type="button"
-                onClick={handleBrowse}
-                className="mt-6 rounded-full border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
-              >
-                Browse Files
-              </button>
-            </div>
-            {previewUrl && (
-              <div className="mt-8">
-                <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Preview</p>
-                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800/70">
-                  <img src={previewUrl} alt="Uploaded map preview" className="max-h-[360px] w-full object-contain" />
-                </div>
-                {imageDimensions && (
-                  <p className="mt-2 text-xs uppercase tracking-[0.4em] text-slate-500">
-                    {imageDimensions.width} × {imageDimensions.height} pixels
+      <main className="flex-1 px-6 py-6">
+        <div className="flex h-full flex-col">
+          {step === 0 && (
+            <div className="flex flex-1 items-center justify-center">
+              <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
+                <div
+                  onDragEnter={(event) => event.preventDefault()}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleDrop}
+                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-8 transition hover:border-teal-400/60"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const selected = event.target.files?.[0];
+                      if (selected) {
+                        setFile(selected);
+                      }
+                    }}
+                  />
+                  <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Drag & Drop</p>
+                  <h3 className="mt-3 text-2xl font-semibold text-white">Drop your map image here</h3>
+                  <p className="mt-2 max-w-xl text-sm text-slate-400">
+                    We accept PNG, JPG, WEBP, and other common image formats. Drop the file or browse your computer to get
+                    started.
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    className="mt-5 rounded-full border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                  >
+                    Browse Files
+                  </button>
+                </div>
+                {previewUrl && (
+                  <div className="mt-6">
+                    <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Preview</p>
+                    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800/70">
+                      <img src={previewUrl} alt="Uploaded map preview" className="max-h-[280px] w-full object-contain" />
+                    </div>
+                    {imageDimensions && (
+                      <p className="mt-2 text-xs uppercase tracking-[0.4em] text-slate-500">
+                        {imageDimensions.width} × {imageDimensions.height} pixels
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
-        {step === 1 && (
-          <div className="mx-auto max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-10">
-            <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Map Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                    placeholder="Ancient Ruins"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Description</label>
-                  <textarea
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                    placeholder="Give a brief overview of the map."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Grouping</label>
-                  <input
-                    type="text"
-                    value={grouping}
-                    onChange={(event) => setGrouping(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                    placeholder="Dungeon Delves"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Notes</label>
-                  <textarea
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    rows={3}
-                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                    placeholder="DM-only reminders or encounter tips"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Tags</label>
-                  <input
-                    type="text"
-                    value={tagsInput}
-                    onChange={(event) => setTagsInput(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                    placeholder="forest, ruins, night"
-                  />
-                  <p className="mt-2 text-xs text-slate-500">Separate tags with commas to help search and filtering.</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
-                  {previewUrl ? (
-                    <img src={previewUrl} alt="Map preview" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center p-6 text-sm text-slate-500">
-                      Upload a map image to see the preview.
+            </div>
+          )}
+          {step === 1 && (
+            <div className="flex flex-1 items-stretch justify-center">
+              <div className="flex h-full w-full max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+                <div className="grid flex-1 min-h-0 gap-6 md:grid-cols-[minmax(0,1fr)_260px]">
+                  <div className="flex flex-col gap-5">
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Map Name</label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        placeholder="Ancient Ruins"
+                      />
                     </div>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 text-xs text-slate-400">
-                  <p className="uppercase tracking-[0.4em] text-slate-500">Campaign</p>
-                  <p className="mt-2 text-sm text-white">{campaign.name}</p>
-                  {imageDimensions && (
-                    <p className="mt-3 text-xs uppercase tracking-[0.4em] text-slate-500">
-                      {imageDimensions.width} × {imageDimensions.height} pixels
-                    </p>
-                  )}
-                  {tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Description</label>
+                      <textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        rows={3}
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        placeholder="Give a brief overview of the map."
+                      />
                     </div>
-                  )}
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Grouping</label>
+                      <input
+                        type="text"
+                        value={grouping}
+                        onChange={(event) => setGrouping(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        placeholder="Dungeon Delves"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Notes</label>
+                      <textarea
+                        value={notes}
+                        onChange={(event) => setNotes(event.target.value)}
+                        rows={3}
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        placeholder="DM-only reminders or encounter tips"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Tags</label>
+                      <input
+                        type="text"
+                        value={tagsInput}
+                        onChange={(event) => setTagsInput(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        placeholder="forest, ruins, night"
+                      />
+                      <p className="mt-2 text-xs text-slate-500">Separate tags with commas to help search and filtering.</p>
+                    </div>
+                  </div>
+                  <div className="flex h-full flex-col gap-4">
+                    <div className="flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
+                      {previewUrl ? (
+                        <img src={previewUrl} alt="Map preview" className="h-full w-full object-contain" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center p-4 text-sm text-slate-500">
+                          Upload a map image to see the preview.
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 text-xs text-slate-400">
+                      <p className="uppercase tracking-[0.4em] text-slate-500">Campaign</p>
+                      <p className="mt-2 text-sm text-white">{campaign.name}</p>
+                      {imageDimensions && (
+                        <p className="mt-3 text-xs uppercase tracking-[0.4em] text-slate-500">
+                          {imageDimensions.width} × {imageDimensions.height} pixels
+                        </p>
+                      )}
+                      {tags.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
         {step === 2 && (
-          <div className="flex h-full flex-col">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <div>
+          <div className="grid h-full grid-rows-[auto,1fr] gap-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
+              <div className="max-w-xl">
                 <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
                 <h3 className="text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
                 <p className="text-xs text-slate-500">
@@ -1583,7 +1605,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                               key={option.id}
                               type="button"
                               onClick={() => handleSelectRoomTool(option.id)}
-                              className={`flex min-w-[180px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                              className={`flex min-w-[160px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
                                 isActive
                                   ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
                                   : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
@@ -1615,10 +1637,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                 </p>
               </div>
             </div>
-            <div className="grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div
                 ref={roomsMapRef}
-                className="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
+                className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
                 onPointerDown={handleRoomPointerDown}
                 onClick={handleRoomClick}
               >
@@ -1802,22 +1824,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                   </div>
                 )}
               </div>
-              <div className="flex flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-5">
+              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
+                <div className="border-b border-slate-800/70 p-4">
                   <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Rooms &amp; Hallways</p>
                   <h3 className="text-lg font-semibold text-white">Manage hidden areas</h3>
                   <p className="mt-2 text-xs text-slate-500">
                     Select a region on the map to edit its details, tags, or visibility.
                   </p>
                 </div>
-                <div className="flex-1 space-y-3 overflow-auto p-5">
+                <div className="flex-1 min-h-0 space-y-3 p-4">
                   {rooms.map((room) => {
                     const roomTags = parseTagsInput(room.tagsInput);
                     const isActive = room.id === activeRoomId;
                     return (
                       <div
                         key={room.id}
-                        className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
+                        className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-2 text-sm transition ${
                           isActive
                             ? 'border-teal-400/70 bg-teal-500/10 text-teal-100'
                             : 'border-slate-800/70 bg-slate-950/70 text-slate-300'
@@ -1873,117 +1895,156 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           </div>
         )}
         {step === 3 && (
-          <div className="flex h-full flex-col">
-            <div className="mb-6 grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div
-                ref={mapAreaRef}
-                className="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-              >
-                {previewUrl ? (
-                  <>
-                    <img src={previewUrl} alt="Interactive map preview" className="h-full w-full object-contain" />
-                    {markers.map((marker) => (
-                      <button
-                        key={marker.id}
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          setDraggingId(marker.id);
-                        }}
-                        style={containerPointToStyle(
-                          normalisedToContainerPoint({ x: marker.x, y: marker.y }, markerDisplayMetrics)
-                        )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
-                      >
-                        {marker.label || 'Marker'}
-                      </button>
-                    ))}
-                    {markers.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                        Add markers from the panel to start placing points of interest.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to place markers.
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
-                      <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMarker}
-                      className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
-                    >
-                      Add Marker
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
-                  </p>
-                </div>
-                <div className="flex-1 space-y-4 overflow-auto p-5">
+          <div className="grid h-full gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div
+              ref={mapAreaRef}
+              className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
+            >
+              {previewUrl ? (
+                <>
+                  <img src={previewUrl} alt="Interactive map preview" className="h-full w-full object-contain" />
                   {markers.map((marker) => (
-                    <div key={marker.id} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <label className="flex-1 text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                          Label
-                          <input
-                            type="text"
-                            value={marker.label}
-                            onChange={(event) => handleMarkerChange(marker.id, 'label', event.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                            placeholder="Secret Door"
-                          />
-                        </label>
-                        <label className="text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                          Color
-                          <input
-                            type="text"
-                            value={marker.color}
-                            onChange={(event) => handleMarkerChange(marker.id, 'color', event.target.value)}
-                            className="mt-2 w-28 rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                            placeholder="#facc15"
-                          />
-                        </label>
-                      </div>
-                      <label className="mt-3 block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                        Notes
-                        <textarea
-                          value={marker.notes}
-                          onChange={(event) => handleMarkerChange(marker.id, 'notes', event.target.value)}
-                          rows={2}
-                          className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                          placeholder="Trap trigger, treasure cache, etc."
-                        />
-                      </label>
-                      <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                        <span>
-                          Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMarker(marker.id)}
-                          className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      key={marker.id}
+                      type="button"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        setDraggingId(marker.id);
+                      }}
+                      style={containerPointToStyle(
+                        normalisedToContainerPoint({ x: marker.x, y: marker.y }, markerDisplayMetrics)
+                      )}
+                      className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
+                    >
+                      {marker.label || 'Marker'}
+                    </button>
                   ))}
                   {markers.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-10 text-center text-xs text-slate-500">
-                      No markers yet. Add a marker to start placing points of interest.
+                    <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+                      Add markers from the panel to start placing points of interest.
                     </div>
                   )}
+                </>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
+                  Upload a map image to place markers.
                 </div>
+              )}
+            </div>
+            <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
+              <div className="border-b border-slate-800/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
+                    <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddMarker}
+                    className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                  >
+                    Add Marker
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Create markers and drag them directly onto the map. Use notes to capture quick reminders.
+                </p>
+              </div>
+              <div className="flex-1 min-h-0 space-y-3 p-4">
+                {markers.map((marker) => {
+                  const isExpanded = expandedMarkerId === marker.id;
+                  return (
+                    <div
+                      key={marker.id}
+                      className={`rounded-2xl border px-4 py-3 transition ${
+                        isExpanded
+                          ? 'border-teal-400/60 bg-slate-950/80'
+                          : 'border-slate-800/70 bg-slate-950/70'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedMarkerId(isExpanded ? null : marker.id)}
+                        className="flex w-full items-start justify-between gap-3 text-left"
+                        aria-expanded={isExpanded}
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                            <span>
+                              Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 rounded-full border border-slate-700/70"
+                                style={{ backgroundColor: marker.color }}
+                                aria-hidden="true"
+                              />
+                              <span>{marker.color}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] uppercase tracking-[0.35em] ${
+                            isExpanded ? 'text-teal-200' : 'text-slate-400'
+                          }`}
+                        >
+                          {isExpanded ? 'Hide' : 'Edit'}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="mt-3 space-y-3">
+                          <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                            Label
+                            <input
+                              type="text"
+                              value={marker.label}
+                              onChange={(event) => handleMarkerChange(marker.id, 'label', event.target.value)}
+                              className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                              placeholder="Secret Door"
+                            />
+                          </label>
+                          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                              Notes
+                              <textarea
+                                value={marker.notes}
+                                onChange={(event) => handleMarkerChange(marker.id, 'notes', event.target.value)}
+                                rows={2}
+                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                placeholder="Trap trigger, treasure cache, etc."
+                              />
+                            </label>
+                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                              Color
+                              <input
+                                type="text"
+                                value={marker.color}
+                                onChange={(event) => handleMarkerChange(marker.id, 'color', event.target.value)}
+                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                placeholder="#facc15"
+                              />
+                            </label>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMarker(marker.id)}
+                              className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {markers.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
+                    No markers yet. Add a marker to start placing points of interest.
+                  </div>
+                )}
               </div>
             </div>
           </div>
