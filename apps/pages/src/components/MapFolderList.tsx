@@ -8,6 +8,7 @@ interface MapFolderListProps {
   onSelect: (map: MapRecord) => void;
   onCreateMap: () => void;
   onDeleteMap: (map: MapRecord) => void;
+  onDeleteGroup: (groupName: string, maps: MapRecord[]) => void;
 }
 
 interface GroupedMaps {
@@ -34,7 +35,14 @@ const getMetadataStringArray = (metadata: MapRecord['metadata'], key: string) =>
   return [];
 };
 
-const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSelect, onCreateMap, onDeleteMap }) => {
+const MapFolderList: React.FC<MapFolderListProps> = ({
+  maps,
+  selectedMapId,
+  onSelect,
+  onCreateMap,
+  onDeleteMap,
+  onDeleteGroup,
+}) => {
   const grouped = useMemo<GroupedMaps[]>(() => {
     const byGroup = new Map<string, MapRecord[]>();
     maps.forEach((map) => {
@@ -94,24 +102,38 @@ const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSe
             const expanded = expandedGroups[group.name];
             return (
               <div key={group.name} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.name)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
-                >
-                  <div>
-                    <p className="text-lg font-semibold text-white">{group.name}</p>
-                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">{group.maps.length} Maps</p>
-                  </div>
-                  <span
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/70 text-xs font-bold text-slate-300 transition ${
-                      expanded ? 'bg-teal-500/10 text-teal-200' : 'bg-slate-900'
-                    }`}
-                    aria-hidden="true"
+                <div className="flex items-start justify-between gap-3 px-5 py-4 sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.name)}
+                    className="flex w-full flex-1 items-center justify-between gap-4 text-left"
                   >
-                    {expanded ? '−' : '+'}
-                  </span>
-                </button>
+                    <div>
+                      <p className="text-lg font-semibold text-white">{group.name}</p>
+                      <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">{group.maps.length} Maps</p>
+                    </div>
+                    <span
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/70 text-xs font-bold text-slate-300 transition ${
+                        expanded ? 'bg-teal-500/10 text-teal-200' : 'bg-slate-900'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {expanded ? '−' : '+'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-rose-400/60 bg-rose-500/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteGroup(group.name, group.maps);
+                    }}
+                    aria-label={`Delete group ${group.name}`}
+                    title="Delete group"
+                  >
+                    Delete
+                  </button>
+                </div>
                 {expanded && (
                   <div className="grid gap-4 border-t border-slate-800/60 px-5 py-5 sm:grid-cols-2 xl:grid-cols-3">
                     {group.maps.map((map) => {
