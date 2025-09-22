@@ -1847,8 +1847,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           })}
         </div>
       </header>
-      <main className="flex-1 px-6 py-6">
-        <div className="flex h-full flex-col">
+      <main className="flex-1 overflow-hidden px-6 py-6">
+        <div className="flex h-full flex-col overflow-hidden">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
@@ -1994,7 +1994,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             </div>
           )}
         {step === 2 && (
-          <div className="grid h-full grid-rows-[auto,1fr] gap-6">
+          <div className="grid h-full min-h-0 grid-rows-[auto,1fr] gap-6 overflow-hidden">
             <div className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
               <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
               <h3 className="mt-1 text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
@@ -2006,7 +2006,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div
                 ref={roomsMapRef}
-                className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
+                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
                 onPointerDown={handleRoomPointerDown}
                 onClick={handleRoomClick}
               >
@@ -2017,14 +2017,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                       alt="Room outlining map preview"
                       className={
                         zoomedRoomsDisplayMetrics
-                          ? 'absolute select-none'
-                          : 'h-full w-full select-none object-contain'
+                          ? 'absolute w-full max-h-full select-none'
+                          : 'w-full max-h-full select-none object-contain'
                       }
                       style={roomImageStyle}
                       draggable={false}
                     />
                     <svg
-                      className="pointer-events-none absolute"
+                      className="pointer-events-none absolute w-full max-h-full"
                       viewBox={`0 0 ${overlayWidth} ${overlayHeight}`}
                       preserveAspectRatio="xMidYMid meet"
                       style={roomOverlayStyle}
@@ -2208,7 +2208,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     Select a region on the map to edit its details, tags, or visibility.
                   </p>
                 </div>
-                <div className="flex-1 min-h-0 space-y-3 p-4">
+                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
                   {rooms.map((room) => {
                     const roomTags = parseTagsInput(room.tagsInput);
                     const isActive = room.id === activeRoomId;
@@ -2271,14 +2271,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           </div>
         )}
         {step === 3 && (
-          <div className="grid h-full gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div
               ref={mapAreaRef}
-              className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
+              className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
             >
               {previewUrl ? (
                 <>
-                  <img src={previewUrl} alt="Interactive map preview" className="h-full w-full object-contain" />
+                  <img src={previewUrl} alt="Interactive map preview" className="w-full max-h-full object-contain" />
                   {markers.map((marker) => (
                     <button
                       key={marker.id}
@@ -2326,7 +2326,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                   Create markers and drag them directly onto the map. Use notes to capture quick reminders.
                 </p>
               </div>
-              <div className="flex-1 min-h-0 space-y-3 p-4">
+              <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
                 {markers.map((marker) => {
                   const isExpanded = expandedMarkerId === marker.id;
                   return (
