@@ -10,8 +10,8 @@ import {
   ROOM_TOOL_INSTRUCTIONS,
   ROOM_TOOL_OPTIONS,
   DEFAULT_ROOM_TOOL,
-  getRoomToolOption,
   type RoomTool,
+  type RoomToolOption,
 } from './roomToolOptions';
 import {
   applyBrushToMask,
@@ -420,6 +420,9 @@ interface WizardSidebarProps {
   onZoomOut: () => void;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  activeTool: RoomTool;
+  onSelectTool: (tool: RoomTool) => void;
+  toolOptions: RoomToolOption[];
 }
 
 const PlusIcon = () => (
@@ -466,6 +469,91 @@ const ZoomOutIcon = () => (
   </svg>
 );
 
+const LassoIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+    <path
+      d="M5.5 9c0-3.2 2.8-5.5 6.3-5.5s6.7 2.7 6.7 6-2.7 5.8-6.2 5.8c-1.2 0-2.4-.2-3.4-.7"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M8.2 14.1c-1.9.5-3.2 1.9-3.2 3.6 0 1.9 1.5 3.4 3.4 3.4 1.3 0 2.4-.6 3-1.6v-2.8"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
+const SmartSnapIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+    <path
+      d="M7 4h3v7a2 2 0 1 0 4 0V4h3"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M7 4a4 4 0 0 0-4 4v5a7 7 0 0 0 7 7h4a7 7 0 0 0 7-7V8a4 4 0 0 0-4-4"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path d="M5 6.5 3.5 5M19 6.5 20.5 5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+  </svg>
+);
+
+const PaintbrushIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+    <path
+      d="m16 4.5 3.5 3.5-8.9 8.9a2.5 2.5 0 0 1-1.2.7l-3.1.8.8-3.1a2.5 2.5 0 0 1 .7-1.2z"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M6.3 17.7c-.4-.1-.7-.1-1.1-.1a2.7 2.7 0 0 0-2.7 2.7c0 1.5 1.2 2.7 2.7 2.7 1.4 0 2.6-1 2.7-2.3.1-.9.2-1.8.4-2.7"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
+const SmartWandIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+    <path
+      d="m5 19 8.5-8.5M16.5 5.5l-1 2.7-2.7 1 2.7 1 1 2.7 1-2.7 2.7-1-2.7-1z"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path d="M5 19 3 21" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const TOOL_ICONS: Record<RoomTool, React.FC> = {
+  lasso: LassoIcon,
+  smartSnap: SmartSnapIcon,
+  paintbrush: PaintbrushIcon,
+  smartWand: SmartWandIcon,
+};
+
 const WizardSidebar: React.FC<WizardSidebarProps> = ({
   isOutlining,
   canOutline,
@@ -474,20 +562,90 @@ const WizardSidebar: React.FC<WizardSidebarProps> = ({
   onZoomOut,
   canZoomIn,
   canZoomOut,
+  activeTool,
+  onSelectTool,
+  toolOptions,
 }) => {
   const outlineLabel = isOutlining ? 'Finish room outline' : 'Add room/corridor';
+  const toolButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  toolButtonRefs.current.length = toolOptions.length;
+
+  const handleToolKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!isOutlining) return;
+    const lastIndex = toolOptions.length - 1;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const nextIndex = index === lastIndex ? 0 : index + 1;
+      toolButtonRefs.current[nextIndex]?.focus();
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      const previousIndex = index === 0 ? lastIndex : index - 1;
+      toolButtonRefs.current[previousIndex]?.focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      toolButtonRefs.current[0]?.focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      toolButtonRefs.current[lastIndex]?.focus();
+    }
+  };
+
   return (
     <aside className="fixed left-6 top-1/2 z-40 -translate-y-1/2">
-      <div className="flex flex-col gap-3 rounded-3xl border border-slate-800/80 bg-slate-950/80 p-3 shadow-2xl">
-        <SidebarButton
-          label={outlineLabel}
-          icon={isOutlining ? <CheckIcon /> : <PlusIcon />}
-          onClick={onOutlineAction}
-          disabled={!canOutline}
-          isActive={isOutlining}
-        />
-        <SidebarButton label="Zoom in" icon={<ZoomInIcon />} onClick={onZoomIn} disabled={!canZoomIn} />
-        <SidebarButton label="Zoom out" icon={<ZoomOutIcon />} onClick={onZoomOut} disabled={!canZoomOut} />
+      <div className="relative">
+        <div className="flex flex-col gap-3 rounded-3xl border border-slate-800/80 bg-slate-950/80 p-3 shadow-2xl">
+          <SidebarButton
+            label={outlineLabel}
+            icon={isOutlining ? <CheckIcon /> : <PlusIcon />}
+            onClick={onOutlineAction}
+            disabled={!canOutline}
+            isActive={isOutlining}
+          />
+          <SidebarButton label="Zoom in" icon={<ZoomInIcon />} onClick={onZoomIn} disabled={!canZoomIn} />
+          <SidebarButton label="Zoom out" icon={<ZoomOutIcon />} onClick={onZoomOut} disabled={!canZoomOut} />
+        </div>
+        <div
+          className={`absolute left-full top-0 flex transform transition-all duration-200 ${
+            isOutlining
+              ? 'translate-x-3 opacity-100 pointer-events-auto'
+              : 'translate-x-8 opacity-0 pointer-events-none'
+          }`}
+          aria-hidden={!isOutlining}
+        >
+          <div
+            role="group"
+            aria-label="Room capture tools"
+            className="flex flex-col gap-2 rounded-3xl border border-slate-800/80 bg-slate-950/90 p-3 shadow-2xl"
+          >
+            {toolOptions.map((option, index) => {
+              const isActive = option.id === activeTool;
+              const Icon = TOOL_ICONS[option.id];
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  ref={(element) => {
+                    toolButtonRefs.current[index] = element;
+                  }}
+                  className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-slate-300 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                    isActive
+                      ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
+                      : 'border-slate-800/70 bg-slate-950/70 hover:border-teal-400/50 hover:bg-slate-900/80 hover:text-teal-100'
+                  }`}
+                  onClick={() => onSelectTool(option.id)}
+                  onKeyDown={(event) => handleToolKeyDown(event, index)}
+                  aria-label={option.label}
+                  aria-pressed={isActive}
+                  title={option.tooltip}
+                  tabIndex={isOutlining ? 0 : -1}
+                >
+                  <Icon />
+                  <span className="sr-only">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </aside>
   );
@@ -918,8 +1076,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId) ?? null, [activeRoomId, rooms]);
   const activeRoomCenter = useMemo(() => computeCentroid(activeRoom?.polygon ?? []), [activeRoom]);
   const isAdjustingActiveRoom = adjustingRoom?.roomId === activeRoom?.id;
-  const activeToolOption = getRoomToolOption(selectedRoomTool);
-
   const overlayWidth = imageDimensions?.width ?? 1000;
   const overlayHeight = imageDimensions?.height ?? 1000;
   const overlayScale = Math.max(overlayWidth, overlayHeight);
@@ -1647,6 +1803,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           onZoomOut={handleZoomOut}
           canZoomIn={canZoomIn}
           canZoomOut={canZoomOut}
+          activeTool={selectedRoomTool}
+          onSelectTool={handleSelectRoomTool}
+          toolOptions={ROOM_TOOL_OPTIONS}
         />
       )}
       <header className="border-b border-slate-800/70 px-6 py-5">
@@ -1836,60 +1995,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           )}
         {step === 2 && (
           <div className="grid h-full grid-rows-[auto,1fr] gap-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
-              <div className="max-w-xl">
-                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
-                <h3 className="text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
-                <p className="text-xs text-slate-500">
-                  Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to
-                  keep them hidden until you are ready to reveal them.
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-3">
-                {previewUrl ? (
-                  isOutliningRoom ? (
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {ROOM_TOOL_OPTIONS.map((option) => {
-                        const isActive = option.id === selectedRoomTool;
-                        return (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => handleSelectRoomTool(option.id)}
-                            className={`flex min-w-[160px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                              isActive
-                                ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
-                                : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
-                            }`}
-                            title={option.tooltip}
-                            aria-pressed={isActive}
-                          >
-                            <span className="text-sm font-semibold">{option.label}</span>
-                            <span className={`text-[11px] ${isActive ? 'text-teal-100/80' : 'text-slate-400'}`}>
-                              {option.description}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-400">
-                      Use the sidebar controls to add rooms and adjust zoom.
-                    </div>
-                  )
-                ) : (
-                  <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-500">
-                    Upload a map to choose a capture tool.
-                  </div>
-                )}
-                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                  {previewUrl
-                    ? isOutliningRoom
-                      ? `Active Tool: ${activeToolOption.label}`
-                      : 'Press "Add room/corridor" to choose a capture tool.'
-                    : 'Tools unlock after selecting a map.'}
-                </p>
-              </div>
+            <div className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
+              <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
+              <h3 className="mt-1 text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
+              <p className="mt-2 text-xs text-slate-500">
+                Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to keep
+                them hidden until you are ready to reveal them.
+              </p>
             </div>
             <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div
