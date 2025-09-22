@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
 import {
   buildEdgeMap,
@@ -377,6 +377,8 @@ const containerPointToStyle = (point: { x: number; y: number }): React.CSSProper
   top: `${point.y * 100}%`,
 });
 
+const ACTIVE_ROOM_POPOVER_GAP = 12;
+
 interface SidebarButtonProps {
   label: string;
   icon: React.ReactNode;
@@ -518,8 +520,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [isDrawingRoom, setIsDrawingRoom] = useState(false);
   const [draftRoomPoints, setDraftRoomPoints] = useState<Array<{ x: number; y: number }>>([]);
   const [adjustingRoom, setAdjustingRoom] = useState<RoomAdjustmentState | null>(null);
+  const [activeRoomPopoverPosition, setActiveRoomPopoverPosition] = useState<
+    { left: number; top: number } | null
+  >(null);
 
   const roomsMapRef = useRef<HTMLDivElement>(null);
+  const activeRoomPopoverRef = useRef<HTMLDivElement | null>(null);
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const edgeMapRef = useRef<EdgeMap | null>(null);
   const sourceImageRef = useRef<RasterImageData | null>(null);
@@ -934,10 +940,99 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       }
     : undefined;
   const activeRoomAnchor = normalisedToContainerPoint(activeRoomCenter, zoomedRoomsDisplayMetrics);
-  const clampedActiveAnchor = {
-    x: clamp(activeRoomAnchor.x, 0.12, 0.88),
-    y: clamp(activeRoomAnchor.y, 0.18, 0.85),
-  };
+
+  const updateActiveRoomPopoverPosition = useCallback(() => {
+    const container = roomsMapRef.current;
+    const popover = activeRoomPopoverRef.current;
+
+    if (!activeRoom || !container || !popover) {
+      setActiveRoomPopoverPosition((previous) => (previous === null ? previous : null));
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+
+    if (containerRect.width === 0 || containerRect.height === 0) {
+      setActiveRoomPopoverPosition((previous) => (previous === null ? previous : null));
+      return;
+    }
+
+    const anchorX = activeRoomAnchor.x * containerRect.width;
+    const anchorY = activeRoomAnchor.y * containerRect.height;
+
+    const fitsAbove = anchorY - ACTIVE_ROOM_POPOVER_GAP - popoverRect.height >= 0;
+    const fitsBelow = anchorY + ACTIVE_ROOM_POPOVER_GAP + popoverRect.height <= containerRect.height;
+
+    let top: number;
+    if (fitsAbove && (!fitsBelow || anchorY > containerRect.height / 2)) {
+      top = anchorY - popoverRect.height - ACTIVE_ROOM_POPOVER_GAP;
+    } else if (fitsBelow) {
+      top = anchorY + ACTIVE_ROOM_POPOVER_GAP;
+    } else {
+      const spaceAbove = anchorY;
+      const spaceBelow = containerRect.height - anchorY;
+      if (spaceAbove >= spaceBelow) {
+        top = anchorY - popoverRect.height - ACTIVE_ROOM_POPOVER_GAP;
+      } else {
+        top = anchorY + ACTIVE_ROOM_POPOVER_GAP;
+      }
+    }
+
+    const fitsLeft = anchorX - ACTIVE_ROOM_POPOVER_GAP - popoverRect.width >= 0;
+    const fitsRight = anchorX + ACTIVE_ROOM_POPOVER_GAP + popoverRect.width <= containerRect.width;
+
+    let left: number;
+    if (fitsLeft && !fitsRight) {
+      left = anchorX - popoverRect.width - ACTIVE_ROOM_POPOVER_GAP;
+    } else if (fitsRight && !fitsLeft) {
+      left = anchorX + ACTIVE_ROOM_POPOVER_GAP;
+    } else if (!fitsLeft && !fitsRight) {
+      left = clamp(anchorX - popoverRect.width / 2, 0, Math.max(containerRect.width - popoverRect.width, 0));
+    } else {
+      left = anchorX - popoverRect.width / 2;
+    }
+
+    const maxTop = Math.max(containerRect.height - popoverRect.height, 0);
+    const maxLeft = Math.max(containerRect.width - popoverRect.width, 0);
+
+    top = clamp(top, 0, maxTop);
+    left = clamp(left, 0, maxLeft);
+
+    setActiveRoomPopoverPosition((previous) => {
+      if (previous && Math.abs(previous.left - left) < 0.5 && Math.abs(previous.top - top) < 0.5) {
+        return previous;
+      }
+      return { left, top };
+    });
+  }, [activeRoom, activeRoomAnchor.x, activeRoomAnchor.y]);
+
+  useLayoutEffect(() => {
+    updateActiveRoomPopoverPosition();
+  }, [updateActiveRoomPopoverPosition]);
+
+  useEffect(() => {
+    if (!activeRoom) return;
+
+    const handleResize = () => {
+      updateActiveRoomPopoverPosition();
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(handleResize);
+      if (roomsMapRef.current) observer.observe(roomsMapRef.current);
+      if (activeRoomPopoverRef.current) observer.observe(activeRoomPopoverRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer?.disconnect();
+    };
+  }, [activeRoom, updateActiveRoomPopoverPosition]);
+
   const canZoomIn = mapZoom < MAX_ZOOM - 1e-6;
   const canZoomOut = mapZoom > MIN_ZOOM + 1e-6;
 
@@ -1892,8 +1987,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     )}
                     {activeRoom && (
                       <div
-                        className="pointer-events-auto absolute z-20 w-80 max-w-[90%] -translate-x-1/2 -translate-y-full rounded-2xl border border-teal-400/40 bg-slate-950/95 p-4 shadow-2xl"
-                        style={containerPointToStyle(clampedActiveAnchor)}
+                        ref={activeRoomPopoverRef}
+                        className="pointer-events-auto absolute z-20 w-80 max-w-[90%] rounded-2xl border border-teal-400/40 bg-slate-950/95 p-4 shadow-2xl"
+                        style={{
+                          left: activeRoomPopoverPosition?.left,
+                          top: activeRoomPopoverPosition?.top,
+                          visibility: activeRoomPopoverPosition ? 'visible' : 'hidden',
+                        }}
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                       >
@@ -2213,6 +2313,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             </div>
           </div>
         )}
+      </div>
       </main>
       <footer className="border-t border-slate-800/70 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
