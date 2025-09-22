@@ -163,6 +163,10 @@ export class ApiClient {
     return map;
   }
 
+  async deleteMap(mapId: string) {
+    await this.request(`/api/maps/${mapId}`, { method: 'DELETE' });
+  }
+
   async getRegions(mapId: string): Promise<Region[]> {
     const { regions } = await this.request<{ regions: Region[] }>(`/api/maps/${mapId}/regions`);
     return regions;

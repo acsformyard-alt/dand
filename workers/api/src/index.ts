@@ -424,6 +424,31 @@ export default {
         return jsonResponse({ map: { ...map, metadata } }, { headers: corsHeaders });
       }
 
+      if (url.pathname.match(/^\/api\/maps\/[a-z0-9-]+$/) && request.method === 'DELETE') {
+        if (!user) {
+          return errorResponse('Unauthorized', 401, { headers: corsHeaders });
+        }
+        const mapId = url.pathname.split('/')[3];
+        const ownsMap = await ensureMapOwnership(env, mapId, user.id);
+        if (!ownsMap) {
+          return errorResponse('Map not found', 404, { headers: corsHeaders });
+        }
+        const storedKeys = await env.MAPS_DB.prepare(
+          'SELECT original_key as originalKey, display_key as displayKey FROM maps WHERE id = ?',
+        )
+          .bind(mapId)
+          .first<{ originalKey: string | null; displayKey: string | null }>();
+        if (!storedKeys) {
+          return errorResponse('Map not found', 404, { headers: corsHeaders });
+        }
+        const keysToDelete = [storedKeys.originalKey, storedKeys.displayKey].filter(
+          (key): key is string => typeof key === 'string' && key.length > 0,
+        );
+        await Promise.all(keysToDelete.map((key) => env.MAPS_BUCKET.delete(key)));
+        await env.MAPS_DB.prepare('DELETE FROM maps WHERE id = ?').bind(mapId).run();
+        return jsonResponse({ success: true }, { headers: corsHeaders });
+      }
+
       if (url.pathname.match(/^\/api\/maps\/[a-z0-9-]+\/display$/) && request.method === 'GET') {
         const mapId = url.pathname.split('/')[3];
         const map = await env.MAPS_DB.prepare('SELECT display_key as displayKey FROM maps WHERE id = ?').bind(mapId).first<{ displayKey: string }>();

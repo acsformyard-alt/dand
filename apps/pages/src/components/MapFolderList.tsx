@@ -7,6 +7,7 @@ interface MapFolderListProps {
   selectedMapId: string | null;
   onSelect: (map: MapRecord) => void;
   onCreateMap: () => void;
+  onDeleteMap: (map: MapRecord) => void;
 }
 
 interface GroupedMaps {
@@ -33,7 +34,7 @@ const getMetadataStringArray = (metadata: MapRecord['metadata'], key: string) =>
   return [];
 };
 
-const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSelect, onCreateMap }) => {
+const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSelect, onCreateMap, onDeleteMap }) => {
   const grouped = useMemo<GroupedMaps[]>(() => {
     const byGroup = new Map<string, MapRecord[]>();
     maps.forEach((map) => {
@@ -118,16 +119,39 @@ const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSe
                       const notes = getMetadataString(map.metadata, 'notes');
                       const tags = getMetadataStringArray(map.metadata, 'tags');
                       return (
-                        <button
+                        <div
                           key={map.id}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
+                          aria-current={selectedMapId === map.id ? 'true' : undefined}
                           onClick={() => onSelect(map)}
-                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition ${
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                              event.preventDefault();
+                              onSelect(map);
+                            }
+                          }}
+                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
                             selectedMapId === map.id
                               ? 'border-teal-400 bg-teal-500/10 shadow-[0_0_0_1px_rgba(45,212,191,0.4)]'
                               : 'border-slate-800/60 bg-slate-950/60 hover:border-teal-400/60 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
                           }`}
                         >
+                          <div className="absolute right-4 top-4 flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="rounded-full border border-rose-400/60 bg-rose-500/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDeleteMap(map);
+                              }}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              aria-label={`Delete ${map.name}`}
+                              title="Delete map"
+                            >
+                              ✕
+                            </button>
+                          </div>
                           <div className="mb-4 flex items-center justify-between text-xs uppercase tracking-[0.4em] text-slate-500">
                             <span>Map</span>
                             <span>
@@ -157,7 +181,7 @@ const MapFolderList: React.FC<MapFolderListProps> = ({ maps, selectedMapId, onSe
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
