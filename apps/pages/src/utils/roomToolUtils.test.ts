@@ -25,6 +25,21 @@ describe('roomToolUtils', () => {
     });
   });
 
+  it('supports erasing pixels from an existing mask', () => {
+    const width = 12;
+    const height = 12;
+    const mask = new Uint8Array(width * height);
+    applyBrushToMask(mask, width, height, 6, 6, 3, 'add');
+    let filled = 0;
+    mask.forEach((value) => {
+      if (value) filled += 1;
+    });
+    expect(filled).toBeGreaterThan(0);
+    applyBrushToMask(mask, width, height, 6, 6, 2, 'erase');
+    const remaining = mask.reduce((count, value) => count + value, 0);
+    expect(remaining).toBeLessThan(filled);
+  });
+
   it('extracts the dominant region when multiple polygons exist', () => {
     const width = 8;
     const height = 8;

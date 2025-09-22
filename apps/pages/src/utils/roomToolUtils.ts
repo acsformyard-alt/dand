@@ -8,25 +8,29 @@ export interface RasterImageData {
   data: Uint8ClampedArray;
 }
 
+export type BrushMode = 'add' | 'erase';
+
 export const applyBrushToMask = (
   mask: Uint8Array,
   width: number,
   height: number,
   centerX: number,
   centerY: number,
-  radius: number
+  radius: number,
+  mode: BrushMode = 'add'
 ) => {
   if (!mask || width <= 0 || height <= 0 || radius <= 0) return;
   const minY = Math.max(0, Math.floor(centerY - radius));
   const maxY = Math.min(height - 1, Math.ceil(centerY + radius));
   const radiusSquared = radius * radius;
+  const value = mode === 'add' ? 1 : 0;
   for (let y = minY; y <= maxY; y += 1) {
     const dy = y - centerY;
     const dxLimit = Math.sqrt(Math.max(radiusSquared - dy * dy, 0));
     const minX = Math.max(0, Math.floor(centerX - dxLimit));
     const maxX = Math.min(width - 1, Math.ceil(centerX + dxLimit));
     for (let x = minX; x <= maxX; x += 1) {
-      mask[y * width + x] = 1;
+      mask[y * width + x] = value;
     }
   }
 };

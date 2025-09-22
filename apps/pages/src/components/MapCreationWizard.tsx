@@ -18,6 +18,7 @@ import {
   dilateMask,
   extractLargestPolygonFromMask,
   rasterizePolygonToMask,
+  type BrushMode,
   type RasterImageData,
 } from '../utils/roomToolUtils';
 import { vectorizeAndSnap } from '../workers/seg';
@@ -693,6 +694,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const paintbrushMaskRef = useRef<Uint8Array | null>(null);
   const paintbrushDimensionsRef = useRef<{ width: number; height: number } | null>(null);
   const paintbrushRadiusRef = useRef<number>(0);
+  const paintbrushModeRef = useRef<BrushMode>('add');
   const paintbrushLastPointRef = useRef<{ x: number; y: number } | null>(null);
   const magneticLassoRef = useRef<MagneticLassoTool | null>(null);
   const magneticLassoUnsubscribeRef = useRef<(() => void) | null>(null);
@@ -836,6 +838,20 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     [finalizeRoomOutline]
   );
 
+  const updatePaintbrushDraftFromMask = useCallback(
+    (mask: Uint8Array | null, dimensions: { width: number; height: number } | null, radius: number) => {
+      if (!mask || !dimensions) {
+        setDraftRoomPoints([]);
+        return;
+      }
+      const { width, height } = dimensions;
+      const workingMask = radius > 0 ? dilateMask(mask, width, height, radius) : mask;
+      const polygon = extractLargestPolygonFromMask(workingMask, width, height);
+      setDraftRoomPoints(polygon.length > 0 ? polygon : []);
+    },
+    []
+  );
+
   useEffect(() => {
     if (!isDrawingRoom) return;
 
@@ -852,6 +868,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         const mask = paintbrushMaskRef.current;
         const radius = paintbrushRadiusRef.current;
         if (!dimensions || !mask || radius <= 0) return;
+        const buttons = event.buttons ?? 0;
+        const rightActive = (buttons & 2) === 2;
+        const leftActive = (buttons & 1) === 1;
+        if (!rightActive && !leftActive) {
+          paintbrushLastPointRef.current = null;
+          return;
+        }
+        const mode: BrushMode = rightActive ? 'add' : 'erase';
+        paintbrushModeRef.current = mode;
         const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
         const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
         const last = paintbrushLastPointRef.current;
@@ -861,14 +886,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           const t = steps === 0 ? 0 : step / steps;
           const sampleX = last ? last.x + (px - last.x) * t : px;
           const sampleY = last ? last.y + (py - last.y) * t : py;
-          applyBrushToMask(mask, dimensions.width, dimensions.height, sampleX, sampleY, radius);
+          applyBrushToMask(mask, dimensions.width, dimensions.height, sampleX, sampleY, radius, mode);
         }
         paintbrushLastPointRef.current = { x: px, y: py };
-        drawingPointsRef.current = [...drawingPointsRef.current, point];
-        if (drawingPointsRef.current.length > 256) {
-          drawingPointsRef.current = drawingPointsRef.current.slice(-256);
-        }
-        setDraftRoomPoints([...drawingPointsRef.current]);
+        updatePaintbrushDraftFromMask(mask, dimensions, radius);
         return;
       }
       const lastPoint = drawingPointsRef.current[drawingPointsRef.current.length - 1];
@@ -895,6 +916,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         paintbrushMaskRef.current = null;
         paintbrushDimensionsRef.current = null;
         paintbrushRadiusRef.current = 0;
+        paintbrushModeRef.current = 'add';
         paintbrushLastPointRef.current = null;
         if (mask && dimensions) {
           const dilated = dilateMask(mask, dimensions.width, dimensions.height, radius);
@@ -920,7 +942,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [finalizeRoomOutline, isDrawingRoom, resolveRelativePoint]);
+  }, [finalizeRoomOutline, isDrawingRoom, resolveRelativePoint, updatePaintbrushDraftFromMask]);
 
   const finalizeRoomAdjustment = useCallback(
     (state: RoomAdjustmentState | null) => {
@@ -1356,6 +1378,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       paintbrushMaskRef.current = null;
       paintbrushDimensionsRef.current = null;
       paintbrushRadiusRef.current = 0;
+      paintbrushModeRef.current = 'add';
       paintbrushLastPointRef.current = null;
       setIsOutliningRoom(true);
       setIsDrawingRoom(false);
@@ -1430,6 +1453,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     paintbrushMaskRef.current = null;
     paintbrushDimensionsRef.current = null;
     paintbrushRadiusRef.current = 0;
+    paintbrushModeRef.current = 'add';
     paintbrushLastPointRef.current = null;
     magneticLassoUnsubscribeRef.current?.();
     magneticLassoUnsubscribeRef.current = null;
@@ -1466,6 +1490,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       paintbrushMaskRef.current = null;
       paintbrushDimensionsRef.current = null;
       paintbrushRadiusRef.current = 0;
+      paintbrushModeRef.current = 'add';
       paintbrushLastPointRef.current = null;
       setIsDrawingRoom(false);
       const polygon =
@@ -1559,18 +1584,36 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         setIsOutliningRoom(false);
         return;
       }
-      const mask = new Uint8Array(total);
-      paintbrushMaskRef.current = mask;
-      paintbrushDimensionsRef.current = { ...dimensions };
-      const maxDimension = Math.max(dimensions.width, dimensions.height);
-      const radius = Math.max(3, Math.round(maxDimension * 0.012));
-      paintbrushRadiusRef.current = radius;
+      const buttons = event.buttons ?? 0;
+      const mode: BrushMode = event.button === 2 || (buttons & 2) === 2 ? 'add' : 'erase';
+      paintbrushModeRef.current = mode;
+      const storedDimensions = paintbrushDimensionsRef.current;
+      const needsReset =
+        !paintbrushMaskRef.current ||
+        !storedDimensions ||
+        storedDimensions.width !== dimensions.width ||
+        storedDimensions.height !== dimensions.height;
+      if (needsReset) {
+        paintbrushMaskRef.current = new Uint8Array(total);
+        paintbrushDimensionsRef.current = { ...dimensions };
+      }
+      const mask = paintbrushMaskRef.current;
+      if (!mask) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      let radius = paintbrushRadiusRef.current;
+      if (!radius || needsReset) {
+        const maxDimension = Math.max(dimensions.width, dimensions.height);
+        radius = Math.max(3, Math.round(maxDimension * 0.012));
+        paintbrushRadiusRef.current = radius;
+      }
       const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
       const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
-      applyBrushToMask(mask, dimensions.width, dimensions.height, px, py, radius);
+      applyBrushToMask(mask, dimensions.width, dimensions.height, px, py, radius, mode);
       paintbrushLastPointRef.current = { x: px, y: py };
-      drawingPointsRef.current = [point];
-      setDraftRoomPoints([point]);
+      drawingPointsRef.current = [];
+      updatePaintbrushDraftFromMask(mask, dimensions, radius);
       setIsDrawingRoom(true);
       return;
     }
