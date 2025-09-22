@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import AuthPanel from './components/AuthPanel';
 import SessionViewer from './components/SessionViewer';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
 import MapFolderList from './components/MapFolderList';
+import LandingPage from './components/LandingPage';
 import type {
   AuthResponse,
   Campaign,
@@ -405,22 +405,7 @@ const App: React.FC = () => {
     }`;
 
   if (!token || !user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-        <header className="px-6 py-4">
-          <div className="mx-auto flex max-w-4xl items-center justify-between">
-            <h1 className="text-2xl font-bold text-primary">TITLE</h1>
-            <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              {themeLabel}
-            </button>
-          </div>
-        </header>
-        <AuthPanel onAuthenticate={handleAuthenticated} />
-      </div>
-    );
+    return <LandingPage theme={theme} setTheme={setTheme} onAuthenticate={handleAuthenticated} />;
   }
 
   if (activeSession) {
