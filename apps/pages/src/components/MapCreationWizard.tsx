@@ -134,6 +134,41 @@ const normalisePolygon = (
   return filtered;
 };
 
+const DENSIFY_DISTANCE_MULTIPLIER = 3;
+
+const densifyPolygon = (
+  points: Array<{ x: number; y: number }>,
+  minimumDistance: number,
+  distanceMultiplier = DENSIFY_DISTANCE_MULTIPLIER
+) => {
+  if (points.length < 3) {
+    return points.map((point) => ({ ...point }));
+  }
+  const maxSegmentLength = minimumDistance * distanceMultiplier;
+  if (!(maxSegmentLength > 0)) {
+    return points.map((point) => ({ ...point }));
+  }
+  const densified: Array<{ x: number; y: number }> = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    densified.push({ x: current.x, y: current.y });
+    const next = points[(index + 1) % points.length];
+    const distance = distanceBetweenPoints(current, next);
+    if (!Number.isFinite(distance) || distance <= maxSegmentLength) {
+      continue;
+    }
+    const segments = Math.max(1, Math.ceil(distance / maxSegmentLength));
+    for (let step = 1; step < segments; step += 1) {
+      const t = step / segments;
+      densified.push({
+        x: current.x + (next.x - current.x) * t,
+        y: current.y + (next.y - current.y) * t,
+      });
+    }
+  }
+  return densified;
+};
+
 const computeSignedArea = (polygon: Array<{ x: number; y: number }>) => {
   let area = 0;
   for (let index = 0; index < polygon.length; index += 1) {
@@ -430,6 +465,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         const edgeMap = edgeMapRef.current;
         if (edgeMap && imageDimensions) {
           const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+          polygon = densifyPolygon(polygon, minimumDistance);
           polygon = snapPolygonToEdges(polygon, {
             edgeMap,
             imageWidth: imageDimensions.width,
@@ -613,6 +649,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           if (room.tool === 'smartSnap' || room.tool === 'smartWand') {
             if (edgeMap && imageDimensions) {
               const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+              polygon = densifyPolygon(polygon, minimumDistance);
               polygon = snapPolygonToEdges(polygon, {
                 edgeMap,
                 imageWidth: imageDimensions.width,
@@ -1051,6 +1088,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         let polygon = normalisePolygon(room.polygon, minimumDistance);
         if (edgeMap && imageDimensions) {
           const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+          polygon = densifyPolygon(polygon, minimumDistance);
           polygon = snapPolygonToEdges(polygon, {
             edgeMap,
             imageWidth: imageDimensions.width,
