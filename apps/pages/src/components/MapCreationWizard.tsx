@@ -13,17 +13,18 @@ import {
   type RoomTool,
   type RoomToolOption,
 } from './roomToolOptions';
-import {
-  applyBrushToMask,
-  dilateMask,
-  extractLargestPolygonFromMask,
-  rasterizePolygonToMask,
-  type BrushMode,
-  type RasterImageData,
-} from '../utils/roomToolUtils';
+import { rasterizePolygonToMask, type BrushMode, type RasterImageData } from '../utils/roomToolUtils';
 import { vectorizeAndSnap } from '../workers/seg';
 import { MagneticLassoTool } from '../tools/magneticLasso';
 import { SmartWandTool } from '../tools/smartWand';
+import {
+  applyBrushAdd,
+  applyBrushErase,
+  createEmptySdf,
+  pathToSDF,
+  sdfToPath,
+  type MaskSDF,
+} from '../utils/sdf';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -424,6 +425,11 @@ interface WizardSidebarProps {
   activeTool: RoomTool;
   onSelectTool: (tool: RoomTool) => void;
   toolOptions: RoomToolOption[];
+  showBrushSlider: boolean;
+  brushRadius: number;
+  brushMin: number;
+  brushMax: number;
+  onBrushRadiusChange: (radius: number) => void;
 }
 
 const PlusIcon = () => (
@@ -566,6 +572,11 @@ const WizardSidebar: React.FC<WizardSidebarProps> = ({
   activeTool,
   onSelectTool,
   toolOptions,
+  showBrushSlider,
+  brushRadius,
+  brushMin,
+  brushMax,
+  onBrushRadiusChange,
 }) => {
   const outlineLabel = isOutlining ? 'Finish room outline' : 'Add room/corridor';
   const toolButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -606,7 +617,7 @@ const WizardSidebar: React.FC<WizardSidebarProps> = ({
           <SidebarButton label="Zoom out" icon={<ZoomOutIcon />} onClick={onZoomOut} disabled={!canZoomOut} />
         </div>
         <div
-          className={`absolute left-full top-0 flex transform transition-all duration-200 ${
+          className={`absolute left-full top-0 flex transform items-start gap-3 transition-all duration-200 ${
             isOutlining
               ? 'translate-x-3 opacity-100 pointer-events-auto'
               : 'translate-x-8 opacity-0 pointer-events-none'
@@ -646,6 +657,25 @@ const WizardSidebar: React.FC<WizardSidebarProps> = ({
               );
             })}
           </div>
+          {showBrushSlider && (
+            <div className="flex w-40 flex-col gap-2 rounded-3xl border border-slate-800/80 bg-slate-950/90 p-4 shadow-2xl">
+              <label className="text-[10px] uppercase tracking-[0.35em] text-slate-400" htmlFor="brush-size-slider">
+                Brush Size
+              </label>
+              <input
+                id="brush-size-slider"
+                type="range"
+                min={brushMin}
+                max={brushMax}
+                value={Math.round(brushRadius)}
+                onChange={(event) => onBrushRadiusChange(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-teal-400"
+              />
+              <div className="text-right text-[10px] uppercase tracking-[0.35em] text-teal-200">
+                {Math.round(brushRadius)} px
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </aside>
@@ -682,6 +712,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [activeRoomPopoverPosition, setActiveRoomPopoverPosition] = useState<
     { left: number; top: number } | null
   >(null);
+  const [paintbrushRadius, setPaintbrushRadius] = useState(0);
 
   const roomsMapRef = useRef<HTMLDivElement>(null);
   const activeRoomPopoverRef = useRef<HTMLDivElement | null>(null);
@@ -691,8 +722,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const outlineToolRef = useRef<RoomTool>(DEFAULT_ROOM_TOOL);
   const adjustmentPathRef = useRef<Array<{ x: number; y: number }>>([]);
   const adjustmentPointerIdRef = useRef<number | null>(null);
-  const paintbrushMaskRef = useRef<Uint8Array | null>(null);
-  const paintbrushDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+  const paintbrushSdfRef = useRef<MaskSDF | null>(null);
   const paintbrushRadiusRef = useRef<number>(0);
   const paintbrushModeRef = useRef<BrushMode>('add');
   const paintbrushLastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -720,6 +750,27 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     () => (file ? `wizard:${file.name}:${file.size}:${file.lastModified}` : undefined),
     [file]
   );
+  const brushSliderRange = useMemo(() => {
+    if (!imageDimensions) {
+      return { min: 1, max: 40 };
+    }
+    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+    const min = Math.max(1, Math.round(maxDimension * 0.004));
+    const max = Math.max(min + 1, Math.round(maxDimension * 0.08));
+    return { min, max };
+  }, [imageDimensions]);
+
+  useEffect(() => {
+    if (!imageDimensions) return;
+    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+    const defaultRadius = clamp(
+      Math.round(maxDimension * 0.012),
+      brushSliderRange.min,
+      brushSliderRange.max
+    );
+    paintbrushRadiusRef.current = defaultRadius;
+    setPaintbrushRadius(defaultRadius);
+  }, [imageDimensions, brushSliderRange.max, brushSliderRange.min]);
 
   const resolveRelativePoint = useCallback(
     (event: { clientX: number; clientY: number }) =>
@@ -833,23 +884,75 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         setIsOutliningRoom(false);
         return;
       }
-      finalizeRoomOutline(result.polygon, { skipVectorize: true, toolOverride: 'smartWand' });
+      const success = initializeSdfFromPolygon(result.polygon, { offsetPx: 5 });
+      if (!success) {
+        setIsOutliningRoom(false);
+      }
     },
-    [finalizeRoomOutline]
+    [initializeSdfFromPolygon]
   );
 
-  const updatePaintbrushDraftFromMask = useCallback(
-    (mask: Uint8Array | null, dimensions: { width: number; height: number } | null, radius: number) => {
-      if (!mask || !dimensions) {
-        setDraftRoomPoints([]);
-        return;
+  const updateDraftRoomFromSdf = useCallback((sdf: MaskSDF | null) => {
+    if (!sdf) {
+      setDraftRoomPoints([]);
+      return;
+    }
+    const path = sdfToPath(sdf, {
+      smoothingIterations: 3,
+      smoothingFactor: 0.24,
+      simplifyTolerance: 0.85,
+    });
+    setDraftRoomPoints(path.points.length > 0 ? path.points : []);
+  }, []);
+
+  const ensurePaintbrushSdf = useCallback(() => {
+    if (!imageDimensions) return null;
+    const existing = paintbrushSdfRef.current;
+    if (existing && existing.w === imageDimensions.width && existing.h === imageDimensions.height) {
+      return existing;
+    }
+    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+    const bandRadius = Math.max(Math.round(maxDimension * 0.06), brushSliderRange.max * 2);
+    const sdf = createEmptySdf(imageDimensions.width, imageDimensions.height, bandRadius);
+    paintbrushSdfRef.current = sdf;
+    updateDraftRoomFromSdf(sdf);
+    return sdf;
+  }, [brushSliderRange.max, imageDimensions, updateDraftRoomFromSdf]);
+
+  const initializeSdfFromPolygon = useCallback(
+    (polygon: Array<{ x: number; y: number }>, options?: { offsetPx?: number }) => {
+      if (!imageDimensions || polygon.length < 3) {
+        updateDraftRoomFromSdf(null);
+        return false;
       }
-      const { width, height } = dimensions;
-      const workingMask = radius > 0 ? dilateMask(mask, width, height, radius) : mask;
-      const polygon = extractLargestPolygonFromMask(workingMask, width, height);
-      setDraftRoomPoints(polygon.length > 0 ? polygon : []);
+      const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
+      const bandRadius = Math.max(Math.round(maxDimension * 0.06), brushSliderRange.max * 2);
+      const sdf = pathToSDF(
+        { points: polygon, closed: true },
+        {
+          width: imageDimensions.width,
+          height: imageDimensions.height,
+          bandRadius,
+          offsetPx: options?.offsetPx ?? 0,
+        }
+      );
+      paintbrushSdfRef.current = sdf;
+      outlineToolRef.current = 'paintbrush';
+      setSelectedRoomTool('paintbrush');
+      setIsDrawingRoom(false);
+      updateDraftRoomFromSdf(sdf);
+      return true;
     },
-    []
+    [brushSliderRange.max, imageDimensions, updateDraftRoomFromSdf]
+  );
+
+  const handleBrushRadiusChange = useCallback(
+    (nextRadius: number) => {
+      const clampedRadius = clamp(nextRadius, brushSliderRange.min, brushSliderRange.max);
+      setPaintbrushRadius(clampedRadius);
+      paintbrushRadiusRef.current = clampedRadius;
+    },
+    [brushSliderRange.max, brushSliderRange.min]
   );
 
   useEffect(() => {
@@ -864,10 +967,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         return;
       }
       if (activeTool === 'paintbrush') {
-        const dimensions = paintbrushDimensionsRef.current;
-        const mask = paintbrushMaskRef.current;
-        const radius = paintbrushRadiusRef.current;
-        if (!dimensions || !mask || radius <= 0) return;
+        const sdf = ensurePaintbrushSdf();
+        const radius = Math.max(1, paintbrushRadiusRef.current || brushSliderRange.min);
+        if (!sdf || radius <= 0) return;
         const buttons = event.buttons ?? 0;
         const rightActive = (buttons & 2) === 2;
         const leftActive = (buttons & 1) === 1;
@@ -877,19 +979,30 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         }
         const mode: BrushMode = rightActive ? 'add' : 'erase';
         paintbrushModeRef.current = mode;
-        const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
-        const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
+        const currentPoint = {
+          x: clamp(point.x, 0, 1),
+          y: clamp(point.y, 0, 1),
+        };
         const last = paintbrushLastPointRef.current;
-        const distance = last ? Math.hypot(px - last.x, py - last.y) : 0;
+        const distance = last
+          ? Math.hypot((currentPoint.x - last.x) * sdf.w, (currentPoint.y - last.y) * sdf.h)
+          : 0;
         const steps = last ? Math.max(1, Math.ceil(distance / Math.max(radius * 0.6, 1))) : 1;
+        const stroke: Array<{ x: number; y: number }> = [];
         for (let step = 0; step <= steps; step += 1) {
           const t = steps === 0 ? 0 : step / steps;
-          const sampleX = last ? last.x + (px - last.x) * t : px;
-          const sampleY = last ? last.y + (py - last.y) * t : py;
-          applyBrushToMask(mask, dimensions.width, dimensions.height, sampleX, sampleY, radius, mode);
+          const sample = last
+            ? { x: last.x + (currentPoint.x - last.x) * t, y: last.y + (currentPoint.y - last.y) * t }
+            : currentPoint;
+          stroke.push(sample);
         }
-        paintbrushLastPointRef.current = { x: px, y: py };
-        updatePaintbrushDraftFromMask(mask, dimensions, radius);
+        if (mode === 'add') {
+          applyBrushAdd(sdf, stroke, radius);
+        } else {
+          applyBrushErase(sdf, stroke, radius);
+        }
+        paintbrushLastPointRef.current = currentPoint;
+        updateDraftRoomFromSdf(sdf);
         return;
       }
       const lastPoint = drawingPointsRef.current[drawingPointsRef.current.length - 1];
@@ -913,10 +1026,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       }
       const completed = drawingPointsRef.current;
       drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
       setIsDrawingRoom(false);
-      if (completed.length >= 3) {
-        finalizeRoomOutline(completed);
+      if (completed.length >= 2) {
+        const closedPath = completed[0]
+          ? [...completed, completed[0]]
+          : [...completed];
+        const success = initializeSdfFromPolygon(closedPath);
+        if (!success) {
+          setIsOutliningRoom(false);
+        }
       } else {
         setIsOutliningRoom(false);
       }
@@ -928,7 +1046,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [finalizeRoomOutline, isDrawingRoom, resolveRelativePoint, updatePaintbrushDraftFromMask]);
+  }, [
+    finalizeRoomOutline,
+    ensurePaintbrushSdf,
+    initializeSdfFromPolygon,
+    isDrawingRoom,
+    resolveRelativePoint,
+    updateDraftRoomFromSdf,
+    brushSliderRange.min,
+  ]);
 
   const finalizeRoomAdjustment = useCallback(
     (state: RoomAdjustmentState | null) => {
@@ -1361,11 +1487,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       setAdjustingRoom(null);
       adjustmentPathRef.current = [];
       adjustmentPointerIdRef.current = null;
-      paintbrushMaskRef.current = null;
-      paintbrushDimensionsRef.current = null;
-      paintbrushRadiusRef.current = 0;
+      paintbrushSdfRef.current = null;
       paintbrushModeRef.current = 'add';
       paintbrushLastPointRef.current = null;
+      updateDraftRoomFromSdf(null);
       setIsOutliningRoom(true);
       setIsDrawingRoom(false);
       setDraftRoomPoints([]);
@@ -1419,7 +1544,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
         }
       }
     },
-    [previewUrl, segmentationCacheKey, selectedRoomTool]
+    [previewUrl, segmentationCacheKey, selectedRoomTool, updateDraftRoomFromSdf]
   );
 
   const handleSelectRoomTool = useCallback(
@@ -1441,9 +1566,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     drawingPointsRef.current = [];
     adjustmentPathRef.current = [];
     adjustmentPointerIdRef.current = null;
-    paintbrushMaskRef.current = null;
-    paintbrushDimensionsRef.current = null;
-    paintbrushRadiusRef.current = 0;
+    paintbrushSdfRef.current = null;
     paintbrushModeRef.current = 'add';
     paintbrushLastPointRef.current = null;
     magneticLassoUnsubscribeRef.current?.();
@@ -1454,6 +1577,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const handleFinishRoomOutline = useCallback(() => {
     if (!isOutliningRoom) return;
+    const sdf = paintbrushSdfRef.current;
+    if (sdf) {
+      const vectorPath = sdfToPath(sdf, {
+        smoothingIterations: 4,
+        smoothingFactor: 0.22,
+        simplifyTolerance: 0.8,
+      });
+      const polygon = vectorPath.points;
+      if (polygon.length >= 3) {
+        finalizeRoomOutline(polygon);
+      } else {
+        handleCancelRoomOutline();
+      }
+      paintbrushSdfRef.current = null;
+      paintbrushLastPointRef.current = null;
+      return;
+    }
     const activeTool = outlineToolRef.current;
     if (activeTool === 'smartSnap') {
       const tool = magneticLassoRef.current;
@@ -1466,31 +1606,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       }
       const result = tool.finalize({ smoothingIterations: 2 });
       drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
       if (result && result.snappedPolygon.length >= 3) {
-        finalizeRoomOutline(result.snappedPolygon, { skipVectorize: true, toolOverride: 'smartSnap' });
+        const success = initializeSdfFromPolygon(result.snappedPolygon, { offsetPx: 5 });
+        if (!success) {
+          handleCancelRoomOutline();
+        }
       } else {
         handleCancelRoomOutline();
       }
       return;
     }
     if (activeTool === 'paintbrush') {
-      const mask = paintbrushMaskRef.current;
-      const dimensions = paintbrushDimensionsRef.current;
-      const radius = paintbrushRadiusRef.current;
       setIsDrawingRoom(false);
-      if (!mask || !dimensions) {
-        handleCancelRoomOutline();
-        return;
-      }
-      const polygon = extractLargestPolygonFromMask(
-        dilateMask(mask, dimensions.width, dimensions.height, radius),
-        dimensions.width,
-        dimensions.height
-      );
-      if (polygon.length >= 3) {
-        finalizeRoomOutline(polygon);
-      }
       handleCancelRoomOutline();
       return;
     }
@@ -1504,7 +1631,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     } else {
       handleCancelRoomOutline();
     }
-  }, [draftRoomPoints, finalizeRoomOutline, handleCancelRoomOutline, isOutliningRoom]);
+  }, [
+    draftRoomPoints,
+    finalizeRoomOutline,
+    handleCancelRoomOutline,
+    initializeSdfFromPolygon,
+    isOutliningRoom,
+  ]);
 
   const handleAddRoomClick = useCallback(() => {
     handleStartRoomOutline();
@@ -1562,46 +1695,29 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     }
     if (activeTool === 'paintbrush') {
       event.stopPropagation();
-      const dimensions = imageDimensions;
-      if (!dimensions) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      const total = dimensions.width * dimensions.height;
-      if (total <= 0) {
+      const sdf = ensurePaintbrushSdf();
+      if (!sdf) {
         setIsOutliningRoom(false);
         return;
       }
       const buttons = event.buttons ?? 0;
       const mode: BrushMode = event.button === 2 || (buttons & 2) === 2 ? 'add' : 'erase';
       paintbrushModeRef.current = mode;
-      const storedDimensions = paintbrushDimensionsRef.current;
-      const needsReset =
-        !paintbrushMaskRef.current ||
-        !storedDimensions ||
-        storedDimensions.width !== dimensions.width ||
-        storedDimensions.height !== dimensions.height;
-      if (needsReset) {
-        paintbrushMaskRef.current = new Uint8Array(total);
-        paintbrushDimensionsRef.current = { ...dimensions };
-      }
-      const mask = paintbrushMaskRef.current;
-      if (!mask) {
-        setIsOutliningRoom(false);
-        return;
-      }
       let radius = paintbrushRadiusRef.current;
-      if (!radius || needsReset) {
-        const maxDimension = Math.max(dimensions.width, dimensions.height);
-        radius = Math.max(3, Math.round(maxDimension * 0.012));
+      if (!radius || radius <= 0) {
+        radius = Math.max(1, paintbrushRadius || brushSliderRange.min);
         paintbrushRadiusRef.current = radius;
       }
-      const px = clamp(point.x * dimensions.width, 0, dimensions.width - 1);
-      const py = clamp(point.y * dimensions.height, 0, dimensions.height - 1);
-      applyBrushToMask(mask, dimensions.width, dimensions.height, px, py, radius, mode);
-      paintbrushLastPointRef.current = { x: px, y: py };
+      const currentPoint = { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) };
+      const stroke = [currentPoint];
+      if (mode === 'add') {
+        applyBrushAdd(sdf, stroke, radius);
+      } else {
+        applyBrushErase(sdf, stroke, radius);
+      }
+      paintbrushLastPointRef.current = currentPoint;
       drawingPointsRef.current = [];
-      updatePaintbrushDraftFromMask(mask, dimensions, radius);
+      updateDraftRoomFromSdf(sdf);
       setIsDrawingRoom(true);
       return;
     }
@@ -1837,6 +1953,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
           activeTool={selectedRoomTool}
           onSelectTool={handleSelectRoomTool}
           toolOptions={ROOM_TOOL_OPTIONS}
+          showBrushSlider={isOutliningRoom && selectedRoomTool === 'paintbrush'}
+          brushRadius={paintbrushRadius}
+          brushMin={brushSliderRange.min}
+          brushMax={brushSliderRange.max}
+          onBrushRadiusChange={handleBrushRadiusChange}
         />
       )}
       <header className="border-b border-slate-800/70 px-6 py-5">
