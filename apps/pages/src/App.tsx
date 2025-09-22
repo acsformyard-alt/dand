@@ -316,6 +316,57 @@ const App: React.FC = () => {
     }
   };
 
+  const finalizeMapRemoval = async (deletedIds: Set<string>) => {
+    let remainingMaps: MapRecord[] = maps;
+    let loadError = false;
+
+    if (deletedIds.size === 0) {
+      if (remainingMaps.length === 0) {
+        setSelectedMap(null);
+        setRegions([]);
+        setMarkers([]);
+      }
+      return { remainingMaps, loadError };
+    }
+
+    setMaps((previous) => {
+      const filtered = previous.filter((entry) => !deletedIds.has(entry.id));
+      remainingMaps = filtered;
+      return filtered;
+    });
+
+    const removedSelectedMap = selectedMap ? deletedIds.has(selectedMap.id) : false;
+
+    if (removedSelectedMap) {
+      const nextMap = remainingMaps[0] ?? null;
+      setSelectedMap(nextMap ?? null);
+      if (nextMap) {
+        setRegions([]);
+        setMarkers([]);
+        try {
+          const [nextRegions, nextMarkers] = await Promise.all([
+            apiClient.getRegions(nextMap.id),
+            apiClient.getMarkers(nextMap.id),
+          ]);
+          setRegions(nextRegions);
+          setMarkers(nextMarkers);
+        } catch (loadErr) {
+          console.error(loadErr);
+          loadError = true;
+        }
+      } else {
+        setRegions([]);
+        setMarkers([]);
+      }
+    } else if (remainingMaps.length === 0) {
+      setSelectedMap(null);
+      setRegions([]);
+      setMarkers([]);
+    }
+
+    return { remainingMaps, loadError };
+  };
+
   const handleDeleteMap = async (map: MapRecord) => {
     const confirmDelete = window.confirm(
       `Delete map "${map.name}"? This will remove all associated regions and markers.`,
@@ -325,41 +376,61 @@ const App: React.FC = () => {
     }
     try {
       await apiClient.deleteMap(map.id);
-      const wasSelected = selectedMap?.id === map.id;
-      let remainingMaps: MapRecord[] = [];
-      setMaps((previous) => {
-        const filtered = previous.filter((entry) => entry.id !== map.id);
-        remainingMaps = filtered;
-        return filtered;
-      });
-      if (wasSelected) {
-        const nextMap = remainingMaps[0] ?? null;
-        setSelectedMap(nextMap ?? null);
-        if (nextMap) {
-          setRegions([]);
-          setMarkers([]);
-          try {
-            const [nextRegions, nextMarkers] = await Promise.all([
-              apiClient.getRegions(nextMap.id),
-              apiClient.getMarkers(nextMap.id),
-            ]);
-            setRegions(nextRegions);
-            setMarkers(nextMarkers);
-          } catch (loadErr) {
-            console.error(loadErr);
-            setStatusMessage('Map deleted, but failed to load the next map details.');
-            return;
-          }
-        } else {
-          setRegions([]);
-          setMarkers([]);
-        }
+      const { loadError } = await finalizeMapRemoval(new Set([map.id]));
+      if (loadError) {
+        setStatusMessage('Map deleted, but failed to load the next map details.');
+        return;
       }
       setStatusMessage('Map deleted.');
     } catch (err) {
       console.error(err);
       setStatusMessage((err as Error).message);
     }
+  };
+
+  const handleDeleteGroup = async (groupName: string, groupMaps: MapRecord[]) => {
+    if (groupMaps.length === 0) {
+      return;
+    }
+    const confirmDelete = window.confirm(
+      `Delete all ${groupMaps.length} map${groupMaps.length === 1 ? '' : 's'} in "${groupName}"? This will remove all associated regions and markers.`,
+    );
+    if (!confirmDelete) {
+      return;
+    }
+
+    const deletedIds = new Set<string>();
+    let currentMap: MapRecord | null = null;
+
+    try {
+      for (const map of groupMaps) {
+        currentMap = map;
+        await apiClient.deleteMap(map.id);
+        deletedIds.add(map.id);
+      }
+    } catch (err) {
+      console.error(err);
+      if (deletedIds.size > 0) {
+        const { loadError } = await finalizeMapRemoval(deletedIds);
+        const failureMessage = `Failed to delete "${currentMap?.name ?? 'map'}" from '${groupName}': ${(err as Error).message}. Deleted ${deletedIds.size} of ${groupMaps.length} maps.`;
+        setStatusMessage(
+          loadError
+            ? `${failureMessage} Additionally, failed to load the next map details.`
+            : failureMessage,
+        );
+      } else {
+        setStatusMessage(
+          `Failed to delete "${currentMap?.name ?? 'map'}" from '${groupName}': ${(err as Error).message}.`,
+        );
+      }
+      return;
+    }
+
+    const { loadError } = await finalizeMapRemoval(deletedIds);
+    const successMessage = `Deleted ${deletedIds.size} map${deletedIds.size === 1 ? '' : 's'} from '${groupName}'.`;
+    setStatusMessage(
+      loadError ? `${successMessage} However, failed to load the next map details.` : successMessage,
+    );
   };
 
   const mySessions = useMemo(() => lobbySessions.filter((session) => session.hostId === user?.id), [lobbySessions, user?.id]);
@@ -783,6 +854,7 @@ const App: React.FC = () => {
                     onSelect={(map) => setSelectedMap(map)}
                     onCreateMap={handleOpenMapWizard}
                     onDeleteMap={handleDeleteMap}
+                    onDeleteGroup={handleDeleteGroup}
                   />
                   <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
                     <div className="space-y-6">
