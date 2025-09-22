@@ -271,16 +271,24 @@ const steps: Array<{ title: string; description: string }> = [
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const DEFAULT_ROOM_ADJUST_BRUSH_RADIUS = 0.035;
+const DEFAULT_ZOOM = 1;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.25;
+const clampZoomValue = (value: number) => Math.min(Math.max(value, MIN_ZOOM), MAX_ZOOM);
 
 const resolveNormalizedPointWithinImage = (
   event: { clientX: number; clientY: number },
   container: HTMLDivElement | null,
-  imageDimensions: { width: number; height: number } | null
+  imageDimensions: { width: number; height: number } | null,
+  metricsOverride?: ImageDisplayMetrics | null
 ) => {
   if (!container || !imageDimensions) return null;
   const rect = container.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return null;
-  const metrics = computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height);
+  const metrics =
+    metricsOverride ??
+    computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height);
   const relativeX = clamp(event.clientX - rect.left - metrics.offsetX, 0, metrics.displayWidth);
   const relativeY = clamp(event.clientY - rect.top - metrics.offsetY, 0, metrics.displayHeight);
   const normalisedX = metrics.displayWidth === 0 ? 0 : relativeX / metrics.displayWidth;
@@ -369,6 +377,120 @@ const containerPointToStyle = (point: { x: number; y: number }): React.CSSProper
   top: `${point.y * 100}%`,
 });
 
+interface SidebarButtonProps {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  isActive?: boolean;
+}
+
+const SidebarButton: React.FC<SidebarButtonProps> = ({ label, icon, onClick, disabled, isActive }) => (
+  <div className="group relative">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+        isActive
+          ? 'border-teal-400/80 bg-teal-500/30 text-teal-100'
+          : 'border-slate-800/80 bg-slate-950/70 text-slate-200 hover:border-teal-400/60 hover:text-teal-100'
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+      aria-label={label}
+      aria-pressed={isActive}
+    >
+      {icon}
+    </button>
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-slate-800/80 bg-slate-950/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 opacity-0 shadow-lg transition group-hover:opacity-100"
+    >
+      {label}
+    </span>
+  </div>
+);
+
+interface WizardSidebarProps {
+  isOutlining: boolean;
+  canOutline: boolean;
+  onOutlineAction: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
+}
+
+const PlusIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path
+      d="M12 5v14M5 12h14"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path d="M5 12.5 10 17l9-10" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const ZoomInIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path
+      d="M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm0 0v6m-3-3h6m3.5 6.5 3.5 3.5"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
+const ZoomOutIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path
+      d="M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm-3 6h6m3.5 3.5 3.5 3.5"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
+const WizardSidebar: React.FC<WizardSidebarProps> = ({
+  isOutlining,
+  canOutline,
+  onOutlineAction,
+  onZoomIn,
+  onZoomOut,
+  canZoomIn,
+  canZoomOut,
+}) => {
+  const outlineLabel = isOutlining ? 'Finish room outline' : 'Add room/corridor';
+  return (
+    <aside className="fixed left-6 top-1/2 z-40 -translate-y-1/2">
+      <div className="flex flex-col gap-3 rounded-3xl border border-slate-800/80 bg-slate-950/80 p-3 shadow-2xl">
+        <SidebarButton
+          label={outlineLabel}
+          icon={isOutlining ? <CheckIcon /> : <PlusIcon />}
+          onClick={onOutlineAction}
+          disabled={!canOutline}
+          isActive={isOutlining}
+        />
+        <SidebarButton label="Zoom in" icon={<ZoomInIcon />} onClick={onZoomIn} disabled={!canZoomIn} />
+        <SidebarButton label="Zoom out" icon={<ZoomOutIcon />} onClick={onZoomOut} disabled={!canZoomOut} />
+      </div>
+    </aside>
+  );
+};
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose, onComplete }) => {
   const [step, setStep] = useState<WizardStep>(0);
   const [file, setFile] = useState<File | null>(null);
@@ -381,6 +503,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [tagsInput, setTagsInput] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -412,6 +535,20 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const smartWandToolRef = useRef<SmartWandTool | null>(null);
 
   const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
+  const zoomedRoomsDisplayMetrics = useMemo(() => {
+    if (!roomsDisplayMetrics) return null;
+    const zoomedWidth = roomsDisplayMetrics.displayWidth * mapZoom;
+    const zoomedHeight = roomsDisplayMetrics.displayHeight * mapZoom;
+    const offsetX = roomsDisplayMetrics.offsetX - (zoomedWidth - roomsDisplayMetrics.displayWidth) / 2;
+    const offsetY = roomsDisplayMetrics.offsetY - (zoomedHeight - roomsDisplayMetrics.displayHeight) / 2;
+    return {
+      ...roomsDisplayMetrics,
+      displayWidth: zoomedWidth,
+      displayHeight: zoomedHeight,
+      offsetX,
+      offsetY,
+    } satisfies ImageDisplayMetrics;
+  }, [roomsDisplayMetrics, mapZoom]);
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
   const segmentationCacheKey = useMemo(
     () => (file ? `wizard:${file.name}:${file.size}:${file.lastModified}` : undefined),
@@ -420,9 +557,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   const resolveRelativePoint = useCallback(
     (event: { clientX: number; clientY: number }) =>
-      resolveNormalizedPointWithinImage(event, roomsMapRef.current, imageDimensions),
-    [imageDimensions]
+      resolveNormalizedPointWithinImage(event, roomsMapRef.current, imageDimensions, zoomedRoomsDisplayMetrics),
+    [imageDimensions, zoomedRoomsDisplayMetrics]
   );
+
+  const handleZoomIn = useCallback(() => {
+    setMapZoom((current) => Number(clampZoomValue(current + ZOOM_STEP).toFixed(2)));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setMapZoom((current) => Number(clampZoomValue(current - ZOOM_STEP).toFixed(2)));
+  }, []);
 
   const vectorizePolygonWithWorker = useCallback(
     (polygon: Array<{ x: number; y: number }>, tool: RoomTool, options?: { snapSearchRadius?: number }) => {
@@ -752,6 +897,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   }, [activeRoomId, rooms]);
 
   useEffect(() => {
+    setMapZoom(DEFAULT_ZOOM);
+  }, [previewUrl]);
+
+  useEffect(() => {
     if (!adjustingRoom) return;
     if (!rooms.some((room) => room.id === adjustingRoom.roomId)) {
       adjustmentPathRef.current = [];
@@ -768,19 +917,29 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const overlayWidth = imageDimensions?.width ?? 1000;
   const overlayHeight = imageDimensions?.height ?? 1000;
   const overlayScale = Math.max(overlayWidth, overlayHeight);
-  const roomOverlayStyle = roomsDisplayMetrics
+  const roomOverlayStyle: React.CSSProperties = zoomedRoomsDisplayMetrics
     ? {
-        left: `${(roomsDisplayMetrics.offsetX / roomsDisplayMetrics.containerWidth) * 100}%`,
-        top: `${(roomsDisplayMetrics.offsetY / roomsDisplayMetrics.containerHeight) * 100}%`,
-        width: `${(roomsDisplayMetrics.displayWidth / roomsDisplayMetrics.containerWidth) * 100}%`,
-        height: `${(roomsDisplayMetrics.displayHeight / roomsDisplayMetrics.containerHeight) * 100}%`,
+        left: zoomedRoomsDisplayMetrics.offsetX,
+        top: zoomedRoomsDisplayMetrics.offsetY,
+        width: zoomedRoomsDisplayMetrics.displayWidth,
+        height: zoomedRoomsDisplayMetrics.displayHeight,
       }
-    : { left: '0%', top: '0%', width: '100%', height: '100%' };
-  const activeRoomAnchor = normalisedToContainerPoint(activeRoomCenter, roomsDisplayMetrics);
+    : { left: 0, top: 0, width: '100%', height: '100%' };
+  const roomImageStyle: React.CSSProperties | undefined = zoomedRoomsDisplayMetrics
+    ? {
+        left: zoomedRoomsDisplayMetrics.offsetX,
+        top: zoomedRoomsDisplayMetrics.offsetY,
+        width: zoomedRoomsDisplayMetrics.displayWidth,
+        height: zoomedRoomsDisplayMetrics.displayHeight,
+      }
+    : undefined;
+  const activeRoomAnchor = normalisedToContainerPoint(activeRoomCenter, zoomedRoomsDisplayMetrics);
   const clampedActiveAnchor = {
     x: clamp(activeRoomAnchor.x, 0.12, 0.88),
     y: clamp(activeRoomAnchor.y, 0.18, 0.85),
   };
+  const canZoomIn = mapZoom < MAX_ZOOM - 1e-6;
+  const canZoomOut = mapZoom > MIN_ZOOM + 1e-6;
 
   const handleStartRoomAdjustment = useCallback(() => {
     if (!activeRoom) return;
@@ -1384,6 +1543,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
+      {step === 2 && (
+        <WizardSidebar
+          isOutlining={isOutliningRoom}
+          canOutline={Boolean(previewUrl)}
+          onOutlineAction={isOutliningRoom ? handleFinishRoomOutline : handleAddRoomClick}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          canZoomIn={canZoomIn}
+          canZoomOut={canZoomOut}
+        />
+      )}
       <header className="border-b border-slate-800/70 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -1582,47 +1752,36 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
               </div>
               <div className="flex flex-col items-end gap-3">
                 {previewUrl ? (
-                  <>
+                  isOutliningRoom ? (
                     <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={isOutliningRoom ? handleFinishRoomOutline : handleAddRoomClick}
-                        className={`rounded-full border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                          isOutliningRoom
-                            ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 hover:bg-teal-400/30'
-                            : 'border-teal-400/70 bg-teal-500/80 text-slate-900 hover:bg-teal-400/70 hover:text-slate-900'
-                        }`}
-                      >
-                        {isOutliningRoom ? 'Finish Room' : 'Add Room'}
-                      </button>
+                      {ROOM_TOOL_OPTIONS.map((option) => {
+                        const isActive = option.id === selectedRoomTool;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => handleSelectRoomTool(option.id)}
+                            className={`flex min-w-[160px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                              isActive
+                                ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
+                                : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
+                            }`}
+                            title={option.tooltip}
+                            aria-pressed={isActive}
+                          >
+                            <span className="text-sm font-semibold">{option.label}</span>
+                            <span className={`text-[11px] ${isActive ? 'text-teal-100/80' : 'text-slate-400'}`}>
+                              {option.description}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {isOutliningRoom && (
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {ROOM_TOOL_OPTIONS.map((option) => {
-                          const isActive = option.id === selectedRoomTool;
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() => handleSelectRoomTool(option.id)}
-                              className={`flex min-w-[160px] flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                                isActive
-                                  ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
-                                  : 'border-slate-800/70 bg-slate-900/70 text-slate-300 hover:border-teal-400/50 hover:bg-slate-800/60 hover:text-teal-100'
-                              }`}
-                              title={option.tooltip}
-                              aria-pressed={isActive}
-                            >
-                              <span className="text-sm font-semibold">{option.label}</span>
-                              <span className={`text-[11px] ${isActive ? 'text-teal-100/80' : 'text-slate-400'}`}>
-                                {option.description}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-400">
+                      Use the sidebar controls to add rooms and adjust zoom.
+                    </div>
+                  )
                 ) : (
                   <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-500">
                     Upload a map to choose a capture tool.
@@ -1632,7 +1791,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                   {previewUrl
                     ? isOutliningRoom
                       ? `Active Tool: ${activeToolOption.label}`
-                      : 'Press "Add Room" to choose a capture tool.'
+                      : 'Press "Add room/corridor" to choose a capture tool.'
                     : 'Tools unlock after selecting a map.'}
                 </p>
               </div>
@@ -1649,7 +1808,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     <img
                       src={previewUrl}
                       alt="Room outlining map preview"
-                      className="h-full w-full select-none object-contain"
+                      className={
+                        zoomedRoomsDisplayMetrics
+                          ? 'absolute select-none'
+                          : 'h-full w-full select-none object-contain'
+                      }
+                      style={roomImageStyle}
                       draggable={false}
                     />
                     <svg
