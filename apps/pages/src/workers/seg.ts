@@ -684,7 +684,7 @@ export const computeSignedDistanceField = (
   for (let i = 0; i < values.length; i += 1) {
     const outsideDist = Math.sqrt(outside[i]);
     const insideDist = Math.sqrt(inside[i]);
-    values[i] = (outsideDist - insideDist) / scale;
+    values[i] = (insideDist - outsideDist) / scale;
   }
   return {
     width,
