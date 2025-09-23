@@ -296,6 +296,8 @@ export const roomMaskToPolygon = (mask: RoomMask, tolerance = 0.001): Point[] =>
   return simplifyDouglasPeucker(dedupePoints(polygon), tolerance);
 };
 
+export const roomMaskToVector = roomMaskToPolygon;
+
 const crcTable = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n += 1) {
@@ -593,58 +595,6 @@ export const decodeRoomMaskFromDataUrl = (dataUrl: string): RoomMask => {
   }
   const bytes = base64Decode(encoded);
   return decodeRoomMaskFromPngBytes(bytes);
-};
-
-export const cloneRoomMask = (mask: RoomMask): RoomMask => ({
-  width: mask.width,
-  height: mask.height,
-  bounds: { ...mask.bounds },
-  data: new Uint8ClampedArray(mask.data),
-});
-
-export const applyCircularBrushToMask = (
-  mask: RoomMask,
-  center: Point,
-  radius: number,
-  mode: 'add' | 'erase',
-  hardness = 1,
-): RoomMask => {
-  const next = cloneRoomMask(mask);
-  const { width, height, bounds } = next;
-  const scaleX = bounds.maxX - bounds.minX || 1;
-  const scaleY = bounds.maxY - bounds.minY || 1;
-  const pixelRadiusX = Math.max(1, Math.round((radius / scaleX) * width));
-  const pixelRadiusY = Math.max(1, Math.round((radius / scaleY) * height));
-  const centerX = Math.round(((center.x - bounds.minX) / scaleX) * width);
-  const centerY = Math.round(((center.y - bounds.minY) / scaleY) * height);
-  const clampedHardness = Math.min(Math.max(hardness, 0), 1);
-  const falloffStart = clampedHardness;
-  const falloffRange = Math.max(1e-6, 1 - falloffStart);
-  for (let dy = -pixelRadiusY; dy <= pixelRadiusY; dy += 1) {
-    const y = centerY + dy;
-    if (y < 0 || y >= height) continue;
-    for (let dx = -pixelRadiusX; dx <= pixelRadiusX; dx += 1) {
-      const x = centerX + dx;
-      if (x < 0 || x >= width) continue;
-      const distance = Math.sqrt((dx / pixelRadiusX) ** 2 + (dy / pixelRadiusY) ** 2);
-      if (distance > 1) {
-        continue;
-      }
-      const index = y * width + x;
-      let weight = 1;
-      if (distance > falloffStart) {
-        weight = Math.max(0, 1 - (distance - falloffStart) / falloffRange);
-      }
-      const contribution = Math.round(weight * 255);
-      if (mode === 'add') {
-        next.data[index] = Math.max(next.data[index], contribution);
-      } else {
-        const remaining = Math.round((next.data[index] * (255 - contribution)) / 255);
-        next.data[index] = Math.max(0, remaining);
-      }
-    }
-  }
-  return next;
 };
 
 export const emptyRoomMask = (): RoomMask => ({
