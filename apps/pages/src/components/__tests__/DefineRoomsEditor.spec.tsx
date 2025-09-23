@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DefineRoomsEditor from '../DefineRoomsEditor';
 
@@ -207,5 +207,104 @@ describe('DefineRoomsEditor harness', () => {
   it('renders an overlay once the mocked image has loaded', async () => {
     const { overlay } = await renderEditor();
     expect(overlay.tagName).toBe('SVG');
+  });
+});
+
+describe('DefineRoomsEditor room authoring', () => {
+  it('allows completing a smart lasso room and resets to idle state', async () => {
+    const { overlay, onRoomsChange, user } = await renderEditor();
+
+    const idleAddRoomButton = screen.getByRole('button', { name: /add room/i });
+    expect(idleAddRoomButton).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /finish room/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+
+    await user.click(idleAddRoomButton);
+
+    const cancelButton = await screen.findByRole('button', { name: /cancel/i });
+    expect(cancelButton).toBeInTheDocument();
+    const finishButton = screen.getByRole('button', { name: /finish room/i });
+    expect(finishButton).toBeDisabled();
+
+    const containerRatio = DEFAULT_CONTAINER_RECT.width / DEFAULT_CONTAINER_RECT.height;
+    const imageRatio = DEFAULT_IMAGE_DIMENSIONS.width / DEFAULT_IMAGE_DIMENSIONS.height;
+    let overlayWidth: number;
+    let overlayHeight: number;
+    if (imageRatio > containerRatio) {
+      overlayWidth = DEFAULT_CONTAINER_RECT.width;
+      overlayHeight = overlayWidth / imageRatio;
+    } else {
+      overlayHeight = DEFAULT_CONTAINER_RECT.height;
+      overlayWidth = overlayHeight * imageRatio;
+    }
+    const offsetX = (DEFAULT_CONTAINER_RECT.width - overlayWidth) / 2;
+    const offsetY = (DEFAULT_CONTAINER_RECT.height - overlayHeight) / 2;
+
+    const toEventCoordinates = (point: { x: number; y: number }) => ({
+      clientX: DEFAULT_CONTAINER_RECT.left + offsetX + point.x * overlayWidth,
+      clientY: DEFAULT_CONTAINER_RECT.top + offsetY + point.y * overlayHeight,
+    });
+
+    const strokePoints = [
+      { x: 0.2, y: 0.2 },
+      { x: 0.35, y: 0.22 },
+      { x: 0.5, y: 0.25 },
+      { x: 0.65, y: 0.3 },
+      { x: 0.75, y: 0.4 },
+      { x: 0.78, y: 0.5 },
+      { x: 0.72, y: 0.6 },
+      { x: 0.6, y: 0.7 },
+      { x: 0.45, y: 0.75 },
+      { x: 0.3, y: 0.65 },
+    ];
+
+    const pointerId = 1;
+    const [startPoint, ...restPoints] = strokePoints;
+    fireEvent.pointerDown(overlay, {
+      pointerId,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      ...toEventCoordinates(startPoint),
+    });
+    restPoints.forEach((point) => {
+      fireEvent.pointerMove(overlay, {
+        pointerId,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 1,
+        ...toEventCoordinates(point),
+      });
+    });
+    const finalPoint = restPoints[restPoints.length - 1] ?? startPoint;
+    fireEvent.pointerUp(overlay, {
+      pointerId,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 0,
+      ...toEventCoordinates(finalPoint),
+    });
+
+    await waitFor(() => expect(finishButton).not.toBeDisabled());
+
+    await user.click(finishButton);
+
+    await waitFor(() => expect(onRoomsChange).toHaveBeenCalledTimes(1));
+    const call = onRoomsChange.mock.calls[0];
+    expect(call).toBeDefined();
+    const roomsArg = call?.[0];
+    expect(Array.isArray(roomsArg)).toBe(true);
+    const rooms = roomsArg as Array<{ polygon: Array<{ x: number; y: number }> }>;
+    expect(rooms).toHaveLength(1);
+    const room = rooms[0];
+    expect(room).toBeDefined();
+    expect(room.polygon.length).toBeGreaterThan(0);
+
+    const addRoomButton = await screen.findByRole('button', { name: /add room/i });
+    expect(addRoomButton).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /finish room/i })).not.toBeInTheDocument();
+    });
   });
 });
