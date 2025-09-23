@@ -233,6 +233,70 @@ describe('traceLiveWire', () => {
     );
     expect(blockedCrossings.length).toBe(0);
   });
+
+  it('keeps the live wire constrained to a low-cost rectangular corridor', () => {
+    const width = 32;
+    const height = 24;
+    const corridor = {
+      minX: 6,
+      maxX: width - 7,
+      minY: 5,
+      maxY: height - 6,
+    };
+
+    const backgroundValue = 32;
+    const wallValue = 240;
+    const corridorValue = 16;
+    const image = new Uint8Array(width * height);
+    image.fill(backgroundValue);
+
+    for (let y = corridor.minY - 1; y <= corridor.maxY + 1; y += 1) {
+      for (let x = corridor.minX - 1; x <= corridor.maxX + 1; x += 1) {
+        const index = y * width + x;
+        if (x >= corridor.minX && x <= corridor.maxX && y >= corridor.minY && y <= corridor.maxY) {
+          image[index] = corridorValue;
+        } else {
+          image[index] = wallValue;
+        }
+      }
+    }
+
+    const pyramid = buildCostPyramid(image, width, height);
+
+    const start = {
+      x: corridor.minX / (width - 1),
+      y: corridor.minY / (height - 1),
+    };
+    const end = {
+      x: corridor.maxX / (width - 1),
+      y: corridor.maxY / (height - 1),
+    };
+
+    const path = traceLiveWire(pyramid, start, end);
+    const pixels = toPixelPolygon(path, width, height);
+
+    expect(pixels.length).toBeGreaterThan(2);
+
+    const requestedStart = toPixelPoint(start, width, height);
+    const requestedEnd = toPixelPoint(end, width, height);
+    const startDeltaX = Math.abs(pixels[0].x - requestedStart.x);
+    const startDeltaY = Math.abs(pixels[0].y - requestedStart.y);
+    const endDeltaX = Math.abs(pixels[pixels.length - 1].x - requestedEnd.x);
+    const endDeltaY = Math.abs(pixels[pixels.length - 1].y - requestedEnd.y);
+
+    expect(startDeltaX).toBeLessThanOrEqual(1);
+    expect(startDeltaY).toBeLessThanOrEqual(1);
+    expect(endDeltaX).toBeLessThanOrEqual(1);
+    expect(endDeltaY).toBeLessThanOrEqual(1);
+
+    for (let i = 1; i < pixels.length - 1; i += 1) {
+      const point = pixels[i];
+      expect(point.x).toBeGreaterThanOrEqual(corridor.minX);
+      expect(point.x).toBeLessThanOrEqual(corridor.maxX);
+      expect(point.y).toBeGreaterThanOrEqual(corridor.minY);
+      expect(point.y).toBeLessThanOrEqual(corridor.maxY);
+    }
+  });
 });
 
 describe('smartWand', () => {
