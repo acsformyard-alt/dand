@@ -180,7 +180,13 @@ export const defineRoomsStore: DefineRoomsStore = {
   applyBrush(point, radius, mode) {
     commitState((current) => {
       const baseMask = ensureMask(current.selection.mask);
-      const mutated = applyCircularBrushToMask(baseMask, point, radius, mode);
+      const mutated = applyCircularBrushToMask(
+        baseMask,
+        point,
+        radius,
+        mode,
+        current.selection.brushHardness ?? 1
+      );
       return {
         ...current,
         selection: {
