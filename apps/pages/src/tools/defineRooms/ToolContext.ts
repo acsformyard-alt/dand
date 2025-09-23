@@ -1,5 +1,12 @@
 import type { DefineRoomsStore, Point } from '../../state/defineRoomsStore';
-import type { SegmentationWorker } from '../../workers/seg';
+import type { RasterLayer, SegmentationWorker } from '../../workers/seg';
+
+export interface RasterContext {
+  layers: RasterLayer | RasterLayer[];
+  width: number;
+  height: number;
+  edgeEnergy?: Float32Array | null;
+}
 
 export interface PointerState {
   point: Point;
@@ -15,6 +22,7 @@ export interface PointerState {
 export interface ToolContext {
   store: DefineRoomsStore;
   segmentation: SegmentationWorker | null;
+  raster: RasterContext | null;
   snap(point: Point): Point;
   clamp(point: Point): Point;
 }
