@@ -10,12 +10,9 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import DefineRoomsEditor, {
-  type DefineRoomDraft,
-} from './DefineRoomsEditor';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
-type WizardStep = 0 | 1 | 2 | 3;
+type WizardStep = 0 | 1 | 2;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -40,10 +37,6 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Map Details',
     description: 'Name your map, assign it to a folder, and capture quick notes or tags.',
-  },
-  {
-    title: 'Define Rooms',
-    description: 'Outline rooms and hallways to control what your players can see.',
   },
   {
     title: 'Add Markers',
@@ -197,8 +190,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [rooms, setRooms] = useState<DefineRoomDraft[]>([]);
-
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -285,18 +276,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (step === 1) {
       return name.trim().length > 0;
     }
-    if (step === 2) {
-      return Boolean(previewUrl);
-    }
     return true;
-  }, [file, name, step, previewUrl]);
+  }, [file, name, step]);
 
   const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
 
   const handleFileSelected = useCallback((selected: File) => {
     setFile(selected);
     setMarkers([]);
-    setRooms([]);
     setExpandedMarkerId(null);
   }, []);
 
@@ -345,10 +332,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setExpandedMarkerId(newMarker.id);
   };
 
-  const handleRoomsChange = useCallback((nextRooms: DefineRoomDraft[]) => {
-    setRooms(nextRooms);
-  }, []);
-
   const handleContinue = () => {
     if (step < steps.length - 1) {
       setStep((current) => (current + 1) as WizardStep);
@@ -389,10 +372,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       if (tags.length > 0) {
         metadata.tags = tags;
       }
-      if (rooms.length > 0) {
-        metadata.roomMaskManifest = rooms.map((room) => room.maskManifest);
-      }
-
       const response = await apiClient.createMap({
         campaignId: campaign.id,
         name: name.trim(),
@@ -428,26 +407,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdMarkers.push(payload);
       }
 
-      const createdRegions: Region[] = [];
-      for (const [index, room] of rooms.entries()) {
-        const compiledNotes = [
-          room.notes.trim(),
-          room.tags.length > 0 ? `Tags: ${room.tags.join(', ')}` : '',
-          room.isVisible ? 'Visible to players at start.' : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-        const region = await apiClient.createRegion(map.id, {
-          name: room.name.trim() || `Room ${index + 1}`,
-          mask: room.mask,
-          maskManifest: room.maskManifest,
-          notes: compiledNotes || undefined,
-          revealOrder: index + 1,
-        });
-        createdRegions.push(region);
-      }
-
-      onComplete(map, createdMarkers, createdRegions);
+      onComplete(map, createdMarkers, []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -637,18 +597,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
-            <div className="flex flex-1 min-h-0">
-              <div className="flex h-full w-full min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
-                <DefineRoomsEditor
-                  imageUrl={previewUrl}
-                  imageDimensions={imageDimensions}
-                  rooms={rooms}
-                  onRoomsChange={handleRoomsChange}
-                />
-              </div>
-            </div>
-          )}
-          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
