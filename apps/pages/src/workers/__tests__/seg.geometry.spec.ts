@@ -35,6 +35,13 @@ interface MaskFixture {
   interior: { minX: number; maxX: number; minY: number; maxY: number };
 }
 
+interface CorridorFixture {
+  width: number;
+  height: number;
+  image: Uint8Array;
+  corridor: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
 const GRID_SIZE = 32;
 const WALL_COLUMN = 15;
 const GAP_TOP = 12;
@@ -157,6 +164,42 @@ const createMaskFixture = (): MaskFixture => {
   return { width, height, data, interior };
 };
 
+const createCorridorFixture = (): CorridorFixture => {
+  const width = 32;
+  const height = 24;
+  const corridor = {
+    minX: 6,
+    maxX: width - 7,
+    minY: 5,
+    maxY: height - 6,
+  };
+
+  const backgroundValueA = 0;
+  const backgroundValueB = 255;
+  const wallValue = 240;
+  const corridorValue = 16;
+  const image = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const parity = (x + y) % 2;
+      image[y * width + x] = parity === 0 ? backgroundValueA : backgroundValueB;
+    }
+  }
+
+  for (let y = corridor.minY - 1; y <= corridor.maxY + 1; y += 1) {
+    for (let x = corridor.minX - 1; x <= corridor.maxX + 1; x += 1) {
+      const index = y * width + x;
+      if (x >= corridor.minX && x <= corridor.maxX && y >= corridor.minY && y <= corridor.maxY) {
+        image[index] = corridorValue;
+      } else {
+        image[index] = wallValue;
+      }
+    }
+  }
+
+  return { width, height, image, corridor };
+};
+
 const toPixelPolygon = (polygon: PixelPoint[], width: number, height: number): PixelPoint[] =>
   polygon.map((point) => ({
     x: Math.round(point.x * (width - 1)),
@@ -167,6 +210,44 @@ const toPixelPoint = (point: PixelPoint, width: number, height: number): PixelPo
   x: Math.round(point.x * (width - 1)),
   y: Math.round(point.y * (height - 1)),
 });
+
+const filterPointsInsideCorridor = (
+  polygon: PixelPoint[],
+  corridor: CorridorFixture['corridor']
+): PixelPoint[] =>
+  polygon.filter(
+    (point) =>
+      point.x >= corridor.minX &&
+      point.x <= corridor.maxX &&
+      point.y >= corridor.minY &&
+      point.y <= corridor.maxY
+  );
+
+const samplePolyline = (points: PixelPoint[], sampleCount: number): PixelPoint[] => {
+  if (sampleCount <= 0) {
+    return [];
+  }
+  if (points.length === sampleCount) {
+    return [...points];
+  }
+  if (points.length === 0) {
+    throw new Error('Cannot sample an empty polyline');
+  }
+  const lastIndex = points.length - 1;
+  const result: PixelPoint[] = [];
+  for (let i = 0; i < sampleCount; i += 1) {
+    const t = sampleCount === 1 ? 0 : i / (sampleCount - 1);
+    const index = Math.round(t * lastIndex);
+    result.push(points[index]);
+  }
+  return result;
+};
+
+const computeVertexDeviation = (actual: PixelPoint[], expected: PixelPoint[]): number[] =>
+  actual.map((point, index) => {
+    const target = expected[index];
+    return Math.max(Math.abs(point.x - target.x), Math.abs(point.y - target.y));
+  });
 
 let grayscaleFixture: GrayscaleFixture;
 let colorFixture: ColorFixture;
@@ -235,32 +316,7 @@ describe('traceLiveWire', () => {
   });
 
   it('keeps the live wire constrained to a low-cost rectangular corridor', () => {
-    const width = 32;
-    const height = 24;
-    const corridor = {
-      minX: 6,
-      maxX: width - 7,
-      minY: 5,
-      maxY: height - 6,
-    };
-
-    const backgroundValue = 32;
-    const wallValue = 240;
-    const corridorValue = 16;
-    const image = new Uint8Array(width * height);
-    image.fill(backgroundValue);
-
-    for (let y = corridor.minY - 1; y <= corridor.maxY + 1; y += 1) {
-      for (let x = corridor.minX - 1; x <= corridor.maxX + 1; x += 1) {
-        const index = y * width + x;
-        if (x >= corridor.minX && x <= corridor.maxX && y >= corridor.minY && y <= corridor.maxY) {
-          image[index] = corridorValue;
-        } else {
-          image[index] = wallValue;
-        }
-      }
-    }
-
+    const { width, height, image, corridor } = createCorridorFixture();
     const pyramid = buildCostPyramid(image, width, height);
 
     const start = {
@@ -296,6 +352,93 @@ describe('traceLiveWire', () => {
       expect(point.y).toBeGreaterThanOrEqual(corridor.minY);
       expect(point.y).toBeLessThanOrEqual(corridor.maxY);
     }
+  });
+
+  it('follows the same corridor path when endpoints are sampled outside the walls', () => {
+    const { width, height, image, corridor } = createCorridorFixture();
+    const pyramid = buildCostPyramid(image, width, height);
+
+    const interiorStart = {
+      x: corridor.minX / (width - 1),
+      y: corridor.minY / (height - 1),
+    };
+    const interiorEnd = {
+      x: corridor.maxX / (width - 1),
+      y: corridor.maxY / (height - 1),
+    };
+
+    const interiorPath = toPixelPolygon(traceLiveWire(pyramid, interiorStart, interiorEnd), width, height);
+    const expected = filterPointsInsideCorridor(interiorPath, corridor);
+    expect(expected.length).toBeGreaterThan(0);
+
+    const offset = 5;
+    const exteriorStart = {
+      x: Math.max(0, corridor.minX - offset) / (width - 1),
+      y: Math.max(0, corridor.minY - offset) / (height - 1),
+    };
+    const exteriorEnd = {
+      x: Math.min(width - 1, corridor.maxX + offset) / (width - 1),
+      y: Math.min(height - 1, corridor.maxY + offset) / (height - 1),
+    };
+
+    const exteriorPath = toPixelPolygon(traceLiveWire(pyramid, exteriorStart, exteriorEnd), width, height);
+    const interiorSamples = filterPointsInsideCorridor(exteriorPath, corridor);
+    expect(interiorSamples.length).toBeGreaterThan(0);
+
+    const sampled = samplePolyline(interiorSamples, expected.length);
+    const deviations = computeVertexDeviation(sampled, expected);
+    for (const deviation of deviations) {
+      expect(deviation).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('increases deviation when diagonal movement is disabled', () => {
+    const { width, height, image, corridor } = createCorridorFixture();
+    const pyramid = buildCostPyramid(image, width, height);
+
+    const interiorStart = {
+      x: corridor.minX / (width - 1),
+      y: corridor.minY / (height - 1),
+    };
+    const interiorEnd = {
+      x: corridor.maxX / (width - 1),
+      y: corridor.maxY / (height - 1),
+    };
+
+    const interiorPath = toPixelPolygon(traceLiveWire(pyramid, interiorStart, interiorEnd), width, height);
+    const expected = filterPointsInsideCorridor(interiorPath, corridor);
+    expect(expected.length).toBeGreaterThan(0);
+
+    const offset = 5;
+    const exteriorStart = {
+      x: Math.max(0, corridor.minX - offset) / (width - 1),
+      y: Math.max(0, corridor.minY - offset) / (height - 1),
+    };
+    const exteriorEnd = {
+      x: Math.min(width - 1, corridor.maxX + offset) / (width - 1),
+      y: Math.min(height - 1, corridor.maxY + offset) / (height - 1),
+    };
+
+    const diagonalPath = toPixelPolygon(traceLiveWire(pyramid, exteriorStart, exteriorEnd), width, height);
+    const diagonalInterior = filterPointsInsideCorridor(diagonalPath, corridor);
+    expect(diagonalInterior.length).toBeGreaterThan(0);
+    const diagonalSampled = samplePolyline(diagonalInterior, expected.length);
+    const diagonalDeviation = computeVertexDeviation(diagonalSampled, expected);
+    const diagonalMax = Math.max(...diagonalDeviation);
+
+    const manhattanPath = toPixelPolygon(
+      traceLiveWire(pyramid, exteriorStart, exteriorEnd, { allowDiagonals: false }),
+      width,
+      height
+    );
+    const manhattanInterior = filterPointsInsideCorridor(manhattanPath, corridor);
+    expect(manhattanInterior.length).toBeGreaterThan(0);
+    const manhattanSampled = samplePolyline(manhattanInterior, expected.length);
+    const manhattanDeviation = computeVertexDeviation(manhattanSampled, expected);
+    const manhattanMax = Math.max(...manhattanDeviation);
+
+    expect(diagonalMax).toBeLessThanOrEqual(1);
+    expect(manhattanMax).toBeGreaterThan(diagonalMax);
   });
 });
 
