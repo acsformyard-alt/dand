@@ -307,4 +307,40 @@ describe('DefineRoomsEditor room authoring', () => {
       expect(screen.queryByRole('button', { name: /finish room/i })).not.toBeInTheDocument();
     });
   });
+
+  it('updates the active tool indicator and brush size slider across tool switches', async () => {
+    const { user } = await renderEditor();
+
+    await user.click(screen.getByRole('button', { name: /add room/i }));
+
+    const activeToolIndicator = await screen.findByText(/active tool:/i);
+    expect(activeToolIndicator).toHaveTextContent(/Active tool:\s*Smart Lasso/i);
+
+    await user.click(screen.getByRole('button', { name: /auto wand/i }));
+    await waitFor(() =>
+      expect(activeToolIndicator).toHaveTextContent(/Active tool:\s*Auto Wand/i)
+    );
+
+    await user.click(screen.getByRole('button', { name: /refine brush/i }));
+    await waitFor(() =>
+      expect(activeToolIndicator).toHaveTextContent(/Active tool:\s*Refine Brush/i)
+    );
+
+    const brushSizeSlider = (await screen.findByLabelText(/brush size/i)) as HTMLInputElement;
+    expect(Number(brushSizeSlider.value)).toBeCloseTo(0.08);
+
+    fireEvent.change(brushSizeSlider, { target: { value: '0.14' } });
+
+    await waitFor(() =>
+      expect(screen.getByText(/current radius:/i)).toHaveTextContent(/14% of the image width/i)
+    );
+
+    await user.click(screen.getByRole('button', { name: /smart lasso/i }));
+
+    await waitFor(() =>
+      expect(activeToolIndicator).toHaveTextContent(/Active tool:\s*Smart Lasso/i)
+    );
+    expect(Number((screen.getByLabelText(/brush size/i) as HTMLInputElement).value)).toBeCloseTo(0.14, 5);
+    expect(screen.getByText(/current radius:/i)).toHaveTextContent(/14% of the image width/i);
+  });
 });
