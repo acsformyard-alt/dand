@@ -18,7 +18,7 @@ interface DefineRoomsEditorProps {
 
 type Point = { x: number; y: number };
 
-type EditorTool = 'smartLasso' | 'autoWand' | 'refineBrush';
+type EditorTool = 'smartLasso' | 'lasso' | 'autoWand' | 'refineBrush';
 
 type BrushMode = 'add' | 'erase';
 
@@ -432,13 +432,22 @@ const computeViewportMetrics = (
   return { width, height, offsetX, offsetY };
 };
 
-const pointFromEvent = (event: PointerEvent, metrics: ViewportMetrics | null, container: HTMLDivElement | null): Point | null => {
+const pointFromEvent = (
+  event: PointerEvent,
+  metrics: ViewportMetrics | null,
+  container: HTMLDivElement | null,
+  zoomLevel: number
+): Point | null => {
   if (!metrics || !container) {
     return null;
   }
   const rect = container.getBoundingClientRect();
-  const x = (event.clientX - rect.left - metrics.offsetX) / metrics.width;
-  const y = (event.clientY - rect.top - metrics.offsetY) / metrics.height;
+  const scaledWidth = metrics.width * zoomLevel;
+  const scaledHeight = metrics.height * zoomLevel;
+  const offsetX = metrics.offsetX - (scaledWidth - metrics.width) / 2;
+  const offsetY = metrics.offsetY - (scaledHeight - metrics.height) / 2;
+  const x = (event.clientX - rect.left - offsetX) / scaledWidth;
+  const y = (event.clientY - rect.top - offsetY) / scaledHeight;
   return { x: clamp(x, 0, 1), y: clamp(y, 0, 1) };
 };
 
@@ -462,6 +471,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [metrics, setMetrics] = useState<ViewportMetrics | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [isPointerDown, setIsPointerDown] = useState(false);
   const brushModeRef = useRef<BrushMode | null>(null);
   const pointerToolRef = useRef<EditorTool | null>(null);
@@ -529,16 +539,23 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     }
   };
 
+  const handleZoomToggle = () => {
+    setZoomLevel((current) => {
+      const next = current >= 2 ? 1 : parseFloat((current + 0.25).toFixed(2));
+      return next;
+    });
+  };
+
   const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!metrics || authoringState.mode !== 'editing') {
       return;
     }
-    const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current);
+    const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current, zoomLevel);
     if (!point) {
       return;
     }
     pointerToolRef.current = authoringState.tool;
-    if (authoringState.tool === 'smartLasso') {
+    if (authoringState.tool === 'smartLasso' || authoringState.tool === 'lasso') {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       coordinator.smartLasso.begin(point);
@@ -560,11 +577,11 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     if (!metrics || !isPointerDown || authoringState.mode !== 'editing') {
       return;
     }
-    const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current);
+    const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current, zoomLevel);
     if (!point || !pointerToolRef.current) {
       return;
     }
-    if (pointerToolRef.current === 'smartLasso') {
+    if (pointerToolRef.current === 'smartLasso' || pointerToolRef.current === 'lasso') {
       coordinator.smartLasso.update(point);
     } else if (pointerToolRef.current === 'refineBrush' && brushModeRef.current) {
       coordinator.brush.apply(point, brushModeRef.current);
@@ -572,7 +589,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   };
 
   const endPointerInteraction = () => {
-    if (pointerToolRef.current === 'smartLasso') {
+    if (pointerToolRef.current === 'smartLasso' || pointerToolRef.current === 'lasso') {
       coordinator.smartLasso.complete();
     }
     setIsPointerDown(false);
@@ -609,6 +626,30 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   );
 
   const canFinish = authoringState.mode === 'editing' && authoringState.polygon.length >= 3;
+  const zoomDisplay = Math.round(zoomLevel * 100);
+  const toolLabel =
+    authoringState.tool === 'smartLasso'
+      ? 'Smart Lasso'
+      : authoringState.tool === 'autoWand'
+      ? 'Magic Wand'
+      : authoringState.tool === 'lasso'
+      ? 'Lasso'
+      : 'Refine Brush';
+
+  const toolButtonClasses = (active: boolean) =>
+    `flex h-12 w-12 items-center justify-center rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-teal-400/60 focus:ring-offset-0 ${
+      active
+        ? 'border-teal-400/70 bg-teal-500/20 text-teal-200 shadow-[0_0_14px_rgba(45,212,191,0.25)]'
+        : 'border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-600 hover:text-white'
+    }`;
+
+  const addRoomButtonClasses = `flex h-12 w-12 items-center justify-center rounded-xl text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-teal-400/60 focus:ring-offset-0 ${
+    authoringState.mode === 'editing'
+      ? canFinish
+        ? 'bg-emerald-500 hover:bg-emerald-400'
+        : 'bg-emerald-500/50 cursor-not-allowed opacity-60'
+      : 'bg-blue-500 hover:bg-blue-400'
+  }`;
 
   if (!imageUrl) {
     return (
@@ -620,198 +661,194 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/70 bg-slate-950/70 px-5 py-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Define Rooms</p>
-          <p className="mt-1 text-sm text-slate-300">
-            Trace a room with Smart Lasso, click with Auto Wand, then refine edges with the brush. Right click adds area, left
-            click erases.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {authoringState.mode === 'editing' ? (
-            <>
-              <button
-                type="button"
-                onClick={handleCancelEditing}
-                className="rounded-full border border-slate-700 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-slate-500 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleFinishRoom}
-                disabled={!canFinish}
-                className={`rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
-                  canFinish
-                    ? 'border border-teal-400/70 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
-                    : 'border border-slate-700 bg-slate-800/60 text-slate-500'
-                }`}
-              >
-                Finish Room
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={handleAddRoom}
-              className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
-            >
-              Add Room
-            </button>
-          )}
-        </div>
-      </div>
       <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <div className="relative flex min-h-[420px] flex-col rounded-3xl border border-slate-800/70 bg-slate-950/70">
-          <div ref={containerRef} className="relative flex flex-1 items-center justify-center overflow-hidden rounded-3xl">
-            <img
-              ref={imageRef}
-              src={imageUrl}
-              alt="Map editor"
-              onLoad={() => setMetrics(computeViewportMetrics(containerRef.current, imageRef.current))}
-              className="pointer-events-none h-full w-full select-none object-contain"
-            />
-            {metrics && (
-              <svg
-                role="presentation"
-                className="absolute inset-0"
-                style={{
-                  left: metrics.offsetX,
-                  top: metrics.offsetY,
-                  width: metrics.width,
-                  height: metrics.height,
-                }}
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerCancel={onPointerUp}
-                onPointerLeave={onPointerLeave}
-                onContextMenu={handleContextMenu}
-              >
-                <rect x={0} y={0} width={metrics.width} height={metrics.height} fill="transparent" />
-                {previewPath && (
-                  <polygon points={previewPath} fill="rgba(45,212,191,0.3)" stroke="rgba(45,212,191,0.6)" strokeWidth={2} />
+        <div className="relative flex min-h-[420px] flex-col overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-950/70">
+          <div className="flex min-h-0 flex-1">
+            <div className="flex w-20 flex-col items-center gap-4 border-r border-slate-800/70 bg-slate-950/80 px-3 py-5">
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={authoringState.mode === 'editing' ? handleFinishRoom : handleAddRoom}
+                  disabled={authoringState.mode === 'editing' && !canFinish}
+                  aria-label={authoringState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
+                  title={authoringState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
+                  className={addRoomButtonClasses}
+                >
+                  {authoringState.mode === 'editing' ? (
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M5 13.5L10 18l9-12" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+                    </svg>
+                  )}
+                </button>
+                {authoringState.mode === 'editing' && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEditing}
+                    aria-label="Cancel Room Editing"
+                    title="Cancel Room Editing"
+                    className="flex h-12 w-12 items-center justify-center rounded-xl border border-rose-500/70 bg-rose-500/15 text-rose-200 transition hover:bg-rose-500/25 focus:outline-none focus:ring-2 focus:ring-rose-400/50 focus:ring-offset-0"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                 )}
-                {polygonPath && (
-                  <polygon points={polygonPath} fill="rgba(59,130,246,0.2)" stroke="rgba(96,165,250,0.85)" strokeWidth={2} />
-                )}
-                {rooms.map((room) => {
-                  if (!room.isVisible || room.id === authoringState.activeRoomId) {
-                    return null;
-                  }
-                  const overlay = polygonToAttribute(room.polygon, metrics);
-                  if (!overlay) return null;
-                  return (
-                    <polygon
-                      key={room.id}
-                      points={overlay}
-                      fill="rgba(148,163,184,0.14)"
-                      stroke="rgba(148,163,184,0.5)"
-                      strokeWidth={1.5}
-                    />
-                  );
-                })}
-              </svg>
-            )}
-          </div>
-          <div className="border-t border-slate-800/70 px-5 py-3 text-xs text-slate-400">
-            {authoringState.mode === 'editing' ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  Active tool:
-                  <span className="ml-2 rounded-full border border-slate-700 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-200">
-                    {authoringState.tool === 'smartLasso'
-                      ? 'Smart Lasso'
-                      : authoringState.tool === 'autoWand'
-                      ? 'Auto Wand'
-                      : 'Refine Brush'}
-                  </span>
-                </span>
-                <span className="text-slate-500">
-                  {authoringState.busyMessage || 'Right click to add, left click to erase when using the brush.'}
-                </span>
               </div>
-            ) : (
-              <span>Select an existing room or start a new one to begin outlining areas.</span>
-            )}
+              <div className="h-px w-full border-b border-slate-800/70" />
+              <div className="flex flex-col items-center gap-3" role="group" aria-label="Editor tools">
+                <button
+                  type="button"
+                  onClick={() => coordinator.store.setTool('refineBrush')}
+                  aria-label="Refine Brush"
+                  aria-pressed={authoringState.tool === 'refineBrush'}
+                  className={toolButtonClasses(authoringState.tool === 'refineBrush')}
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M15.5 3.5L20.5 8.5L11 18c-1.1 1.1-2.6 1.5-3.8.8l-1.4-.7" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 18c-.2 1.5-1.2 3-3 3 0-2.6 1.4-3.4 3-3z" fill="currentColor" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => coordinator.store.setTool('lasso')}
+                  aria-label="Lasso"
+                  aria-pressed={authoringState.tool === 'lasso'}
+                  className={toolButtonClasses(authoringState.tool === 'lasso')}
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 5c3.6 0 6.5 2.2 6.5 5s-2.9 5-6.5 5-6.5-2.2-6.5-5 2.9-5 6.5-5z" stroke="currentColor" strokeWidth={1.6} />
+                    <path d="M12 15v3.5a2 2 0 01-2 2H8.5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => coordinator.store.setTool('smartLasso')}
+                  aria-label="Smart Lasso"
+                  aria-pressed={authoringState.tool === 'smartLasso'}
+                  className={toolButtonClasses(authoringState.tool === 'smartLasso')}
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 5.5c3.3 0 6 2 6 4.5s-2.7 4.5-6 4.5-6-2-6-4.5 2.7-4.5 6-4.5z" stroke="currentColor" strokeWidth={1.6} />
+                    <path d="M6 14c0 1.4 1 2.3 2.4 2.3H9" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+                    <path d="M6.5 3.7l.7 1.6 1.7.3-1.3 1 .3 1.7-1.4-.8-1.4.8.3-1.7-1.3-1 1.7-.3z" fill="currentColor" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => coordinator.store.setTool('autoWand')}
+                  aria-label="Magic Wand"
+                  aria-pressed={authoringState.tool === 'autoWand'}
+                  className={toolButtonClasses(authoringState.tool === 'autoWand')}
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 18l6-6" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M15 3l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z" fill="currentColor" />
+                    <path d="M12 6l3 3" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="h-px w-full border-b border-slate-800/70" />
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleZoomToggle}
+                  aria-label={zoomLevel >= 2 ? 'Reset Zoom' : 'Zoom In'}
+                  title={zoomLevel >= 2 ? 'Reset Zoom' : 'Zoom In'}
+                  className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/70 text-slate-200 transition hover:border-slate-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-teal-400/60 focus:ring-offset-0"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx={11} cy={11} r={5} stroke="currentColor" strokeWidth={1.6} />
+                    <path d="M15.5 15.5L19 19" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+                    <path d="M11 8v6M8 11h6" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+                  </svg>
+                </button>
+                <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">{zoomDisplay}%</span>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div ref={containerRef} className="relative flex flex-1 items-center justify-center overflow-hidden">
+                <img
+                  ref={imageRef}
+                  src={imageUrl}
+                  alt="Map editor"
+                  onLoad={() => setMetrics(computeViewportMetrics(containerRef.current, imageRef.current))}
+                  className="pointer-events-none h-full w-full select-none object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
+                />
+                {metrics && (
+                  <svg
+                    role="presentation"
+                    className="absolute inset-0 transition-transform duration-200"
+                    style={{
+                      left: metrics.offsetX,
+                      top: metrics.offsetY,
+                      width: metrics.width,
+                      height: metrics.height,
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'center center',
+                    }}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerUp}
+                    onPointerLeave={onPointerLeave}
+                    onContextMenu={handleContextMenu}
+                  >
+                    <rect x={0} y={0} width={metrics.width} height={metrics.height} fill="transparent" />
+                    {previewPath && (
+                      <polygon points={previewPath} fill="rgba(45,212,191,0.3)" stroke="rgba(45,212,191,0.6)" strokeWidth={2} />
+                    )}
+                    {polygonPath && (
+                      <polygon points={polygonPath} fill="rgba(59,130,246,0.2)" stroke="rgba(96,165,250,0.85)" strokeWidth={2} />
+                    )}
+                    {rooms.map((room) => {
+                      if (!room.isVisible || room.id === authoringState.activeRoomId) {
+                        return null;
+                      }
+                      const overlay = polygonToAttribute(room.polygon, metrics);
+                      if (!overlay) return null;
+                      return (
+                        <polygon
+                          key={room.id}
+                          points={overlay}
+                          fill="rgba(148,163,184,0.14)"
+                          stroke="rgba(148,163,184,0.5)"
+                          strokeWidth={1.5}
+                        />
+                      );
+                    })}
+                  </svg>
+                )}
+              </div>
+              <div className="border-t border-slate-800/70 py-3 pr-5 pl-5 text-xs text-slate-400">
+                {authoringState.mode === 'editing' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span>
+                      Active tool:
+                      <span className="ml-2 rounded-full border border-slate-700 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-200">
+                        {toolLabel}
+                      </span>
+                    </span>
+                    <div className="flex flex-wrap items-center gap-4 text-slate-500">
+                      <span>{authoringState.busyMessage || 'Right click to add, left click to erase when using the brush.'}</span>
+                      <span>Zoom {zoomDisplay}%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span>Select an existing room or start a new one to begin outlining areas.</span>
+                    <span className="text-slate-500">Zoom {zoomDisplay}%</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="rounded-3xl border border-slate-800/70 bg-slate-950/70 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Tools</p>
-                <h3 className="text-lg font-semibold text-white">Vector Authoring</h3>
-              </div>
-              <div className="text-right text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                Snap {Math.round(authoringState.snapStrength * 100)}%
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => coordinator.store.setTool('smartLasso')}
-                className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                  authoringState.tool === 'smartLasso'
-                    ? 'bg-indigo-500/80 text-white shadow'
-                    : 'border border-slate-800 bg-slate-900/70 text-slate-200 hover:border-slate-600 hover:text-white'
-                }`}
-              >
-                Smart Lasso
-              </button>
-              <button
-                type="button"
-                onClick={() => coordinator.store.setTool('autoWand')}
-                className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                  authoringState.tool === 'autoWand'
-                    ? 'bg-indigo-500/80 text-white shadow'
-                    : 'border border-slate-800 bg-slate-900/70 text-slate-200 hover:border-slate-600 hover:text-white'
-                }`}
-              >
-                Auto Wand
-              </button>
-              <button
-                type="button"
-                onClick={() => coordinator.store.setTool('refineBrush')}
-                className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                  authoringState.tool === 'refineBrush'
-                    ? 'bg-indigo-500/80 text-white shadow'
-                    : 'border border-slate-800 bg-slate-900/70 text-slate-200 hover:border-slate-600 hover:text-white'
-                }`}
-              >
-                Refine Brush
-              </button>
-            </div>
-            <div className="mt-5 space-y-4 text-sm text-slate-200">
-              <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.35em] text-slate-500">Brush Size</span>
-                <input
-                  type="range"
-                  min={0.02}
-                  max={0.3}
-                  step={0.01}
-                  value={authoringState.brushSize}
-                  onChange={(event) => coordinator.store.setBrushSize(parseFloat(event.currentTarget.value))}
-                />
-                <span className="text-xs text-slate-500">Current radius: {(authoringState.brushSize * 100).toFixed(0)}% of the image width.</span>
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.35em] text-slate-500">Snap to Wall Strength</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={authoringState.snapStrength}
-                  onChange={(event) => coordinator.store.setSnapStrength(parseFloat(event.currentTarget.value))}
-                />
-                <span className="text-xs text-slate-500">
-                  Higher values pull points toward nearby orthogonal edges detected in the segmentation pyramid.
-                </span>
-              </label>
-            </div>
-          </div>
           <div className="rounded-3xl border border-slate-800/70 bg-slate-950/70 p-5">
             <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Room Metadata</p>
             {authoringState.mode === 'editing' ? (
