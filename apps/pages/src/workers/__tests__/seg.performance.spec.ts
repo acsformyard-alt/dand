@@ -93,36 +93,71 @@ const createMaskFixture = (width = 128, height = 128): Uint8Fixture & {
   exteriorIndex: number;
 } => {
   const data = new Uint8Array(width * height);
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radiusX = width * 0.28;
-  const radiusY = height * 0.32;
+  const circles: Array<{ cx: number; cy: number; radius: number }> = [];
+  const baseRadius = Math.min(width, height) * 0.08;
 
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const dx = (x - centerX) / radiusX;
-      const dy = (y - centerY) / radiusY;
-      const inside = dx * dx + dy * dy <= 1;
-      if (inside) {
-        data[y * width + x] = 1;
+  const paintCircle = (cx: number, cy: number, radius: number) => {
+    const xMin = Math.max(0, Math.floor(cx - radius - 1));
+    const xMax = Math.min(width - 1, Math.ceil(cx + radius + 1));
+    const yMin = Math.max(0, Math.floor(cy - radius - 1));
+    const yMax = Math.min(height - 1, Math.ceil(cy + radius + 1));
+    const radiusSquared = radius * radius;
+
+    for (let y = yMin; y <= yMax; y += 1) {
+      const dy = y - cy;
+      for (let x = xMin; x <= xMax; x += 1) {
+        const dx = x - cx;
+        if (dx * dx + dy * dy <= radiusSquared) {
+          data[y * width + x] = 1;
+        }
       }
     }
+  };
+
+  for (let i = 0; i < 8; i += 1) {
+    const t = i / 7;
+    const sinOffset = Math.sin(t * Math.PI);
+    const cosOffset = Math.cos(t * Math.PI * 0.75);
+    circles.push({
+      cx: width * (0.28 + t * 0.44 + sinOffset * 0.05),
+      cy: height * (0.32 + t * 0.28 + cosOffset * 0.04),
+      radius: baseRadius * (0.85 + 0.25 * sinOffset),
+    });
   }
 
-  const armHeight = Math.floor(height * 0.12);
-  const armYMin = Math.floor(centerY - armHeight / 2);
-  const armYMax = Math.floor(centerY + armHeight / 2);
-  const armXMin = Math.floor(centerX);
-  const armXMax = Math.min(width - 2, armXMin + Math.floor(width * 0.18));
-  for (let y = armYMin; y <= armYMax; y += 1) {
-    for (let x = armXMin; x <= armXMax; x += 1) {
-      data[y * width + x] = 1;
+  circles.push(
+    { cx: width * 0.45, cy: height * 0.58, radius: baseRadius * 1.05 },
+    { cx: width * 0.58, cy: height * 0.52, radius: baseRadius * 0.95 },
+    { cx: width * 0.66, cy: height * 0.46, radius: baseRadius * 0.8 },
+    { cx: width * 0.52, cy: height * 0.42, radius: baseRadius * 0.7 }
+  );
+
+  for (const circle of circles) {
+    paintCircle(circle.cx, circle.cy, circle.radius);
+  }
+
+  const interiorX = Math.floor(width * 0.5);
+  const interiorY = Math.floor(height * 0.52);
+  const interiorIndex = interiorY * width + interiorX;
+
+  if (data[interiorIndex] === 0) {
+    paintCircle(interiorX, interiorY, baseRadius * 0.9);
+  }
+
+  const preferredExterior = [
+    { x: Math.floor(width * 0.1), y: Math.floor(height * 0.1) },
+    { x: Math.floor(width * 0.85), y: Math.floor(height * 0.15) },
+    { x: Math.floor(width * 0.12), y: Math.floor(height * 0.85) },
+  ];
+
+  let exteriorIndex = preferredExterior[0].y * width + preferredExterior[0].x;
+  for (const candidate of preferredExterior) {
+    const index = candidate.y * width + candidate.x;
+    if (data[index] === 0) {
+      exteriorIndex = index;
+      break;
     }
   }
-
-  const interiorIndex = Math.floor(centerY) * width + Math.floor(centerX);
-  const exteriorY = Math.max(0, Math.floor(centerY - radiusY) - 4);
-  const exteriorIndex = exteriorY * width + Math.floor(centerX);
 
   return { width, height, data, interiorIndex, exteriorIndex };
 };
@@ -207,14 +242,44 @@ describe('segmentation performance characteristics', () => {
 
   it('computes a signed distance field for a complex mask efficiently', () => {
     const fixture = createMaskFixture();
+    const runs = 8;
+    const durations: number[] = [];
+    let warmupDuration = 0;
+    let field: ReturnType<typeof computeSignedDistanceField> | null = null;
 
-    const start = performance.now();
-    const field = computeSignedDistanceField(fixture.data, fixture.width, fixture.height);
-    const duration = performance.now() - start;
+    for (let run = 0; run < runs; run += 1) {
+      const start = performance.now();
+      const result = computeSignedDistanceField(fixture.data, fixture.width, fixture.height);
+      const duration = performance.now() - start;
+
+      if (run === 0) {
+        warmupDuration = duration;
+      } else {
+        durations.push(duration);
+      }
+
+      field = result;
+    }
+
+    if (field === null) {
+      throw new Error('Failed to compute signed distance field during benchmark');
+    }
+
+    const average = durations.reduce((sum, value) => sum + value, 0) / durations.length;
+    const thresholdMs = 25;
+
+    if (average >= thresholdMs) {
+      const formattedDurations = durations.map((value) => value.toFixed(3)).join(', ');
+      console.warn(
+        `computeSignedDistanceField average ${average.toFixed(3)}ms exceeded latency budget of ${thresholdMs}ms after warm-up ${warmupDuration.toFixed(
+          3
+        )}ms (runs: ${formattedDurations})`
+      );
+    }
 
     expect(field.values.length).toBe(fixture.width * fixture.height);
     expect(field.values[fixture.interiorIndex]).toBeLessThan(0);
     expect(field.values[fixture.exteriorIndex]).toBeGreaterThan(0);
-    expect(duration).toBeLessThan(60);
+    expect(average).toBeLessThan(thresholdMs);
   });
 });
