@@ -1,3 +1,5 @@
+import type { RoomMask } from './utils/roomMask';
+
 export interface User {
   id: string;
   email: string;
@@ -29,11 +31,19 @@ export interface MapRecord {
   metadata?: Record<string, unknown> | null;
 }
 
+
+export interface RoomMaskManifestEntry {
+  roomId: string;
+  key: string;
+  dataUrl: string;
+}
+
 export interface Region {
   id: string;
   mapId: string;
   name: string;
-  polygon: Array<{ x: number; y: number }>;
+  mask: RoomMask;
+  maskManifest?: RoomMaskManifestEntry | null;
   notes?: string | null;
   revealOrder?: number | null;
 }

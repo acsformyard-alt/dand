@@ -5,9 +5,18 @@ import type {
   MapRecord,
   Marker,
   Region,
+  RoomMaskManifestEntry,
   SessionRecord,
   User,
 } from '../types';
+import {
+  createRoomMaskFromPolygon,
+  decodeRoomMaskFromDataUrl,
+  encodeRoomMaskToDataUrl,
+  emptyRoomMask,
+  roomMaskToVector,
+  type RoomMask,
+} from '../utils/roomMask';
 
 interface SignupPayload {
   email: string;
@@ -37,7 +46,8 @@ interface MapPayload {
 
 interface RegionPayload {
   name: string;
-  polygon: Array<{ x: number; y: number }>;
+  mask: RoomMask;
+  maskManifest?: RoomMaskManifestEntry | null;
   notes?: string;
   revealOrder?: number;
 }
@@ -57,6 +67,99 @@ interface SessionPayload {
   mapId: string;
   name: string;
 }
+
+const polygonPointsFromRaw = (rawPolygon: unknown) => {
+  if (!Array.isArray(rawPolygon)) {
+    return [] as Array<{ x: number; y: number }>;
+  }
+  const points: Array<{ x: number; y: number }> = [];
+  for (const candidate of rawPolygon) {
+    if (candidate && typeof candidate === 'object') {
+      const maybeArray = candidate as unknown as Array<number>;
+      const x = Number((candidate as { x?: number }).x ?? maybeArray?.[0]);
+      const y = Number((candidate as { y?: number }).y ?? maybeArray?.[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        points.push({ x, y });
+      }
+    }
+  }
+  return points;
+};
+
+const ensureManifest = (
+  roomId: string,
+  mask: RoomMask,
+  manifest?: RoomMaskManifestEntry | null,
+): RoomMaskManifestEntry =>
+  manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
+
+const normalizeRegion = (raw: any): Region => {
+  const polygon = polygonPointsFromRaw(raw?.polygon);
+  let mask: RoomMask | null = null;
+  const rawMask = raw?.mask;
+  if (rawMask && typeof rawMask === 'object') {
+    if (typeof rawMask.dataUrl === 'string') {
+      try {
+        mask = decodeRoomMaskFromDataUrl(rawMask.dataUrl);
+        if (rawMask.bounds) {
+          mask = {
+            ...mask,
+            bounds: {
+              minX: Number(rawMask.bounds.minX) || mask.bounds.minX,
+              minY: Number(rawMask.bounds.minY) || mask.bounds.minY,
+              maxX: Number(rawMask.bounds.maxX) || mask.bounds.maxX,
+              maxY: Number(rawMask.bounds.maxY) || mask.bounds.maxY,
+            },
+          };
+        }
+      } catch (_error) {
+        mask = null;
+      }
+    }
+  }
+  if (!mask && polygon.length) {
+    mask = createRoomMaskFromPolygon(polygon, { resolution: 256 });
+  }
+  if (!mask) {
+    mask = emptyRoomMask();
+  }
+  const manifest = ensureManifest(String(raw?.id ?? ''), mask, raw?.maskManifest);
+  return {
+    id: String(raw?.id ?? ''),
+    mapId: String(raw?.mapId ?? ''),
+    name: typeof raw?.name === 'string' ? raw.name : 'Room',
+    mask,
+    maskManifest: manifest,
+    notes: typeof raw?.notes === 'string' ? raw.notes : raw?.notes ?? null,
+    revealOrder: raw?.revealOrder ?? null,
+  };
+};
+
+const serializeRegionPayload = (payload: Partial<RegionPayload>) => {
+  const body: Record<string, unknown> = {};
+  if (payload.name !== undefined) {
+    body.name = payload.name;
+  }
+  if (payload.notes !== undefined) {
+    body.notes = payload.notes;
+  }
+  if (payload.revealOrder !== undefined) {
+    body.revealOrder = payload.revealOrder;
+  }
+  if (payload.mask) {
+    body.mask = {
+      dataUrl: encodeRoomMaskToDataUrl(payload.mask),
+      width: payload.mask.width,
+      height: payload.mask.height,
+      bounds: payload.mask.bounds,
+    };
+    body.polygon = roomMaskToVector(payload.mask);
+  }
+  if (payload.maskManifest !== undefined) {
+    body.maskManifest = payload.maskManifest;
+  }
+  return body;
+};
 
 export class ApiClient {
   private baseUrl: string;
@@ -168,22 +271,27 @@ export class ApiClient {
   }
 
   async getRegions(mapId: string): Promise<Region[]> {
-    const { regions } = await this.request<{ regions: Region[] }>(`/api/maps/${mapId}/regions`);
-    return regions;
+    const { regions } = await this.request<{ regions: unknown[] }>(`/api/maps/${mapId}/regions`);
+    if (!Array.isArray(regions)) {
+      return [];
+    }
+    return regions.map((region) => normalizeRegion(region));
   }
 
   async createRegion(mapId: string, payload: RegionPayload): Promise<Region> {
-    const { region } = await this.request<{ region: Region }>(`/api/maps/${mapId}/regions`, {
+    const body = serializeRegionPayload(payload);
+    const { region } = await this.request<{ region: unknown }>(`/api/maps/${mapId}/regions`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
-    return region;
+    return normalizeRegion(region);
   }
 
   async updateRegion(regionId: string, payload: Partial<RegionPayload>) {
+    const body = serializeRegionPayload(payload);
     await this.request(`/api/regions/${regionId}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
   }
 

@@ -1,9 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { RoomMaskManifestEntry } from '../types';
+import type { Point } from '../types/geometry';
+import {
+  applyCircularBrushToMask,
+  cloneRoomMask,
+  createRoomMaskFromPolygon,
+  encodeRoomMaskToDataUrl,
+  emptyRoomMask,
+  roomMaskToPolygon,
+  type RoomMask,
+} from '../utils/roomMask';
+import { createEmptySelectionState, type SelectionState } from '../state/selection';
 
 export interface DefineRoomDraft {
   id: string;
   name: string;
-  polygon: Array<{ x: number; y: number }>;
+  mask: RoomMask;
+  maskManifest: RoomMaskManifestEntry;
   notes: string;
   tags: string[];
   isVisible: boolean;
@@ -16,8 +29,6 @@ interface DefineRoomsEditorProps {
   onRoomsChange: (nextRooms: DefineRoomDraft[]) => void;
 }
 
-type Point = { x: number; y: number };
-
 type EditorTool = 'smartLasso' | 'lasso' | 'autoWand' | 'refineBrush';
 
 type BrushMode = 'add' | 'erase';
@@ -25,12 +36,9 @@ type BrushMode = 'add' | 'erase';
 interface RoomAuthoringState {
   mode: 'idle' | 'editing';
   activeRoomId: string | null;
-  polygon: Point[];
-  previewPolygon: Point[] | null;
-  samples: Point[];
+  selection: SelectionState;
+  previewMask: RoomMask | null;
   tool: EditorTool;
-  brushSize: number;
-  snapStrength: number;
   name: string;
   notes: string;
   tags: string[];
@@ -49,8 +57,6 @@ const createDraftId = () => {
   }
   return `room-${Math.random().toString(36).slice(2, 10)}`;
 };
-
-const distance = (a: Point, b: Point) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
 const dedupePoints = (points: Point[]) => {
   const seen = new Set<string>();
@@ -157,12 +163,9 @@ class SegmentationService {
 const buildDefaultState = (): RoomAuthoringState => ({
   mode: 'idle',
   activeRoomId: null,
-  polygon: [],
-  previewPolygon: null,
-  samples: [],
+  selection: { ...createEmptySelectionState(), tool: 'smartLasso' },
+  previewMask: null,
   tool: 'smartLasso',
-  brushSize: 0.08,
-  snapStrength: 0.65,
   name: '',
   notes: '',
   tags: [],
@@ -196,15 +199,26 @@ class RoomAuthoringStore {
   }
 
   setTool(tool: EditorTool) {
-    this.setState((current) => ({ ...current, tool }));
+    this.setState((current) => ({
+      ...current,
+      tool,
+      selection: { ...current.selection, tool },
+    }));
   }
 
   setBrushSize(size: number) {
-    this.setState((current) => ({ ...current, brushSize: clamp(size, 0.02, 0.5) }));
+    const radius = clamp(size, 0.02, 0.5);
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, brushRadius: radius },
+    }));
   }
 
   setSnapStrength(value: number) {
-    this.setState((current) => ({ ...current, snapStrength: clamp(value, 0, 1) }));
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, snapStrength: clamp(value, 0, 1) },
+    }));
   }
 
   setName(name: string) {
@@ -228,27 +242,19 @@ class RoomAuthoringStore {
   }
 
   previewPolygon(polygon: Point[] | null) {
-    this.setState((current) => ({ ...current, previewPolygon: polygon }));
+    const mask = polygon && polygon.length >= 3 ? createRoomMaskFromPolygon(polygon) : null;
+    this.setState((current) => ({ ...current, previewMask: mask }));
   }
 
   commitPolygon(polygon: Point[]) {
-    const samples = polygon.length ? polygon.slice() : [];
     this.setState((current) => ({
       ...current,
-      polygon,
-      samples,
-      previewPolygon: null,
-      isDirty: true,
-    }));
-  }
-
-  updateSamples(samples: Point[]) {
-    const polygon = samples.length ? computeHull(samples) : [];
-    this.setState((current) => ({
-      ...current,
-      samples,
-      polygon,
-      previewPolygon: null,
+      selection: {
+        ...current.selection,
+        mask: polygon.length >= 3 ? createRoomMaskFromPolygon(polygon) : emptyRoomMask(),
+        lastUpdated: Date.now(),
+      },
+      previewMask: null,
       isDirty: true,
     }));
   }
@@ -271,12 +277,13 @@ class RoomAuthoringStore {
     this.setState(() => ({
       mode: 'editing',
       activeRoomId: room.id,
-      polygon: room.polygon.slice(),
-      previewPolygon: null,
-      samples: room.polygon.slice(),
+      selection: {
+        ...createEmptySelectionState(),
+        tool: 'smartLasso',
+        mask: cloneRoomMask(room.mask),
+      },
+      previewMask: null,
       tool: 'smartLasso',
-      brushSize: 0.08,
-      snapStrength: 0.65,
       name: room.name,
       notes: room.notes,
       tags: room.tags,
@@ -288,17 +295,35 @@ class RoomAuthoringStore {
 
   finish(): DefineRoomDraft | null {
     const current = this.state;
-    if (!current.activeRoomId || current.polygon.length < 3) {
+    if (!current.activeRoomId || !current.selection.mask) {
       return null;
     }
     return {
       id: current.activeRoomId,
       name: current.name || 'Untitled Room',
-      polygon: current.polygon.map((point) => ({ x: point.x, y: point.y })),
+      mask: cloneRoomMask(current.selection.mask),
+      maskManifest: {
+        roomId: current.activeRoomId,
+        key: `room-masks/${current.activeRoomId}.png`,
+        dataUrl: encodeRoomMaskToDataUrl(current.selection.mask),
+      },
       notes: current.notes,
       tags: current.tags,
       isVisible: current.isVisible,
     };
+  }
+
+  applyBrushMask(point: Point, radius: number, mode: BrushMode) {
+    this.setState((current) => ({
+      ...current,
+      selection: {
+        ...current.selection,
+        mask: applyCircularBrushToMask(current.selection.mask ?? emptyRoomMask(), point, radius, mode),
+        lastUpdated: Date.now(),
+      },
+      previewMask: null,
+      isDirty: true,
+    }));
   }
 }
 
@@ -310,14 +335,14 @@ class SmartLassoModule {
   begin(point: Point) {
     this.stroke = [point];
     const state = this.store.getState();
-    const preview = this.segmentation.smoothStroke(this.stroke, state.snapStrength);
+    const preview = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
     this.store.previewPolygon(preview);
   }
 
   update(point: Point) {
     this.stroke.push(point);
     const state = this.store.getState();
-    const preview = this.segmentation.smoothStroke(this.stroke, state.snapStrength);
+    const preview = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
     this.store.previewPolygon(preview);
   }
 
@@ -328,7 +353,7 @@ class SmartLassoModule {
       return;
     }
     const state = this.store.getState();
-    const polygon = this.segmentation.smoothStroke(this.stroke, state.snapStrength);
+    const polygon = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
     this.store.commitPolygon(polygon);
     this.stroke = [];
   }
@@ -345,7 +370,7 @@ class AutoWandModule {
     const state = this.store.getState();
     this.store.setBusy('Analyzing region…');
     try {
-      const polygon = await this.segmentation.wandSelect(point, state.brushSize, state.snapStrength);
+      const polygon = await this.segmentation.wandSelect(point, state.selection.brushRadius, state.selection.snapStrength);
       this.store.commitPolygon(polygon);
     } finally {
       this.store.setBusy(null);
@@ -359,16 +384,9 @@ class BrushRefinementModule {
 
   apply(point: Point, mode: BrushMode) {
     const state = this.store.getState();
-    const snappedCenter = this.segmentation.snapPoint(point, state.snapStrength);
-    const radius = clamp(state.brushSize, 0.02, 0.4);
-    const samples = [...state.samples];
-    if (mode === 'add') {
-      const ring = generateCircularPolygon(snappedCenter, radius, 12);
-      this.store.updateSamples([...samples, snappedCenter, ...ring]);
-    } else {
-      const filtered = samples.filter((sample) => distance(sample, snappedCenter) > radius * 0.6);
-      this.store.updateSamples(filtered);
-    }
+    const snappedCenter = this.segmentation.snapPoint(point, state.selection.snapStrength);
+    const radius = clamp(state.selection.brushRadius, 0.02, 0.4);
+    this.store.applyBrushMask(snappedCenter, radius, mode);
   }
 }
 
@@ -619,13 +637,18 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     }
   };
 
-  const polygonPath = useMemo(() => polygonToAttribute(authoringState.polygon, metrics), [authoringState.polygon, metrics]);
-  const previewPath = useMemo(
-    () => polygonToAttribute(authoringState.previewPolygon ?? [], metrics),
-    [authoringState.previewPolygon, metrics]
+  const activePolygon = useMemo(
+    () => (authoringState.selection.mask ? roomMaskToPolygon(authoringState.selection.mask) : []),
+    [authoringState.selection.mask]
   );
+  const polygonPath = useMemo(() => polygonToAttribute(activePolygon, metrics), [activePolygon, metrics]);
+  const previewPolygonPoints = useMemo(
+    () => (authoringState.previewMask ? roomMaskToPolygon(authoringState.previewMask) : []),
+    [authoringState.previewMask]
+  );
+  const previewPath = useMemo(() => polygonToAttribute(previewPolygonPoints, metrics), [previewPolygonPoints, metrics]);
 
-  const canFinish = authoringState.mode === 'editing' && authoringState.polygon.length >= 3;
+  const canFinish = authoringState.mode === 'editing' && activePolygon.length >= 3;
   const zoomDisplay = Math.round(zoomLevel * 100);
   const toolLabel =
     authoringState.tool === 'smartLasso'
@@ -752,6 +775,25 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 </button>
               </div>
               <div className="h-px w-full border-b border-slate-800/70" />
+              <div className="w-full px-2 text-center">
+                <label className="flex flex-col items-center text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                  Brush Size
+                  <input
+                    type="range"
+                    min={0.02}
+                    max={0.4}
+                    step={0.01}
+                    value={authoringState.selection.brushRadius}
+                    onChange={(event) => coordinator.store.setBrushSize(Number(event.target.value))}
+                    className="mt-2 w-full"
+                    aria-label="Brush Size"
+                  />
+                </label>
+                <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                  Current radius: {Math.round(authoringState.selection.brushRadius * 100)}% of the image width
+                </p>
+              </div>
+              <div className="h-px w-full border-b border-slate-800/70" />
               <div className="flex flex-col items-center gap-2">
                 <button
                   type="button"
@@ -809,7 +851,8 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                       if (!room.isVisible || room.id === authoringState.activeRoomId) {
                         return null;
                       }
-                      const overlay = polygonToAttribute(room.polygon, metrics);
+                      const roomPolygon = roomMaskToPolygon(room.mask);
+                      const overlay = polygonToAttribute(roomPolygon, metrics);
                       if (!overlay) return null;
                       return (
                         <polygon
@@ -922,6 +965,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
               ) : (
                 rooms.map((room) => {
                   const isActive = authoringState.activeRoomId === room.id;
+                  const roomPolygon = roomMaskToPolygon(room.mask);
                   return (
                     <div
                       key={room.id}
@@ -932,7 +976,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{room.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{room.polygon.length} points · {room.tags.join(', ') || 'No tags'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{roomPolygon.length} points · {room.tags.join(', ') || 'No tags'}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button

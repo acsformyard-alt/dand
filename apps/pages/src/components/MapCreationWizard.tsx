@@ -389,6 +389,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       if (tags.length > 0) {
         metadata.tags = tags;
       }
+      if (rooms.length > 0) {
+        metadata.roomMaskManifest = rooms.map((room) => room.maskManifest);
+      }
 
       const response = await apiClient.createMap({
         campaignId: campaign.id,
@@ -436,7 +439,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           .join('\n');
         const region = await apiClient.createRegion(map.id, {
           name: room.name.trim() || `Room ${index + 1}`,
-          polygon: room.polygon,
+          mask: room.mask,
+          maskManifest: room.maskManifest,
           notes: compiledNotes || undefined,
           revealOrder: index + 1,
         });
