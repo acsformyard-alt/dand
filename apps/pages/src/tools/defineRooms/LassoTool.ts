@@ -37,6 +37,7 @@ const pointsToMask = (ctx: ToolContext, points: Point[]): RoomMask | null => {
   if (points.length < 3) {
     return null;
   }
+  const { selection } = ctx.store.getState();
   const baseBounds = computeBounds(points);
   const rangeX = baseBounds.maxX - baseBounds.minX;
   const rangeY = baseBounds.maxY - baseBounds.minY;
@@ -59,13 +60,25 @@ const pointsToMask = (ctx: ToolContext, points: Point[]): RoomMask | null => {
     closePath: true,
   });
   const filled = useSegmentation(ctx.segmentation, 'fillMaskInterior', boundary, width, height);
-  const featherRadius = Math.max(1, Math.round(Math.max(width, height) * 0.01));
+  const maskMaxDimension = Math.max(width, height);
+  const featherAmount = Math.min(Math.max(selection.selectionFeather ?? 0, 0), 0.25);
+  const featherRadius = Math.round(maskMaxDimension * featherAmount);
   const feathered = useSegmentation(ctx.segmentation, 'featherMask', filled, width, height, featherRadius);
+  const sourceMaxDimension = ctx.raster
+    ? Math.max(ctx.raster.width, ctx.raster.height, 1)
+    : Math.max(maskMaxDimension, 1);
+  const dilationRadius = selection.dilateBy5px
+    ? Math.max(0, Math.round((5 / sourceMaxDimension) * maskMaxDimension))
+    : 0;
+  const finalMask =
+    dilationRadius > 0
+      ? useSegmentation(ctx.segmentation, 'dilateMask', feathered, width, height, dilationRadius)
+      : feathered;
   return {
     width,
     height,
     bounds,
-    data: feathered,
+    data: finalMask,
   };
 };
 
