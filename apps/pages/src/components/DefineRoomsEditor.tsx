@@ -570,26 +570,30 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Feather radius: {(selection.selectionFeather * 100).toFixed(1)}% of mask size
             </p>
-            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge Width
-              <input
-                type="range"
-                min={0.005}
-                max={0.08}
-                step={0.005}
-                value={selection.edgeRefinementWidth}
-                onChange={(event) =>
-                  updateSelection((current) => ({
-                    ...current,
-                    edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
-                  }))
-                }
-                aria-label="Edge Width"
-              />
-            </label>
-            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
-            </p>
+            {activeToolId === 'smartLasso' && (
+              <>
+                <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Edge Width
+                  <input
+                    type="range"
+                    min={0.005}
+                    max={0.08}
+                    step={0.005}
+                    value={selection.edgeRefinementWidth}
+                    onChange={(event) =>
+                      updateSelection((current) => ({
+                        ...current,
+                        edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
+                      }))
+                    }
+                    aria-label="Edge Width"
+                  />
+                </label>
+                <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
+                </p>
+              </>
+            )}
             <div className="flex flex-col gap-2">
               <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
                 <span>Contiguous</span>
@@ -678,26 +682,30 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Feather radius: {(selection.selectionFeather * 100).toFixed(1)}% of mask size
             </p>
-            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge Width
-              <input
-                type="range"
-                min={0.005}
-                max={0.08}
-                step={0.005}
-                value={selection.edgeRefinementWidth}
-                onChange={(event) =>
-                  updateSelection((current) => ({
-                    ...current,
-                    edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
-                  }))
-                }
-                aria-label="Edge Width"
-              />
-            </label>
-            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
-            </p>
+            {activeToolId === 'smartLasso' && (
+              <>
+                <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Edge Width
+                  <input
+                    type="range"
+                    min={0.005}
+                    max={0.08}
+                    step={0.005}
+                    value={selection.edgeRefinementWidth}
+                    onChange={(event) =>
+                      updateSelection((current) => ({
+                        ...current,
+                        edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
+                      }))
+                    }
+                    aria-label="Edge Width"
+                  />
+                </label>
+                <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
+                </p>
+              </>
+            )}
             {activeToolId === 'smartLasso' && (
               <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                 Smart Stickiness
