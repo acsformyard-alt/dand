@@ -868,30 +868,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     [vectorizePolygonWithWorker]
   );
 
-  const handleSmartWandSelection = useCallback(
-    (point: { x: number; y: number }) => {
-      const tool = smartWandToolRef.current;
-      const source = sourceImageRef.current;
-      if (!tool || !source) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
-      setIsDrawingRoom(false);
-      const result = tool.select(point);
-      if (!result || result.polygon.length < 3) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      const success = initializeSdfFromPolygon(result.polygon, { offsetPx: 5 });
-      if (!success) {
-        setIsOutliningRoom(false);
-      }
-    },
-    [initializeSdfFromPolygon]
-  );
-
   const updateDraftRoomFromSdf = useCallback((sdf: MaskSDF | null) => {
     if (!sdf) {
       setDraftRoomPoints([]);
@@ -944,6 +920,30 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       return true;
     },
     [brushSliderRange.max, imageDimensions, updateDraftRoomFromSdf]
+  );
+
+  const handleSmartWandSelection = useCallback(
+    (point: { x: number; y: number }) => {
+      const tool = smartWandToolRef.current;
+      const source = sourceImageRef.current;
+      if (!tool || !source) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      drawingPointsRef.current = [];
+      setDraftRoomPoints([]);
+      setIsDrawingRoom(false);
+      const result = tool.select(point);
+      if (!result || result.polygon.length < 3) {
+        setIsOutliningRoom(false);
+        return;
+      }
+      const success = initializeSdfFromPolygon(result.polygon, { offsetPx: 5 });
+      if (!success) {
+        setIsOutliningRoom(false);
+      }
+    },
+    [initializeSdfFromPolygon]
   );
 
   const handleBrushRadiusChange = useCallback(
