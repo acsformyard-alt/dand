@@ -1,31 +1,18 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { USE_NEW_DEFINE_ROOMS } from './mapCreationWizardConfig';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { apiClient } from '../api/client';
 import {
-  buildEdgeMap,
   computeDisplayMetrics,
-  type EdgeMap,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import {
-  ROOM_TOOL_INSTRUCTIONS,
-  ROOM_TOOL_OPTIONS,
-  DEFAULT_ROOM_TOOL,
-  type RoomTool,
-  type RoomToolOption,
-} from './roomToolOptions';
-import { rasterizePolygonToMask, type BrushMode, type RasterImageData } from '../utils/roomToolUtils';
-import { vectorizeAndSnap } from '../workers/seg';
-import { MagneticLassoTool } from '../tools/magneticLasso';
-import { SmartWandTool } from '../tools/smartWand';
-import {
-  applyBrushAdd,
-  applyBrushErase,
-  createEmptySdf,
-  pathToSDF,
-  sdfToPath,
-  type MaskSDF,
-} from '../utils/sdf';
+import DefineRoomsEditor, {
+  type DefineRoomDraft,
+} from './DefineRoomsEditor';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -44,213 +31,6 @@ interface DraftMarker {
   x: number;
   y: number;
 }
-
-interface DraftRoom {
-  id: string;
-  name: string;
-  notes: string;
-  tagsInput: string;
-  polygon: Array<{ x: number; y: number }>;
-  isVisible: boolean;
-  tool: RoomTool;
-}
-
-interface RoomAdjustmentState {
-  roomId: string;
-  brushRadius: number;
-  startedInside: boolean | null;
-  isPointerActive: boolean;
-  originalPolygon: Array<{ x: number; y: number }>;
-}
-
-const DEFAULT_POINT_MIN_DISTANCE = 0.0015;
-const SMART_SNAP_POINT_MIN_DISTANCE = 0.00075;
-
-const getPointMinimumDistance = (tool?: RoomTool | null) =>
-  tool === 'smartSnap' ? SMART_SNAP_POINT_MIN_DISTANCE : DEFAULT_POINT_MIN_DISTANCE;
-
-const distanceBetweenPoints = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-  Math.hypot(a.x - b.x, a.y - b.y);
-
-const pointInPolygon = (point: { x: number; y: number }, polygon: Array<{ x: number; y: number }>) => {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x;
-    const yi = polygon[i].y;
-    const xj = polygon[j].x;
-    const yj = polygon[j].y;
-    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-};
-
-const simplifyPolygon = (points: Array<{ x: number; y: number }>, tolerance = 0.004) => {
-  if (points.length <= 3) return points;
-
-  const perpendicularDistance = (
-    point: { x: number; y: number },
-    lineStart: { x: number; y: number },
-    lineEnd: { x: number; y: number }
-  ) => {
-    const area =
-      Math.abs(
-        0.5 *
-          (lineStart.x * lineEnd.y + lineEnd.x * point.y + point.x * lineStart.y - lineEnd.x * lineStart.y - point.x * lineEnd.y - lineStart.x * point.y)
-      );
-    const base = distanceBetweenPoints(lineStart, lineEnd) || Number.EPSILON;
-    return (area * 2) / base;
-  };
-
-  const rdp = (pts: Array<{ x: number; y: number }>, epsilon: number): Array<{ x: number; y: number }> => {
-    if (pts.length < 3) return pts;
-    let maxDistance = 0;
-    let index = 0;
-    const last = pts.length - 1;
-    for (let i = 1; i < last; i += 1) {
-      const distance = perpendicularDistance(pts[i], pts[0], pts[last]);
-      if (distance > maxDistance) {
-        index = i;
-        maxDistance = distance;
-      }
-    }
-    if (maxDistance > epsilon) {
-      const left = rdp(pts.slice(0, index + 1), epsilon);
-      const right = rdp(pts.slice(index), epsilon);
-      return [...left.slice(0, -1), ...right];
-    }
-    return [pts[0], pts[last]];
-  };
-
-  const simplified = rdp(points, tolerance);
-  return simplified.length >= 3 ? simplified : points;
-};
-
-const normalisePolygon = (
-  points: Array<{ x: number; y: number }>,
-  minimumDistance = DEFAULT_POINT_MIN_DISTANCE
-) => {
-  if (points.length === 0) return [];
-  const filtered = points.filter((point, index) => {
-    if (index === 0) return true;
-    return distanceBetweenPoints(point, points[index - 1]) > minimumDistance;
-  });
-  return filtered;
-};
-
-const computeSignedArea = (polygon: Array<{ x: number; y: number }>) => {
-  let area = 0;
-  for (let index = 0; index < polygon.length; index += 1) {
-    const current = polygon[index];
-    const next = polygon[(index + 1) % polygon.length];
-    area += current.x * next.y - next.x * current.y;
-  }
-  return area / 2;
-};
-
-const normalizeVector = (vector: { x: number; y: number }) => {
-  const length = Math.hypot(vector.x, vector.y);
-  if (length < 1e-6) {
-    return { x: 0, y: 0 };
-  }
-  return { x: vector.x / length, y: vector.y / length };
-};
-
-const applyPolygonBrushAdjustment = (
-  polygon: Array<{ x: number; y: number }>,
-  path: Array<{ x: number; y: number }>,
-  options: { brushRadius: number; mode: 'expand' | 'shrink' }
-) => {
-  if (polygon.length < 3 || path.length === 0 || options.brushRadius <= 0) {
-    return polygon;
-  }
-
-  const activePoint = path[path.length - 1];
-  const orientation = computeSignedArea(polygon) >= 0 ? 1 : -1;
-  const directionMultiplier = options.mode === 'expand' ? 1 : -1;
-  const normals = polygon.map((point, index) => {
-    const previous = polygon[(index - 1 + polygon.length) % polygon.length];
-    const next = polygon[(index + 1) % polygon.length];
-    const edgePrev = { x: point.x - previous.x, y: point.y - previous.y };
-    const edgeNext = { x: next.x - point.x, y: next.y - point.y };
-    const normalPrev = normalizeVector({
-      x: edgePrev.y * orientation,
-      y: -edgePrev.x * orientation,
-    });
-    const normalNext = normalizeVector({
-      x: edgeNext.y * orientation,
-      y: -edgeNext.x * orientation,
-    });
-    let combined = { x: normalPrev.x + normalNext.x, y: normalPrev.y + normalNext.y };
-    if (Math.hypot(combined.x, combined.y) < 1e-6) {
-      combined = normalPrev.x !== 0 || normalPrev.y !== 0 ? normalPrev : normalNext;
-    }
-    return normalizeVector(combined);
-  });
-
-  const brushRadius = options.brushRadius;
-  const baseStrength = brushRadius * 0.6;
-  const adjusted = polygon.map((point, index) => {
-    const distance = distanceBetweenPoints(point, activePoint);
-    if (distance > brushRadius) {
-      return point;
-    }
-    const falloff = Math.pow(1 - distance / brushRadius, 2);
-    const offsetAmount = baseStrength * falloff * directionMultiplier;
-    const normal = normals[index];
-    return {
-      x: point.x + normal.x * offsetAmount,
-      y: point.y + normal.y * offsetAmount,
-    };
-  });
-
-  const clamped = adjusted.map((point) => ({
-    x: clamp(point.x, 0, 1),
-    y: clamp(point.y, 0, 1),
-  }));
-  let normalised = normalisePolygon(clamped);
-  if (normalised.length >= 3) {
-    normalised = simplifyPolygon(normalised, 0.0015);
-    normalised = normalisePolygon(normalised);
-  }
-  if (normalised.length < 3) {
-    return polygon;
-  }
-  return normalised.map((point) => ({ ...point }));
-};
-
-const computeCentroid = (polygon: Array<{ x: number; y: number }>) => {
-  if (polygon.length === 0) {
-    return { x: 0.5, y: 0.5 };
-  }
-  let area = 0;
-  let x = 0;
-  let y = 0;
-  for (let i = 0; i < polygon.length; i += 1) {
-    const current = polygon[i];
-    const next = polygon[(i + 1) % polygon.length];
-    const cross = current.x * next.y - next.x * current.y;
-    area += cross;
-    x += (current.x + next.x) * cross;
-    y += (current.y + next.y) * cross;
-  }
-  area *= 0.5;
-  if (Math.abs(area) < Number.EPSILON) {
-    const sum = polygon.reduce(
-      (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
-      { x: 0, y: 0 }
-    );
-    return { x: sum.x / polygon.length, y: sum.y / polygon.length };
-  }
-  const factor = 1 / (6 * area);
-  return { x: x * factor, y: y * factor };
-};
-
-const parseTagsInput = (input: string) =>
-  input
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
 
 const steps: Array<{ title: string; description: string }> = [
   {
@@ -271,29 +51,36 @@ const steps: Array<{ title: string; description: string }> = [
   },
 ];
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-const DEFAULT_ROOM_ADJUST_BRUSH_RADIUS = 0.035;
-const DEFAULT_ZOOM = 1;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.25;
-const clampZoomValue = (value: number) => Math.min(Math.max(value, MIN_ZOOM), MAX_ZOOM);
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 const resolveNormalizedPointWithinImage = (
   event: { clientX: number; clientY: number },
   container: HTMLDivElement | null,
   imageDimensions: { width: number; height: number } | null,
-  metricsOverride?: ImageDisplayMetrics | null
+  metricsOverride?: ImageDisplayMetrics | null,
 ) => {
   if (!container || !imageDimensions) return null;
   const rect = container.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return null;
   const metrics =
     metricsOverride ??
-    computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height);
-  const relativeX = clamp(event.clientX - rect.left - metrics.offsetX, 0, metrics.displayWidth);
-  const relativeY = clamp(event.clientY - rect.top - metrics.offsetY, 0, metrics.displayHeight);
+    computeDisplayMetrics(
+      rect.width,
+      rect.height,
+      imageDimensions.width,
+      imageDimensions.height,
+    );
+  const relativeX = clamp(
+    event.clientX - rect.left - metrics.offsetX,
+    0,
+    metrics.displayWidth,
+  );
+  const relativeY = clamp(
+    event.clientY - rect.top - metrics.offsetY,
+    0,
+    metrics.displayHeight,
+  );
   const normalisedX = metrics.displayWidth === 0 ? 0 : relativeX / metrics.displayWidth;
   const normalisedY = metrics.displayHeight === 0 ? 0 : relativeY / metrics.displayHeight;
   return { x: normalisedX, y: normalisedY };
@@ -301,7 +88,7 @@ const resolveNormalizedPointWithinImage = (
 
 const useImageDisplayMetrics = (
   ref: React.RefObject<HTMLDivElement>,
-  imageDimensions: { width: number; height: number } | null
+  imageDimensions: { width: number; height: number } | null,
 ) => {
   const [metrics, setMetrics] = useState<ImageDisplayMetrics | null>(null);
 
@@ -309,7 +96,7 @@ const useImageDisplayMetrics = (
     const element = ref.current;
     if (!element || !imageDimensions) {
       setMetrics(null);
-      return;
+      return undefined;
     }
 
     let animationFrame: number | null = null;
@@ -318,7 +105,12 @@ const useImageDisplayMetrics = (
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       setMetrics(
-        computeDisplayMetrics(rect.width, rect.height, imageDimensions.width, imageDimensions.height)
+        computeDisplayMetrics(
+          rect.width,
+          rect.height,
+          imageDimensions.width,
+          imageDimensions.height,
+        ),
       );
     };
 
@@ -348,11 +140,8 @@ const useImageDisplayMetrics = (
     return () => {
       window.removeEventListener('resize', scheduleUpdate);
       if (observer) observer.disconnect();
-      if (animationFrame !== null) {
-        if (typeof window !== 'undefined') {
-          window.cancelAnimationFrame(animationFrame);
-        }
-        animationFrame = null;
+      if (animationFrame !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(animationFrame);
       }
     };
   }, [ref, imageDimensions]);
@@ -362,7 +151,7 @@ const useImageDisplayMetrics = (
 
 const normalisedToContainerPoint = (
   point: { x: number; y: number },
-  metrics: ImageDisplayMetrics | null
+  metrics: ImageDisplayMetrics | null,
 ) => {
   if (!metrics || metrics.containerWidth === 0 || metrics.containerHeight === 0) {
     return { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) };
@@ -380,314 +169,24 @@ const containerPointToStyle = (point: { x: number; y: number }): React.CSSProper
   top: `${point.y * 100}%`,
 });
 
-const ACTIVE_ROOM_POPOVER_GAP = 12;
+const parseTagsInput = (input: string) =>
+  input
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
 
-interface SidebarButtonProps {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  isActive?: boolean;
-}
-
-const SidebarButton: React.FC<SidebarButtonProps> = ({ label, icon, onClick, disabled, isActive }) => (
-  <div className="group relative">
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-        isActive
-          ? 'border-teal-400/80 bg-teal-500/30 text-teal-100'
-          : 'border-slate-800/80 bg-slate-950/70 text-slate-200 hover:border-teal-400/60 hover:text-teal-100'
-      } disabled:cursor-not-allowed disabled:opacity-50`}
-      aria-label={label}
-      aria-pressed={isActive}
-    >
-      {icon}
-    </button>
-    <span
-      role="tooltip"
-      className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-slate-800/80 bg-slate-950/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 opacity-0 shadow-lg transition group-hover:opacity-100"
-    >
-      {label}
-    </span>
-  </div>
-);
-
-interface WizardSidebarProps {
-  isOutlining: boolean;
-  canOutline: boolean;
-  onOutlineAction: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  canZoomIn: boolean;
-  canZoomOut: boolean;
-  activeTool: RoomTool;
-  onSelectTool: (tool: RoomTool) => void;
-  toolOptions: RoomToolOption[];
-  showBrushSlider: boolean;
-  brushRadius: number;
-  brushMin: number;
-  brushMax: number;
-  onBrushRadiusChange: (radius: number) => void;
-}
-
-const PlusIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-    <path
-      d="M12 5v14M5 12h14"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-    <path d="M5 12.5 10 17l9-10" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const ZoomInIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-    <path
-      d="M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm0 0v6m-3-3h6m3.5 6.5 3.5 3.5"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
-);
-
-const ZoomOutIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-    <path
-      d="M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm-3 6h6m3.5 3.5 3.5 3.5"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
-);
-
-const LassoIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
-    <path
-      d="M5.5 9c0-3.2 2.8-5.5 6.3-5.5s6.7 2.7 6.7 6-2.7 5.8-6.2 5.8c-1.2 0-2.4-.2-3.4-.7"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path
-      d="M8.2 14.1c-1.9.5-3.2 1.9-3.2 3.6 0 1.9 1.5 3.4 3.4 3.4 1.3 0 2.4-.6 3-1.6v-2.8"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
-);
-
-const SmartSnapIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
-    <path
-      d="M7 4h3v7a2 2 0 1 0 4 0V4h3"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path
-      d="M7 4a4 4 0 0 0-4 4v5a7 7 0 0 0 7 7h4a7 7 0 0 0 7-7V8a4 4 0 0 0-4-4"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path d="M5 6.5 3.5 5M19 6.5 20.5 5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
-  </svg>
-);
-
-const PaintbrushIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
-    <path
-      d="m16 4.5 3.5 3.5-8.9 8.9a2.5 2.5 0 0 1-1.2.7l-3.1.8.8-3.1a2.5 2.5 0 0 1 .7-1.2z"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path
-      d="M6.3 17.7c-.4-.1-.7-.1-1.1-.1a2.7 2.7 0 0 0-2.7 2.7c0 1.5 1.2 2.7 2.7 2.7 1.4 0 2.6-1 2.7-2.3.1-.9.2-1.8.4-2.7"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
-);
-
-const SmartWandIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
-    <path
-      d="m5 19 8.5-8.5M16.5 5.5l-1 2.7-2.7 1 2.7 1 1 2.7 1-2.7 2.7-1-2.7-1z"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path d="M5 19 3 21" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const TOOL_ICONS: Record<RoomTool, React.FC> = {
-  lasso: LassoIcon,
-  smartSnap: SmartSnapIcon,
-  paintbrush: PaintbrushIcon,
-  smartWand: SmartWandIcon,
-};
-
-const WizardSidebar: React.FC<WizardSidebarProps> = ({
-  isOutlining,
-  canOutline,
-  onOutlineAction,
-  onZoomIn,
-  onZoomOut,
-  canZoomIn,
-  canZoomOut,
-  activeTool,
-  onSelectTool,
-  toolOptions,
-  showBrushSlider,
-  brushRadius,
-  brushMin,
-  brushMax,
-  onBrushRadiusChange,
+const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
+  campaign,
+  onClose,
+  onComplete,
 }) => {
-  const outlineLabel = isOutlining ? 'Finish room outline' : 'Add room/corridor';
-  const toolButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  toolButtonRefs.current.length = toolOptions.length;
-
-  const handleToolKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!isOutlining) return;
-    const lastIndex = toolOptions.length - 1;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-      event.preventDefault();
-      const nextIndex = index === lastIndex ? 0 : index + 1;
-      toolButtonRefs.current[nextIndex]?.focus();
-    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-      event.preventDefault();
-      const previousIndex = index === 0 ? lastIndex : index - 1;
-      toolButtonRefs.current[previousIndex]?.focus();
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      toolButtonRefs.current[0]?.focus();
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      toolButtonRefs.current[lastIndex]?.focus();
-    }
-  };
-
-  return (
-    <aside className="fixed left-6 top-1/2 z-40 -translate-y-1/2">
-      <div className="relative">
-        <div className="flex flex-col gap-3 rounded-3xl border border-slate-800/80 bg-slate-950/80 p-3 shadow-2xl">
-          <SidebarButton
-            label={outlineLabel}
-            icon={isOutlining ? <CheckIcon /> : <PlusIcon />}
-            onClick={onOutlineAction}
-            disabled={!canOutline}
-            isActive={isOutlining}
-          />
-          <SidebarButton label="Zoom in" icon={<ZoomInIcon />} onClick={onZoomIn} disabled={!canZoomIn} />
-          <SidebarButton label="Zoom out" icon={<ZoomOutIcon />} onClick={onZoomOut} disabled={!canZoomOut} />
-        </div>
-        <div
-          className={`absolute left-full top-0 flex transform items-start gap-3 transition-all duration-200 ${
-            isOutlining
-              ? 'translate-x-3 opacity-100 pointer-events-auto'
-              : 'translate-x-8 opacity-0 pointer-events-none'
-          }`}
-          aria-hidden={!isOutlining}
-        >
-          <div
-            role="group"
-            aria-label="Room capture tools"
-            className="flex flex-col gap-2 rounded-3xl border border-slate-800/80 bg-slate-950/90 p-3 shadow-2xl"
-          >
-            {toolOptions.map((option, index) => {
-              const isActive = option.id === activeTool;
-              const Icon = TOOL_ICONS[option.id];
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  ref={(element) => {
-                    toolButtonRefs.current[index] = element;
-                  }}
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-slate-300 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
-                    isActive
-                      ? 'border-teal-400/70 bg-teal-500/20 text-teal-100 shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
-                      : 'border-slate-800/70 bg-slate-950/70 hover:border-teal-400/50 hover:bg-slate-900/80 hover:text-teal-100'
-                  }`}
-                  onClick={() => onSelectTool(option.id)}
-                  onKeyDown={(event) => handleToolKeyDown(event, index)}
-                  aria-label={option.label}
-                  aria-pressed={isActive}
-                  title={option.tooltip}
-                  tabIndex={isOutlining ? 0 : -1}
-                >
-                  <Icon />
-                  <span className="sr-only">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {showBrushSlider && (
-            <div className="flex w-40 flex-col gap-2 rounded-3xl border border-slate-800/80 bg-slate-950/90 p-4 shadow-2xl">
-              <label className="text-[10px] uppercase tracking-[0.35em] text-slate-400" htmlFor="brush-size-slider">
-                Brush Size
-              </label>
-              <input
-                id="brush-size-slider"
-                type="range"
-                min={brushMin}
-                max={brushMax}
-                value={Math.round(brushRadius)}
-                onChange={(event) => onBrushRadiusChange(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-teal-400"
-              />
-              <div className="text-right text-[10px] uppercase tracking-[0.35em] text-teal-200">
-                {Math.round(brushRadius)} px
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </aside>
-  );
-};
-
-const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose, onComplete }) => {
   const [step, setStep] = useState<WizardStep>(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [grouping, setGrouping] = useState('');
@@ -695,437 +194,65 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
   const [tagsInput, setTagsInput] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
+  const [markers, setMarkers] = useState<DraftMarker[]>([]);
+  const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<DefineRoomDraft[]>([]);
 
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [markers, setMarkers] = useState<DraftMarker[]>([]);
-  const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
-  const [rooms, setRooms] = useState<DraftRoom[]>([]);
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [selectedRoomTool, setSelectedRoomTool] = useState<RoomTool>(DEFAULT_ROOM_TOOL);
-  const [isOutliningRoom, setIsOutliningRoom] = useState(false);
-  const [isDrawingRoom, setIsDrawingRoom] = useState(false);
-  const [draftRoomPoints, setDraftRoomPoints] = useState<Array<{ x: number; y: number }>>([]);
-  const [adjustingRoom, setAdjustingRoom] = useState<RoomAdjustmentState | null>(null);
-  const [activeRoomPopoverPosition, setActiveRoomPopoverPosition] = useState<
-    { left: number; top: number } | null
-  >(null);
-  const [paintbrushRadius, setPaintbrushRadius] = useState(0);
-
-  const roomsMapRef = useRef<HTMLDivElement>(null);
-  const activeRoomPopoverRef = useRef<HTMLDivElement | null>(null);
-  const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
-  const edgeMapRef = useRef<EdgeMap | null>(null);
-  const sourceImageRef = useRef<RasterImageData | null>(null);
-  const outlineToolRef = useRef<RoomTool>(DEFAULT_ROOM_TOOL);
-  const adjustmentPathRef = useRef<Array<{ x: number; y: number }>>([]);
-  const adjustmentPointerIdRef = useRef<number | null>(null);
-  const paintbrushSdfRef = useRef<MaskSDF | null>(null);
-  const paintbrushRadiusRef = useRef<number>(0);
-  const paintbrushModeRef = useRef<BrushMode>('add');
-  const paintbrushLastPointRef = useRef<{ x: number; y: number } | null>(null);
-  const magneticLassoRef = useRef<MagneticLassoTool | null>(null);
-  const magneticLassoUnsubscribeRef = useRef<(() => void) | null>(null);
-  const smartWandToolRef = useRef<SmartWandTool | null>(null);
-
-  const roomsDisplayMetrics = useImageDisplayMetrics(roomsMapRef, imageDimensions);
-  const zoomedRoomsDisplayMetrics = useMemo(() => {
-    if (!roomsDisplayMetrics) return null;
-    const zoomedWidth = roomsDisplayMetrics.displayWidth * mapZoom;
-    const zoomedHeight = roomsDisplayMetrics.displayHeight * mapZoom;
-    const offsetX = roomsDisplayMetrics.offsetX - (zoomedWidth - roomsDisplayMetrics.displayWidth) / 2;
-    const offsetY = roomsDisplayMetrics.offsetY - (zoomedHeight - roomsDisplayMetrics.displayHeight) / 2;
-    return {
-      ...roomsDisplayMetrics,
-      displayWidth: zoomedWidth,
-      displayHeight: zoomedHeight,
-      offsetX,
-      offsetY,
-    } satisfies ImageDisplayMetrics;
-  }, [roomsDisplayMetrics, mapZoom]);
-  const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
-  const segmentationCacheKey = useMemo(
-    () => (file ? `wizard:${file.name}:${file.size}:${file.lastModified}` : undefined),
-    [file]
-  );
-  const brushSliderRange = useMemo(() => {
-    if (!imageDimensions) {
-      return { min: 1, max: 40 };
-    }
-    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-    const min = Math.max(1, Math.round(maxDimension * 0.004));
-    const max = Math.max(min + 1, Math.round(maxDimension * 0.08));
-    return { min, max };
-  }, [imageDimensions]);
-
   useEffect(() => {
-    if (!imageDimensions) return;
-    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-    const defaultRadius = clamp(
-      Math.round(maxDimension * 0.012),
-      brushSliderRange.min,
-      brushSliderRange.max
-    );
-    paintbrushRadiusRef.current = defaultRadius;
-    setPaintbrushRadius(defaultRadius);
-  }, [imageDimensions, brushSliderRange.max, brushSliderRange.min]);
-
-  const resolveRelativePoint = useCallback(
-    (event: { clientX: number; clientY: number }) =>
-      resolveNormalizedPointWithinImage(event, roomsMapRef.current, imageDimensions, zoomedRoomsDisplayMetrics),
-    [imageDimensions, zoomedRoomsDisplayMetrics]
-  );
-
-  const handleZoomIn = useCallback(() => {
-    setMapZoom((current) => Number(clampZoomValue(current + ZOOM_STEP).toFixed(2)));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setMapZoom((current) => Number(clampZoomValue(current - ZOOM_STEP).toFixed(2)));
-  }, []);
-
-  const vectorizePolygonWithWorker = useCallback(
-    (polygon: Array<{ x: number; y: number }>, tool: RoomTool, options?: { snapSearchRadius?: number }) => {
-      const raster = sourceImageRef.current;
-      if (!raster || polygon.length < 3) {
-        return polygon;
-      }
-      try {
-        const maskWidth = raster.width;
-        const maskHeight = raster.height;
-        const mask = rasterizePolygonToMask(polygon, maskWidth, maskHeight);
-        const snapRadius =
-          options?.snapSearchRadius ?? Math.max(24, Math.round(Math.max(maskWidth, maskHeight) * 0.035));
-        const smoothingIterations = tool === 'smartSnap' ? 2 : 1;
-        const result = vectorizeAndSnap({
-          raster,
-          mask,
-          maskWidth,
-          maskHeight,
-          cacheKey: segmentationCacheKey,
-          smoothingIterations,
-          snapSearchRadius: snapRadius,
-        });
-        return result.snappedPolygon;
-      } catch (error) {
-        console.error('Failed to vectorize polygon', error);
-        return polygon;
-      }
-    },
-    [segmentationCacheKey]
-  );
-
-  const finalizeRoomOutline = useCallback(
-    (
-      points: Array<{ x: number; y: number }>,
-      options?: { skipVectorize?: boolean; toolOverride?: RoomTool }
-    ) => {
-      const activeTool = options?.toolOverride ?? outlineToolRef.current;
-      const minimumDistance = getPointMinimumDistance(activeTool);
-      let polygon = normalisePolygon(points, minimumDistance);
-      if (polygon.length < 3) {
-        magneticLassoRef.current?.reset();
-        setIsOutliningRoom(false);
-        setDraftRoomPoints([]);
-        drawingPointsRef.current = [];
-        return;
-      }
-      if (!options?.skipVectorize) {
-        polygon = vectorizePolygonWithWorker(polygon, activeTool);
-      }
-      polygon = normalisePolygon(polygon, minimumDistance);
-      const simplifyTolerance =
-        activeTool === 'smartSnap' ? 0.0015 : activeTool === 'smartWand' ? 0.0025 : 0.0015;
-      polygon = simplifyPolygon(polygon, simplifyTolerance);
-      polygon = normalisePolygon(polygon, minimumDistance);
-      polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
-      const newRoomId = `room-${Date.now()}-${Math.round(Math.random() * 10000)}`;
-      setRooms((current) => {
-        const nextIndex = current.length + 1;
-        return [
-          ...current,
-          {
-            id: newRoomId,
-            name: `Room ${nextIndex}`,
-            notes: '',
-            tagsInput: '',
-            polygon,
-            isVisible: false,
-            tool: activeTool,
-          },
-        ];
-      });
-      setActiveRoomId(newRoomId);
-      setIsOutliningRoom(false);
-      setDraftRoomPoints([]);
-      drawingPointsRef.current = [];
-      if (activeTool === 'smartSnap') {
-        magneticLassoRef.current?.reset();
-      }
-    },
-    [vectorizePolygonWithWorker]
-  );
-
-  const updateDraftRoomFromSdf = useCallback((sdf: MaskSDF | null) => {
-    if (!sdf) {
-      setDraftRoomPoints([]);
+    if (!file) {
+      setPreviewUrl(null);
+      setImageDimensions(null);
       return;
     }
-    const path = sdfToPath(sdf, {
-      smoothingIterations: 3,
-      smoothingFactor: 0.24,
-      simplifyTolerance: 0.85,
-    });
-    setDraftRoomPoints(path.points.length > 0 ? path.points : []);
-  }, []);
 
-  const ensurePaintbrushSdf = useCallback(() => {
-    if (!imageDimensions) return null;
-    const existing = paintbrushSdfRef.current;
-    if (existing && existing.w === imageDimensions.width && existing.h === imageDimensions.height) {
-      return existing;
-    }
-    const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-    const bandRadius = Math.max(Math.round(maxDimension * 0.06), brushSliderRange.max * 2);
-    const sdf = createEmptySdf(imageDimensions.width, imageDimensions.height, bandRadius);
-    paintbrushSdfRef.current = sdf;
-    updateDraftRoomFromSdf(sdf);
-    return sdf;
-  }, [brushSliderRange.max, imageDimensions, updateDraftRoomFromSdf]);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
 
-  const initializeSdfFromPolygon = useCallback(
-    (polygon: Array<{ x: number; y: number }>, options?: { offsetPx?: number }) => {
-      if (!imageDimensions || polygon.length < 3) {
-        updateDraftRoomFromSdf(null);
-        return false;
-      }
-      const maxDimension = Math.max(imageDimensions.width, imageDimensions.height);
-      const bandRadius = Math.max(Math.round(maxDimension * 0.06), brushSliderRange.max * 2);
-      const sdf = pathToSDF(
-        { points: polygon, closed: true },
-        {
-          width: imageDimensions.width,
-          height: imageDimensions.height,
-          bandRadius,
-          offsetPx: options?.offsetPx ?? 0,
-        }
-      );
-      paintbrushSdfRef.current = sdf;
-      outlineToolRef.current = 'paintbrush';
-      setSelectedRoomTool('paintbrush');
-      setIsDrawingRoom(false);
-      updateDraftRoomFromSdf(sdf);
-      return true;
-    },
-    [brushSliderRange.max, imageDimensions, updateDraftRoomFromSdf]
-  );
-
-  const handleSmartWandSelection = useCallback(
-    (point: { x: number; y: number }) => {
-      const tool = smartWandToolRef.current;
-      const source = sourceImageRef.current;
-      if (!tool || !source) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
-      setIsDrawingRoom(false);
-      const result = tool.select(point);
-      if (!result || result.polygon.length < 3) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      const success = initializeSdfFromPolygon(result.polygon, { offsetPx: 5 });
-      if (!success) {
-        setIsOutliningRoom(false);
-      }
-    },
-    [initializeSdfFromPolygon]
-  );
-
-  const handleBrushRadiusChange = useCallback(
-    (nextRadius: number) => {
-      const clampedRadius = clamp(nextRadius, brushSliderRange.min, brushSliderRange.max);
-      setPaintbrushRadius(clampedRadius);
-      paintbrushRadiusRef.current = clampedRadius;
-    },
-    [brushSliderRange.max, brushSliderRange.min]
-  );
-
-  useEffect(() => {
-    if (!isDrawingRoom) return;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const point = resolveRelativePoint(event);
-      if (!point) return;
-      const activeTool = outlineToolRef.current;
-      if (activeTool === 'smartSnap') {
-        magneticLassoRef.current?.pointerMove(point);
-        return;
-      }
-      if (activeTool === 'paintbrush') {
-        const sdf = ensurePaintbrushSdf();
-        const radius = Math.max(1, paintbrushRadiusRef.current || brushSliderRange.min);
-        if (!sdf || radius <= 0) return;
-        const buttons = event.buttons ?? 0;
-        const rightActive = (buttons & 2) === 2;
-        const leftActive = (buttons & 1) === 1;
-        if (!rightActive && !leftActive) {
-          paintbrushLastPointRef.current = null;
-          return;
-        }
-        const mode: BrushMode = rightActive ? 'add' : 'erase';
-        paintbrushModeRef.current = mode;
-        const currentPoint = {
-          x: clamp(point.x, 0, 1),
-          y: clamp(point.y, 0, 1),
-        };
-        const last = paintbrushLastPointRef.current;
-        const distance = last
-          ? Math.hypot((currentPoint.x - last.x) * sdf.w, (currentPoint.y - last.y) * sdf.h)
-          : 0;
-        const steps = last ? Math.max(1, Math.ceil(distance / Math.max(radius * 0.6, 1))) : 1;
-        const stroke: Array<{ x: number; y: number }> = [];
-        for (let step = 0; step <= steps; step += 1) {
-          const t = steps === 0 ? 0 : step / steps;
-          const sample = last
-            ? { x: last.x + (currentPoint.x - last.x) * t, y: last.y + (currentPoint.y - last.y) * t }
-            : currentPoint;
-          stroke.push(sample);
-        }
-        if (mode === 'add') {
-          applyBrushAdd(sdf, stroke, radius);
-        } else {
-          applyBrushErase(sdf, stroke, radius);
-        }
-        paintbrushLastPointRef.current = currentPoint;
-        updateDraftRoomFromSdf(sdf);
-        return;
-      }
-      const lastPoint = drawingPointsRef.current[drawingPointsRef.current.length - 1];
-      if (!lastPoint || distanceBetweenPoints(lastPoint, point) > 0.001) {
-        drawingPointsRef.current = [...drawingPointsRef.current, point];
-        setDraftRoomPoints(drawingPointsRef.current);
-      }
+    const image = new Image();
+    image.onload = () => {
+      setImageDimensions({ width: image.width, height: image.height });
     };
+    image.src = objectUrl;
 
-    const handlePointerUp = (event: PointerEvent) => {
-      event.preventDefault();
-      const activeTool = outlineToolRef.current;
-      if (activeTool === 'smartSnap') {
-        return;
-      }
-      if (activeTool === 'paintbrush') {
-        drawingPointsRef.current = [];
-        paintbrushLastPointRef.current = null;
-        setIsDrawingRoom(false);
-        return;
-      }
-      const completed = drawingPointsRef.current;
-      drawingPointsRef.current = [];
-      setIsDrawingRoom(false);
-      if (completed.length >= 2) {
-        const closedPath = completed[0]
-          ? [...completed, completed[0]]
-          : [...completed];
-        const success = initializeSdfFromPolygon(closedPath);
-        if (!success) {
-          setIsOutliningRoom(false);
-        }
-      } else {
-        setIsOutliningRoom(false);
-      }
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+      URL.revokeObjectURL(objectUrl);
     };
-  }, [
-    finalizeRoomOutline,
-    ensurePaintbrushSdf,
-    initializeSdfFromPolygon,
-    isDrawingRoom,
-    resolveRelativePoint,
-    updateDraftRoomFromSdf,
-    brushSliderRange.min,
-  ]);
-
-  const finalizeRoomAdjustment = useCallback(
-    (state: RoomAdjustmentState | null) => {
-      if (!state) return;
-      if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
-        const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
-        if (release) {
-          try {
-            release(adjustmentPointerIdRef.current);
-          } catch {
-            // ignore release errors
-          }
-        }
-      }
-      adjustmentPointerIdRef.current = null;
-      adjustmentPathRef.current = [];
-      setRooms((current) =>
-        current.map((room) => {
-          if (room.id !== state.roomId) return room;
-          const minimumDistance = getPointMinimumDistance(room.tool);
-          let polygon = normalisePolygon(room.polygon, minimumDistance);
-          polygon = vectorizePolygonWithWorker(polygon, room.tool);
-          polygon = normalisePolygon(polygon, minimumDistance);
-          const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : room.tool === 'smartWand' ? 0.0025 : 0.0015;
-          polygon = simplifyPolygon(polygon, simplifyTolerance);
-          polygon = normalisePolygon(polygon, minimumDistance);
-          polygon = polygon.map((point) => ({
-            x: clamp(point.x, 0, 1),
-            y: clamp(point.y, 0, 1),
-          }));
-          return { ...room, polygon };
-        })
-      );
-      setAdjustingRoom((current) => (current && current.roomId === state.roomId ? null : current));
-    },
-    [vectorizePolygonWithWorker]
-  );
+  }, [file]);
 
   useEffect(() => {
-    if (!adjustingRoom || !adjustingRoom.isPointerActive || adjustingRoom.startedInside === null) {
-      return;
-    }
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
+
+  useEffect(() => {
+    if (!draggingId) return;
 
     const handlePointerMove = (event: PointerEvent) => {
-      const point = resolveRelativePoint(event);
+      const point = resolveNormalizedPointWithinImage(
+        event,
+        mapAreaRef.current,
+        imageDimensions,
+        markerDisplayMetrics,
+      );
       if (!point) return;
-      const last = adjustmentPathRef.current[adjustmentPathRef.current.length - 1];
-      const threshold = Math.max(0.0002, adjustingRoom.brushRadius * 0.2);
-      if (!last || distanceBetweenPoints(last, point) > threshold) {
-        const nextPath = [...adjustmentPathRef.current, point];
-        if (nextPath.length > 64) {
-          nextPath.splice(0, nextPath.length - 64);
-        }
-        adjustmentPathRef.current = nextPath;
-        const mode = adjustingRoom.startedInside ? 'expand' : 'shrink';
-        setRooms((current) =>
-          current.map((room) => {
-            if (room.id !== adjustingRoom.roomId) return room;
-            const nextPolygon = applyPolygonBrushAdjustment(room.polygon, nextPath, {
-              brushRadius: adjustingRoom.brushRadius,
-              mode,
-            });
-            return { ...room, polygon: nextPolygon };
-          })
-        );
-      }
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === draggingId ? { ...marker, x: point.x, y: point.y } : marker,
+        ),
+      );
     };
 
     const handlePointerUp = () => {
-      finalizeRoomAdjustment(adjustingRoom);
+      setDraggingId(null);
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -1136,302 +263,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [adjustingRoom, finalizeRoomAdjustment, resolveRelativePoint]);
-
-  useEffect(() => {
-    if (!adjustingRoom) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (adjustmentPointerIdRef.current !== null && roomsMapRef.current) {
-          const release = roomsMapRef.current.releasePointerCapture?.bind(roomsMapRef.current);
-          if (release) {
-            try {
-              release(adjustmentPointerIdRef.current);
-            } catch {
-              // ignore release errors
-            }
-          }
-        }
-        adjustmentPointerIdRef.current = null;
-        adjustmentPathRef.current = [];
-        setRooms((current) =>
-          current.map((room) =>
-            room.id === adjustingRoom.roomId
-              ? {
-                  ...room,
-                  polygon: adjustingRoom.originalPolygon.map((point) => ({ ...point })),
-                }
-              : room
-          )
-        );
-        setAdjustingRoom(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [adjustingRoom]);
-
-  useEffect(() => {
-    if (!isOutliningRoom) return;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOutliningRoom(false);
-        setIsDrawingRoom(false);
-        drawingPointsRef.current = [];
-        setDraftRoomPoints([]);
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => {
-      window.removeEventListener('keydown', handleKey);
-    };
-  }, [isOutliningRoom]);
-
-  useEffect(() => {
-    if (activeRoomId && !rooms.some((room) => room.id === activeRoomId)) {
-      setActiveRoomId(null);
-    }
-  }, [activeRoomId, rooms]);
-
-  useEffect(() => {
-    setMapZoom(DEFAULT_ZOOM);
-  }, [previewUrl]);
-
-  useEffect(() => {
-    if (!adjustingRoom) return;
-    if (!rooms.some((room) => room.id === adjustingRoom.roomId)) {
-      adjustmentPathRef.current = [];
-      adjustmentPointerIdRef.current = null;
-      setAdjustingRoom(null);
-    }
-  }, [adjustingRoom, rooms]);
-
-  const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId) ?? null, [activeRoomId, rooms]);
-  const activeRoomCenter = useMemo(() => computeCentroid(activeRoom?.polygon ?? []), [activeRoom]);
-  const isAdjustingActiveRoom = adjustingRoom?.roomId === activeRoom?.id;
-  const overlayWidth = imageDimensions?.width ?? 1000;
-  const overlayHeight = imageDimensions?.height ?? 1000;
-  const overlayScale = Math.max(overlayWidth, overlayHeight);
-  const roomOverlayStyle: React.CSSProperties = zoomedRoomsDisplayMetrics
-    ? {
-        left: zoomedRoomsDisplayMetrics.offsetX,
-        top: zoomedRoomsDisplayMetrics.offsetY,
-        width: zoomedRoomsDisplayMetrics.displayWidth,
-        height: zoomedRoomsDisplayMetrics.displayHeight,
-      }
-    : { left: 0, top: 0, width: '100%', height: '100%' };
-  const roomImageStyle: React.CSSProperties | undefined = zoomedRoomsDisplayMetrics
-    ? {
-        left: zoomedRoomsDisplayMetrics.offsetX,
-        top: zoomedRoomsDisplayMetrics.offsetY,
-        width: zoomedRoomsDisplayMetrics.displayWidth,
-        height: zoomedRoomsDisplayMetrics.displayHeight,
-      }
-    : undefined;
-  const activeRoomAnchor = normalisedToContainerPoint(activeRoomCenter, zoomedRoomsDisplayMetrics);
-
-  const updateActiveRoomPopoverPosition = useCallback(() => {
-    const container = roomsMapRef.current;
-    const popover = activeRoomPopoverRef.current;
-
-    if (!activeRoom || !container || !popover) {
-      setActiveRoomPopoverPosition((previous) => (previous === null ? previous : null));
-      return;
-    }
-
-    const containerRect = container.getBoundingClientRect();
-    const popoverRect = popover.getBoundingClientRect();
-
-    if (containerRect.width === 0 || containerRect.height === 0) {
-      setActiveRoomPopoverPosition((previous) => (previous === null ? previous : null));
-      return;
-    }
-
-    const anchorX = activeRoomAnchor.x * containerRect.width;
-    const anchorY = activeRoomAnchor.y * containerRect.height;
-
-    const fitsAbove = anchorY - ACTIVE_ROOM_POPOVER_GAP - popoverRect.height >= 0;
-    const fitsBelow = anchorY + ACTIVE_ROOM_POPOVER_GAP + popoverRect.height <= containerRect.height;
-
-    let top: number;
-    if (fitsAbove && (!fitsBelow || anchorY > containerRect.height / 2)) {
-      top = anchorY - popoverRect.height - ACTIVE_ROOM_POPOVER_GAP;
-    } else if (fitsBelow) {
-      top = anchorY + ACTIVE_ROOM_POPOVER_GAP;
-    } else {
-      const spaceAbove = anchorY;
-      const spaceBelow = containerRect.height - anchorY;
-      if (spaceAbove >= spaceBelow) {
-        top = anchorY - popoverRect.height - ACTIVE_ROOM_POPOVER_GAP;
-      } else {
-        top = anchorY + ACTIVE_ROOM_POPOVER_GAP;
-      }
-    }
-
-    const fitsLeft = anchorX - ACTIVE_ROOM_POPOVER_GAP - popoverRect.width >= 0;
-    const fitsRight = anchorX + ACTIVE_ROOM_POPOVER_GAP + popoverRect.width <= containerRect.width;
-
-    let left: number;
-    if (fitsLeft && !fitsRight) {
-      left = anchorX - popoverRect.width - ACTIVE_ROOM_POPOVER_GAP;
-    } else if (fitsRight && !fitsLeft) {
-      left = anchorX + ACTIVE_ROOM_POPOVER_GAP;
-    } else if (!fitsLeft && !fitsRight) {
-      left = clamp(anchorX - popoverRect.width / 2, 0, Math.max(containerRect.width - popoverRect.width, 0));
-    } else {
-      left = anchorX - popoverRect.width / 2;
-    }
-
-    const maxTop = Math.max(containerRect.height - popoverRect.height, 0);
-    const maxLeft = Math.max(containerRect.width - popoverRect.width, 0);
-
-    top = clamp(top, 0, maxTop);
-    left = clamp(left, 0, maxLeft);
-
-    setActiveRoomPopoverPosition((previous) => {
-      if (previous && Math.abs(previous.left - left) < 0.5 && Math.abs(previous.top - top) < 0.5) {
-        return previous;
-      }
-      return { left, top };
-    });
-  }, [activeRoom, activeRoomAnchor.x, activeRoomAnchor.y]);
-
-  useLayoutEffect(() => {
-    updateActiveRoomPopoverPosition();
-  }, [updateActiveRoomPopoverPosition]);
-
-  useEffect(() => {
-    if (!activeRoom) return;
-
-    const handleResize = () => {
-      updateActiveRoomPopoverPosition();
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(handleResize);
-      if (roomsMapRef.current) observer.observe(roomsMapRef.current);
-      if (activeRoomPopoverRef.current) observer.observe(activeRoomPopoverRef.current);
-    }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      observer?.disconnect();
-    };
-  }, [activeRoom, updateActiveRoomPopoverPosition]);
-
-  const canZoomIn = mapZoom < MAX_ZOOM - 1e-6;
-  const canZoomOut = mapZoom > MIN_ZOOM + 1e-6;
-
-  const handleStartRoomAdjustment = useCallback(() => {
-    if (!activeRoom) return;
-    adjustmentPathRef.current = [];
-    adjustmentPointerIdRef.current = null;
-    setAdjustingRoom({
-      roomId: activeRoom.id,
-      brushRadius: DEFAULT_ROOM_ADJUST_BRUSH_RADIUS,
-      startedInside: null,
-      isPointerActive: false,
-      originalPolygon: activeRoom.polygon.map((point) => ({ ...point })),
-    });
-    setIsOutliningRoom(false);
-    setIsDrawingRoom(false);
-    setDraftRoomPoints([]);
-    drawingPointsRef.current = [];
-  }, [activeRoom]);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl((previous) => {
-        if (previous) {
-          URL.revokeObjectURL(previous);
-        }
-        return null;
-      });
-      setImageDimensions(null);
-      edgeMapRef.current = null;
-      sourceImageRef.current = null;
-      return;
-    }
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl((previous) => {
-      if (previous) {
-        URL.revokeObjectURL(previous);
-      }
-      return objectUrl;
-    });
-    const image = new Image();
-    image.onload = () => {
-      setImageDimensions({ width: image.naturalWidth, height: image.naturalHeight });
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        const context = canvas.getContext('2d');
-        if (context) {
-          context.drawImage(image, 0, 0);
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const pixels = new Uint8ClampedArray(imageData.data);
-          sourceImageRef.current = { width: canvas.width, height: canvas.height, data: pixels };
-          edgeMapRef.current = buildEdgeMap(pixels, canvas.width, canvas.height);
-        } else {
-          edgeMapRef.current = null;
-          sourceImageRef.current = null;
-        }
-      } catch {
-        edgeMapRef.current = null;
-        sourceImageRef.current = null;
-      }
-    };
-    image.src = objectUrl;
-    return () => {
-      image.onload = null;
-    };
-  }, [file]);
-
-  useEffect(() => {
-    return () => {
-      magneticLassoUnsubscribeRef.current?.();
-      magneticLassoUnsubscribeRef.current = null;
-      magneticLassoRef.current = null;
-      smartWandToolRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
-
-  useEffect(() => {
-    if (!draggingId) return;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const point = resolveNormalizedPointWithinImage(event, mapAreaRef.current, imageDimensions);
-      if (!point) return;
-      setMarkers((current) =>
-        current.map((marker) => (marker.id === draggingId ? { ...marker, x: point.x, y: point.y } : marker))
-      );
-    };
-
-    const handlePointerUp = () => {
-      setDraggingId(null);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [draggingId, imageDimensions]);
+  }, [draggingId, imageDimensions, markerDisplayMetrics]);
 
   useEffect(() => {
     if (markers.length === 0) {
@@ -1453,327 +285,32 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     if (step === 1) {
       return name.trim().length > 0;
     }
+    if (step === 2) {
+      return Boolean(previewUrl);
+    }
     return true;
-  }, [file, name, step]);
+  }, [file, name, step, previewUrl]);
 
-  const tags = useMemo(
-    () =>
-      tagsInput
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0),
-    [tagsInput]
-  );
+  const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
+
+  const handleFileSelected = useCallback((selected: File) => {
+    setFile(selected);
+    setMarkers([]);
+    setRooms([]);
+    setExpandedMarkerId(null);
+  }, []);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setError(null);
     const droppedFile = event.dataTransfer.files?.[0];
     if (droppedFile) {
-      setFile(droppedFile);
+      handleFileSelected(droppedFile);
     }
   };
 
   const handleBrowse = () => {
     fileInputRef.current?.click();
-  };
-
-  const handleStartRoomOutline = useCallback(
-    (nextTool?: RoomTool) => {
-      if (!previewUrl) return;
-      const tool = nextTool ?? selectedRoomTool;
-      outlineToolRef.current = tool;
-      setSelectedRoomTool(tool);
-      setActiveRoomId(null);
-      setAdjustingRoom(null);
-      adjustmentPathRef.current = [];
-      adjustmentPointerIdRef.current = null;
-      paintbrushSdfRef.current = null;
-      paintbrushModeRef.current = 'add';
-      paintbrushLastPointRef.current = null;
-      updateDraftRoomFromSdf(null);
-      setIsOutliningRoom(true);
-      setIsDrawingRoom(false);
-      setDraftRoomPoints([]);
-      drawingPointsRef.current = [];
-      if (tool === 'smartSnap') {
-        const raster = sourceImageRef.current;
-        if (raster) {
-          if (!magneticLassoRef.current) {
-            magneticLassoRef.current = new MagneticLassoTool({ raster, cacheKey: segmentationCacheKey });
-          } else {
-            magneticLassoRef.current.configure({ raster, cacheKey: segmentationCacheKey });
-          }
-          magneticLassoUnsubscribeRef.current?.();
-          magneticLassoUnsubscribeRef.current = magneticLassoRef.current.subscribe(() => {
-            const instance = magneticLassoRef.current;
-            if (!instance) return;
-            const committed = instance.getCommittedPath();
-            const preview = instance.getPreview();
-            const anchors = instance.getAnchors();
-            const combined: Array<{ x: number; y: number }> = committed.length > 0 ? [...committed] : [...anchors];
-            if (preview && preview.path.length > 0) {
-              const previewPath = preview.path;
-              if (combined.length > 0) {
-                const lastCommitted = combined[combined.length - 1];
-                const firstPreview = previewPath[0];
-                const previewStart =
-                  lastCommitted && firstPreview && lastCommitted.x === firstPreview.x && lastCommitted.y === firstPreview.y
-                    ? 1
-                    : 0;
-                combined.push(...previewPath.slice(previewStart));
-              } else {
-                combined.push(...previewPath);
-              }
-            }
-            setDraftRoomPoints(combined);
-          });
-        }
-      } else {
-        magneticLassoUnsubscribeRef.current?.();
-        magneticLassoUnsubscribeRef.current = null;
-        magneticLassoRef.current?.reset();
-      }
-      if (tool === 'smartWand') {
-        const raster = sourceImageRef.current;
-        if (raster) {
-          if (!smartWandToolRef.current) {
-            smartWandToolRef.current = new SmartWandTool({ raster, cacheKey: segmentationCacheKey });
-          } else {
-            smartWandToolRef.current.configure({ raster, cacheKey: segmentationCacheKey });
-          }
-        }
-      }
-    },
-    [previewUrl, segmentationCacheKey, selectedRoomTool, updateDraftRoomFromSdf]
-  );
-
-  const handleSelectRoomTool = useCallback(
-    (tool: RoomTool) => {
-      if (tool === 'paintbrush' && isOutliningRoom && outlineToolRef.current === 'paintbrush') {
-        outlineToolRef.current = tool;
-        setSelectedRoomTool(tool);
-        return;
-      }
-      handleStartRoomOutline(tool);
-    },
-    [handleStartRoomOutline, isOutliningRoom]
-  );
-
-  const handleCancelRoomOutline = useCallback(() => {
-    setIsOutliningRoom(false);
-    setIsDrawingRoom(false);
-    setDraftRoomPoints([]);
-    drawingPointsRef.current = [];
-    adjustmentPathRef.current = [];
-    adjustmentPointerIdRef.current = null;
-    paintbrushSdfRef.current = null;
-    paintbrushModeRef.current = 'add';
-    paintbrushLastPointRef.current = null;
-    magneticLassoUnsubscribeRef.current?.();
-    magneticLassoUnsubscribeRef.current = null;
-    magneticLassoRef.current?.reset();
-    smartWandToolRef.current?.setLockedEntranceId(null);
-  }, []);
-
-  const handleFinishRoomOutline = useCallback(() => {
-    if (!isOutliningRoom) return;
-    const sdf = paintbrushSdfRef.current;
-    if (sdf) {
-      const vectorPath = sdfToPath(sdf, {
-        smoothingIterations: 4,
-        smoothingFactor: 0.22,
-        simplifyTolerance: 0.8,
-      });
-      const polygon = vectorPath.points;
-      if (polygon.length >= 3) {
-        finalizeRoomOutline(polygon);
-      } else {
-        handleCancelRoomOutline();
-      }
-      paintbrushSdfRef.current = null;
-      paintbrushLastPointRef.current = null;
-      return;
-    }
-    const activeTool = outlineToolRef.current;
-    if (activeTool === 'smartSnap') {
-      const tool = magneticLassoRef.current;
-      magneticLassoUnsubscribeRef.current?.();
-      magneticLassoUnsubscribeRef.current = null;
-      setIsDrawingRoom(false);
-      if (!tool) {
-        handleCancelRoomOutline();
-        return;
-      }
-      const result = tool.finalize({ smoothingIterations: 2 });
-      drawingPointsRef.current = [];
-      if (result && result.snappedPolygon.length >= 3) {
-        const success = initializeSdfFromPolygon(result.snappedPolygon, { offsetPx: 5 });
-        if (!success) {
-          handleCancelRoomOutline();
-        }
-      } else {
-        handleCancelRoomOutline();
-      }
-      return;
-    }
-    if (activeTool === 'paintbrush') {
-      setIsDrawingRoom(false);
-      handleCancelRoomOutline();
-      return;
-    }
-    const sourcePoints = drawingPointsRef.current.length > 0 ? drawingPointsRef.current : draftRoomPoints;
-    const polygon = sourcePoints.length > 0 ? [...sourcePoints] : [];
-    setIsDrawingRoom(false);
-    drawingPointsRef.current = [];
-    setDraftRoomPoints([]);
-    if (polygon.length >= 3) {
-      finalizeRoomOutline(polygon);
-    } else {
-      handleCancelRoomOutline();
-    }
-  }, [
-    draftRoomPoints,
-    finalizeRoomOutline,
-    handleCancelRoomOutline,
-    initializeSdfFromPolygon,
-    isOutliningRoom,
-  ]);
-
-  const handleAddRoomClick = useCallback(() => {
-    handleStartRoomOutline();
-  }, [handleStartRoomOutline]);
-
-  const handleRoomPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (adjustingRoom) {
-      const room = rooms.find((candidate) => candidate.id === adjustingRoom.roomId);
-      if (!room) {
-        setAdjustingRoom(null);
-        return;
-      }
-      const point = resolveRelativePoint(event.nativeEvent);
-      if (!point) return;
-      event.preventDefault();
-      event.stopPropagation();
-      adjustmentPathRef.current = [point];
-      adjustmentPointerIdRef.current = event.pointerId;
-      if (typeof event.currentTarget.setPointerCapture === 'function') {
-        try {
-          event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-          // ignore capture errors
-        }
-      }
-      const startedInside = pointInPolygon(point, room.polygon);
-      setAdjustingRoom((current) => {
-        if (!current || current.roomId !== room.id) return current;
-        return { ...current, startedInside, isPointerActive: true };
-      });
-      return;
-    }
-    if (!isOutliningRoom) return;
-    event.preventDefault();
-    const point = resolveRelativePoint(event.nativeEvent);
-    if (!point) return;
-    const activeTool = outlineToolRef.current;
-    if (activeTool === 'smartWand') {
-      event.stopPropagation();
-      handleSmartWandSelection(point);
-      return;
-    }
-    if (activeTool === 'smartSnap') {
-      event.stopPropagation();
-      const tool = magneticLassoRef.current;
-      if (!tool) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      drawingPointsRef.current = [];
-      setDraftRoomPoints([]);
-      tool.pointerDown(point);
-      setIsDrawingRoom(true);
-      return;
-    }
-    if (activeTool === 'paintbrush') {
-      event.stopPropagation();
-      const sdf = ensurePaintbrushSdf();
-      if (!sdf) {
-        setIsOutliningRoom(false);
-        return;
-      }
-      const buttons = event.buttons ?? 0;
-      const mode: BrushMode = event.button === 2 || (buttons & 2) === 2 ? 'add' : 'erase';
-      paintbrushModeRef.current = mode;
-      let radius = paintbrushRadiusRef.current;
-      if (!radius || radius <= 0) {
-        radius = Math.max(1, paintbrushRadius || brushSliderRange.min);
-        paintbrushRadiusRef.current = radius;
-      }
-      const currentPoint = { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) };
-      const stroke = [currentPoint];
-      if (mode === 'add') {
-        applyBrushAdd(sdf, stroke, radius);
-      } else {
-        applyBrushErase(sdf, stroke, radius);
-      }
-      paintbrushLastPointRef.current = currentPoint;
-      drawingPointsRef.current = [];
-      updateDraftRoomFromSdf(sdf);
-      setIsDrawingRoom(true);
-      return;
-    }
-    drawingPointsRef.current = [point];
-    setDraftRoomPoints([point]);
-    setIsDrawingRoom(true);
-  };
-
-  const handleRoomClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (isOutliningRoom || isDrawingRoom || adjustingRoom) return;
-    const point = resolveRelativePoint(event.nativeEvent);
-    if (!point) return;
-    let matched: DraftRoom | null = null;
-    for (let index = rooms.length - 1; index >= 0; index -= 1) {
-      const candidate = rooms[index];
-      if (pointInPolygon(point, candidate.polygon)) {
-        matched = candidate;
-        break;
-      }
-    }
-    setActiveRoomId(matched ? matched.id : null);
-  };
-
-  const handleRoomFieldChange = (roomId: string, field: 'name' | 'notes' | 'tagsInput', value: string) => {
-    setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, [field]: value } : room)));
-  };
-
-  const handleRoomVisibilityToggle = (roomId: string, nextValue: boolean) => {
-    setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, isVisible: nextValue } : room)));
-  };
-
-  const handleAutoSnapRoom = (roomId: string) => {
-    setAdjustingRoom((current) => (current && current.roomId === roomId ? null : current));
-    adjustmentPathRef.current = [];
-    adjustmentPointerIdRef.current = null;
-    setRooms((current) =>
-      current.map((room) => {
-        if (room.id !== roomId) return room;
-        const minimumDistance = getPointMinimumDistance(room.tool);
-        let polygon = normalisePolygon(room.polygon, minimumDistance);
-        polygon = vectorizePolygonWithWorker(polygon, room.tool);
-        polygon = normalisePolygon(polygon, minimumDistance);
-        const simplifyTolerance = room.tool === 'smartSnap' ? 0.0015 : room.tool === 'smartWand' ? 0.0025 : 0.0015;
-        polygon = simplifyPolygon(polygon, simplifyTolerance);
-        polygon = normalisePolygon(polygon, minimumDistance);
-        polygon = polygon.map((point) => ({ x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }));
-        return { ...room, polygon };
-      })
-    );
-  };
-
-  const handleRemoveRoom = (roomId: string) => {
-    setRooms((current) => current.filter((room) => room.id !== roomId));
-    setActiveRoomId((current) => (current === roomId ? null : current));
-    setAdjustingRoom((current) => (current && current.roomId === roomId ? null : current));
   };
 
   const handleMarkerChange = (markerId: string, field: keyof DraftMarker, value: string) => {
@@ -1784,8 +321,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
               ...marker,
               [field]: field === 'x' || field === 'y' ? Number(value) : value,
             }
-          : marker
-      )
+          : marker,
+      ),
     );
   };
 
@@ -1807,6 +344,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
     setMarkers((current) => [...current, newMarker]);
     setExpandedMarkerId(newMarker.id);
   };
+
+  const handleRoomsChange = useCallback((nextRooms: DefineRoomDraft[]) => {
+    setRooms(nextRooms);
+  }, []);
 
   const handleContinue = () => {
     if (step < steps.length - 1) {
@@ -1848,36 +389,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
       if (tags.length > 0) {
         metadata.tags = tags;
       }
-      if (rooms.length > 0) {
-        const roomEntries = rooms.map((room) => {
-          const trimmedName = room.name.trim();
-          const trimmedNotes = room.notes.trim();
-          const roomTags = parseTagsInput(room.tagsInput);
-          const entry: Record<string, unknown> = {
-            id: room.id,
-            polygon: room.polygon,
-            isVisible: room.isVisible,
-            tool: room.tool,
-          };
-          if (trimmedName) {
-            entry.name = trimmedName;
-          }
-          if (trimmedNotes) {
-            entry.notes = trimmedNotes;
-          }
-          if (roomTags.length > 0) {
-            entry.tags = roomTags;
-          }
-          return entry;
-        });
-        metadata.rooms = roomEntries;
-        const visibleRoomNames = rooms
-          .filter((room) => room.isVisible)
-          .map((room) => room.name.trim() || room.id);
-        if (visibleRoomNames.length > 0) {
-          metadata.visibleRooms = visibleRoomNames;
-        }
-      }
+
       const response = await apiClient.createMap({
         campaignId: campaign.id,
         name: name.trim(),
@@ -1915,10 +427,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
       const createdRegions: Region[] = [];
       for (const [index, room] of rooms.entries()) {
-        const roomTags = parseTagsInput(room.tagsInput);
         const compiledNotes = [
           room.notes.trim(),
-          roomTags.length > 0 ? `Tags: ${roomTags.join(', ')}` : '',
+          room.tags.length > 0 ? `Tags: ${room.tags.join(', ')}` : '',
           room.isVisible ? 'Visible to players at start.' : '',
         ]
           .filter(Boolean)
@@ -1942,25 +453,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
-      {step === 2 && !USE_NEW_DEFINE_ROOMS && (
-        <WizardSidebar
-          isOutlining={isOutliningRoom}
-          canOutline={Boolean(previewUrl)}
-          onOutlineAction={isOutliningRoom ? handleFinishRoomOutline : handleAddRoomClick}
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
-          canZoomIn={canZoomIn}
-          canZoomOut={canZoomOut}
-          activeTool={selectedRoomTool}
-          onSelectTool={handleSelectRoomTool}
-          toolOptions={ROOM_TOOL_OPTIONS}
-          showBrushSlider={isOutliningRoom && selectedRoomTool === 'paintbrush'}
-          brushRadius={paintbrushRadius}
-          brushMin={brushSliderRange.min}
-          brushMax={brushSliderRange.max}
-          onBrushRadiusChange={handleBrushRadiusChange}
-        />
-      )}
       <header className="border-b border-slate-800/70 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -2019,15 +511,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                     onChange={(event) => {
                       const selected = event.target.files?.[0];
                       if (selected) {
-                        setFile(selected);
+                        handleFileSelected(selected);
                       }
                     }}
                   />
-                  <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Drag & Drop</p>
+                  <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Drag &amp; Drop</p>
                   <h3 className="mt-3 text-2xl font-semibold text-white">Drop your map image here</h3>
                   <p className="mt-2 max-w-xl text-sm text-slate-400">
-                    We accept PNG, JPG, WEBP, and other common image formats. Drop the file or browse your computer to get
-                    started.
+                    We accept PNG, JPG, WEBP, and other common image formats. Drop the file or browse your computer to get started.
                   </p>
                   <button
                     type="button"
@@ -2041,7 +532,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                   <div className="mt-6">
                     <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Preview</p>
                     <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800/70">
-                      <img src={previewUrl} alt="Uploaded map preview" className="max-h-[280px] w-full object-contain" />
+                      <img
+                        src={previewUrl}
+                        alt="Uploaded map preview"
+                        className="max-h-[280px] w-full object-contain"
+                      />
                     </div>
                     {imageDimensions && (
                       <p className="mt-2 text-xs uppercase tracking-[0.4em] text-slate-500">
@@ -2113,478 +608,212 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
                   <div className="flex h-full flex-col gap-4">
                     <div className="flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
                       {previewUrl ? (
-                        <img src={previewUrl} alt="Map preview" className="h-full w-full object-contain" />
+                        <img
+                          src={previewUrl}
+                          alt="Map preview"
+                          className="max-h-full w-full object-contain"
+                        />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center p-4 text-sm text-slate-500">
-                          Upload a map image to see the preview.
-                        </div>
-                      )}
-                    </div>
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 text-xs text-slate-400">
-                      <p className="uppercase tracking-[0.4em] text-slate-500">Campaign</p>
-                      <p className="mt-2 text-sm text-white">{campaign.name}</p>
-                      {imageDimensions && (
-                        <p className="mt-3 text-xs uppercase tracking-[0.4em] text-slate-500">
-                          {imageDimensions.width} × {imageDimensions.height} pixels
+                        <p className="text-xs uppercase tracking-[0.4em] text-slate-500">
+                          Upload a map image to preview it here.
                         </p>
                       )}
-                      {tags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    </div>
+                    <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Tips</p>
+                      <ul className="mt-2 space-y-2 text-xs text-slate-400">
+                        <li>Keep names short but descriptive for quick reference during sessions.</li>
+                        <li>Use notes to capture secrets, traps, or DM-only reminders.</li>
+                        <li>Tags help you filter maps later in the campaign dashboard.</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
-        {step === 2 && (
-          USE_NEW_DEFINE_ROOMS ? (
+          {step === 2 && (
             <div className="flex flex-1 items-center justify-center">
-              <div data-testid="define-rooms-placeholder">Define Rooms (new editor coming soon)</div>
-            </div>
-          ) : (
-            <div className="grid h-full min-h-0 grid-rows-[auto,1fr] gap-6 overflow-hidden">
-              <div className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
-                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
-                <h3 className="mt-1 text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
-                <p className="mt-2 text-xs text-slate-500">
-                  Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to keep
-                  them hidden until you are ready to reveal them.
-                </p>
+              <div className="h-full w-full max-w-6xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+                <DefineRoomsEditor
+                  imageUrl={previewUrl}
+                  imageDimensions={imageDimensions}
+                  rooms={rooms}
+                  onRoomsChange={handleRoomsChange}
+                />
               </div>
-              <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+            </div>
+          )}
+          {step === 3 && (
+            <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
-                ref={roomsMapRef}
+                ref={mapAreaRef}
                 className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-                onPointerDown={handleRoomPointerDown}
-                onClick={handleRoomClick}
               >
                 {previewUrl ? (
                   <>
                     <img
                       src={previewUrl}
-                      alt="Room outlining map preview"
-                      className={
-                        zoomedRoomsDisplayMetrics
-                          ? 'absolute w-full max-h-full select-none'
-                          : 'w-full max-h-full select-none object-contain'
-                      }
-                      style={roomImageStyle}
-                      draggable={false}
+                      alt="Interactive map preview"
+                      className="w-full max-h-full object-contain"
                     />
-                    <svg
-                      className="pointer-events-none absolute w-full max-h-full"
-                      viewBox={`0 0 ${overlayWidth} ${overlayHeight}`}
-                      preserveAspectRatio="xMidYMid meet"
-                      style={roomOverlayStyle}
-                    >
-                      {rooms.map((room) => {
-                        const isActive = room.id === activeRoomId;
-                        const polygonPoints = room.polygon
-                          .map((point) => `${point.x * overlayWidth},${point.y * overlayHeight}`)
-                          .join(' ');
-                        const center = computeCentroid(room.polygon);
-                        const strokeWidth = isActive ? overlayScale * 0.006 : overlayScale * 0.004;
-                        return (
-                          <g key={room.id}>
-                            <polygon
-                              points={polygonPoints}
-                              fill={isActive ? 'rgba(45, 212, 191, 0.28)' : 'rgba(59, 130, 246, 0.22)'}
-                              stroke={isActive ? 'rgba(45, 212, 191, 0.9)' : 'rgba(148, 163, 184, 0.9)'}
-                              strokeWidth={strokeWidth}
-                            />
-                            <text
-                              x={center.x * overlayWidth}
-                              y={center.y * overlayHeight}
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              className="fill-white text-[26px] font-semibold"
-                              opacity={0.9}
-                            >
-                              {room.name || 'Room'}
-                            </text>
-                          </g>
-                        );
-                      })}
-                      {draftRoomPoints.length > 1 && (
-                        <polyline
-                          points={[...draftRoomPoints, draftRoomPoints[0]]
-                            .map((point) => `${point.x * overlayWidth},${point.y * overlayHeight}`)
-                            .join(' ')}
-                          fill="rgba(45, 212, 191, 0.18)"
-                          stroke="rgba(45, 212, 191, 0.8)"
-                          strokeWidth={overlayScale * 0.005}
-                          strokeLinejoin="round"
-                          strokeLinecap="round"
-                        />
-                      )}
-                      {draftRoomPoints.length === 1 && (
-                        <circle
-                          cx={draftRoomPoints[0].x * overlayWidth}
-                          cy={draftRoomPoints[0].y * overlayHeight}
-                          r={overlayScale * 0.012}
-                          fill="rgba(45, 212, 191, 0.8)"
-                        />
-                      )}
-                    </svg>
-                    {isOutliningRoom && (
+                    {markers.map((marker) => (
                       <button
+                        key={marker.id}
                         type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleCancelRoomOutline();
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          setDraggingId(marker.id);
                         }}
-                        className="absolute left-4 top-4 rounded-full border border-rose-400/60 bg-rose-500/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                        style={containerPointToStyle(
+                          normalisedToContainerPoint(
+                            { x: marker.x, y: marker.y },
+                            markerDisplayMetrics,
+                          ),
+                        )}
+                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
                       >
-                        Cancel Outline
+                        {marker.label || 'Marker'}
                       </button>
-                    )}
-                    {isOutliningRoom && !isDrawingRoom && (
-                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <div className="rounded-xl border border-teal-400/50 bg-slate-950/80 px-5 py-4 text-center text-[10px] uppercase tracking-[0.35em] text-teal-100">
-                          {ROOM_TOOL_INSTRUCTIONS[selectedRoomTool]}
-                        </div>
-                      </div>
-                    )}
-                    {activeRoom && (
-                      <div
-                        ref={activeRoomPopoverRef}
-                        className="pointer-events-auto absolute z-20 w-80 max-w-[90%] rounded-2xl border border-teal-400/40 bg-slate-950/95 p-4 shadow-2xl"
-                        style={{
-                          left: activeRoomPopoverPosition?.left,
-                          top: activeRoomPopoverPosition?.top,
-                          visibility: activeRoomPopoverPosition ? 'visible' : 'hidden',
-                        }}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.35em] text-teal-300">Room Details</p>
-                            <h4 className="mt-1 text-sm font-semibold text-white">{activeRoom.name || 'Unnamed Area'}</h4>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleAutoSnapRoom(activeRoom.id)}
-                                className="rounded-full border border-teal-400/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-teal-100 transition hover:bg-teal-400/20"
-                              >
-                                Auto Snap
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleStartRoomAdjustment}
-                                disabled={isAdjustingActiveRoom}
-                                className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                                  isAdjustingActiveRoom
-                                    ? 'border-amber-400/70 bg-amber-500/20 text-amber-200'
-                                    : 'border-teal-400/40 text-teal-100 hover:bg-teal-400/20'
-                                }`}
-                              >
-                                Adjust Boundary
-                              </button>
-                            </div>
-                            {isAdjustingActiveRoom && (
-                              <span className="text-[10px] uppercase tracking-[0.35em] text-amber-200">
-                                Adjusting — drag on the map to refine
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <label className="mt-3 block text-[10px] uppercase tracking-[0.35em] text-slate-400">
-                          Area Name
-                          <input
-                            type="text"
-                            value={activeRoom.name}
-                            onChange={(event) => handleRoomFieldChange(activeRoom.id, 'name', event.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                            placeholder="Hallway A"
-                          />
-                        </label>
-                        <label className="mt-3 block text-[10px] uppercase tracking-[0.35em] text-slate-400">
-                          Tags
-                          <input
-                            type="text"
-                            value={activeRoom.tagsInput}
-                            onChange={(event) => handleRoomFieldChange(activeRoom.id, 'tagsInput', event.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                            placeholder="hallway, treasure, trap"
-                          />
-                        </label>
-                        <label className="mt-3 block text-[10px] uppercase tracking-[0.35em] text-slate-400">
-                          Notes
-                          <textarea
-                            value={activeRoom.notes}
-                            onChange={(event) => handleRoomFieldChange(activeRoom.id, 'notes', event.target.value)}
-                            rows={3}
-                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                            placeholder="Hidden lever opens the passage."
-                          />
-                        </label>
-                        <label className="mt-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.35em] text-slate-400">
-                          <input
-                            type="checkbox"
-                            checked={activeRoom.isVisible}
-                            onChange={(event) => handleRoomVisibilityToggle(activeRoom.id, event.target.checked)}
-                            className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-teal-400 focus:ring-teal-400"
-                          />
-                          Visible to players at start
-                        </label>
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setActiveRoomId(null)}
-                            className="rounded-full border border-slate-700/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-100"
-                          >
-                            Done
-                          </button>
-                        </div>
+                    ))}
+                    {markers.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+                        Add markers from the panel to start placing points of interest.
                       </div>
                     )}
                   </>
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to outline rooms.
+                    Upload a map image to place markers.
                   </div>
                 )}
               </div>
               <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
                 <div className="border-b border-slate-800/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Rooms &amp; Hallways</p>
-                  <h3 className="text-lg font-semibold text-white">Manage hidden areas</h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
+                      <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddMarker}
+                      className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                    >
+                      Add Marker
+                    </button>
+                  </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    Select a region on the map to edit its details, tags, or visibility.
+                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
                   </p>
                 </div>
                 <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
-                  {rooms.map((room) => {
-                    const roomTags = parseTagsInput(room.tagsInput);
-                    const isActive = room.id === activeRoomId;
+                  {markers.map((marker) => {
+                    const isExpanded = expandedMarkerId === marker.id;
                     return (
                       <div
-                        key={room.id}
-                        className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-2 text-sm transition ${
-                          isActive
-                            ? 'border-teal-400/70 bg-teal-500/10 text-teal-100'
-                            : 'border-slate-800/70 bg-slate-950/70 text-slate-300'
+                        key={marker.id}
+                        className={`rounded-2xl border px-4 py-3 transition ${
+                          isExpanded
+                            ? 'border-teal-400/60 bg-slate-950/80'
+                            : 'border-slate-800/70 bg-slate-950/70'
                         }`}
                       >
-                        <div>
-                          <button
-                            type="button"
-                            className="text-left text-sm font-semibold text-white hover:underline"
-                            onClick={() => setActiveRoomId(room.id)}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedMarkerId(isExpanded ? null : marker.id)
+                          }
+                          className="flex w-full items-start justify-between gap-3 text-left"
+                          aria-expanded={isExpanded}
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                              <span>
+                                Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
+                              </span>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className="h-3 w-3 rounded-full border border-slate-700/70"
+                                  style={{ backgroundColor: marker.color || '#facc15' }}
+                                />
+                                <span>{marker.color}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-[10px] uppercase tracking-[0.35em] ${
+                              isExpanded ? 'text-teal-200' : 'text-slate-400'
+                            }`}
                           >
-                            {room.name || 'Unnamed Area'}
-                          </button>
-                          {roomTags.length > 0 && (
-                            <p className="mt-1 text-[11px] uppercase tracking-[0.35em] text-slate-400">
-                              Tags: {roomTags.join(', ')}
-                            </p>
-                          )}
-                          {room.notes && <p className="mt-1 text-xs text-slate-400">{room.notes}</p>}
-                          {room.isVisible && (
-                            <span className="mt-2 inline-flex rounded-full border border-amber-400/60 bg-amber-500/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200">
-                              Visible to players
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em]">
-                          <button
-                            type="button"
-                            onClick={() => setActiveRoomId(room.id)}
-                            className="rounded-full border border-teal-400/60 px-3 py-1 text-teal-100 transition hover:bg-teal-400/20"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRoom(room.id)}
-                            className="rounded-full border border-rose-400/60 px-3 py-1 text-rose-200 transition hover:bg-rose-500/20"
-                          >
-                            Remove
-                          </button>
-                        </div>
+                            {isExpanded ? 'Hide' : 'Edit'}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-3 space-y-3">
+                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                              Label
+                              <input
+                                type="text"
+                                value={marker.label}
+                                onChange={(event) =>
+                                  handleMarkerChange(marker.id, 'label', event.target.value)
+                                }
+                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                placeholder="Secret Door"
+                              />
+                            </label>
+                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                                Notes
+                                <textarea
+                                  value={marker.notes}
+                                  onChange={(event) =>
+                                    handleMarkerChange(marker.id, 'notes', event.target.value)
+                                  }
+                                  rows={2}
+                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  placeholder="Trap trigger, treasure cache, etc."
+                                />
+                              </label>
+                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                                Color
+                                <input
+                                  type="text"
+                                  value={marker.color}
+                                  onChange={(event) =>
+                                    handleMarkerChange(marker.id, 'color', event.target.value)
+                                  }
+                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  placeholder="#facc15"
+                                />
+                              </label>
+                            </div>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMarker(marker.id)}
+                                className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                  {rooms.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-10 text-center text-xs text-slate-500">
-                      Add rooms to control what players can see on the map.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-        )}
-        {step === 3 && (
-          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div
-              ref={mapAreaRef}
-              className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-            >
-              {previewUrl ? (
-                <>
-                  <img src={previewUrl} alt="Interactive map preview" className="w-full max-h-full object-contain" />
-                  {markers.map((marker) => (
-                    <button
-                      key={marker.id}
-                      type="button"
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        setDraggingId(marker.id);
-                      }}
-                      style={containerPointToStyle(
-                        normalisedToContainerPoint({ x: marker.x, y: marker.y }, markerDisplayMetrics)
-                      )}
-                      className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
-                    >
-                      {marker.label || 'Marker'}
-                    </button>
-                  ))}
                   {markers.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                      Add markers from the panel to start placing points of interest.
+                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
+                      No markers yet. Add a marker to start placing points of interest.
                     </div>
                   )}
-                </>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                  Upload a map image to place markers.
                 </div>
-              )}
-            </div>
-            <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-              <div className="border-b border-slate-800/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
-                    <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddMarker}
-                    className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
-                  >
-                    Add Marker
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Create markers and drag them directly onto the map. Use notes to capture quick reminders.
-                </p>
-              </div>
-              <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
-                {markers.map((marker) => {
-                  const isExpanded = expandedMarkerId === marker.id;
-                  return (
-                    <div
-                      key={marker.id}
-                      className={`rounded-2xl border px-4 py-3 transition ${
-                        isExpanded
-                          ? 'border-teal-400/60 bg-slate-950/80'
-                          : 'border-slate-800/70 bg-slate-950/70'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setExpandedMarkerId(isExpanded ? null : marker.id)}
-                        className="flex w-full items-start justify-between gap-3 text-left"
-                        aria-expanded={isExpanded}
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
-                          <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                            <span>
-                              Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
-                            </span>
-                            <span className="flex items-center gap-2">
-                              <span
-                                className="h-3 w-3 rounded-full border border-slate-700/70"
-                                style={{ backgroundColor: marker.color }}
-                                aria-hidden="true"
-                              />
-                              <span>{marker.color}</span>
-                            </span>
-                          </div>
-                        </div>
-                        <span
-                          className={`text-[10px] uppercase tracking-[0.35em] ${
-                            isExpanded ? 'text-teal-200' : 'text-slate-400'
-                          }`}
-                        >
-                          {isExpanded ? 'Hide' : 'Edit'}
-                        </span>
-                      </button>
-                      {isExpanded && (
-                        <div className="mt-3 space-y-3">
-                          <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                            Label
-                            <input
-                              type="text"
-                              value={marker.label}
-                              onChange={(event) => handleMarkerChange(marker.id, 'label', event.target.value)}
-                              className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                              placeholder="Secret Door"
-                            />
-                          </label>
-                          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                              Notes
-                              <textarea
-                                value={marker.notes}
-                                onChange={(event) => handleMarkerChange(marker.id, 'notes', event.target.value)}
-                                rows={2}
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                                placeholder="Trap trigger, treasure cache, etc."
-                              />
-                            </label>
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                              Color
-                              <input
-                                type="text"
-                                value={marker.color}
-                                onChange={(event) => handleMarkerChange(marker.id, 'color', event.target.value)}
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                                placeholder="#facc15"
-                              />
-                            </label>
-                          </div>
-                          <div className="flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveMarker(marker.id)}
-                              className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {markers.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
-                    No markers yet. Add a marker to start placing points of interest.
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </main>
       <footer className="border-t border-slate-800/70 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
