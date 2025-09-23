@@ -577,7 +577,7 @@ describe('smartWand', () => {
 });
 
 describe('computeSignedDistanceField', () => {
-  it('reports positive interior distances and negative exterior distances', () => {
+  it('reports negative interior distances and positive exterior distances', () => {
     const { data, width, height, interior } = maskFixture;
 
     const field = computeSignedDistanceField(data, width, height);
@@ -589,12 +589,73 @@ describe('computeSignedDistanceField', () => {
     const centerX = Math.floor((interior.minX + interior.maxX) / 2);
     const centerY = Math.floor((interior.minY + interior.maxY) / 2);
     const centerIndex = centerY * width + centerX;
-    expect(field.values[centerIndex]).toBeGreaterThan(0);
+    expect(field.values[centerIndex]).toBeLessThan(0);
 
     const outsideIndex = (interior.minY - 2) * width + (interior.minX - 2);
-    expect(field.values[outsideIndex]).toBeLessThan(0);
+    expect(field.values[outsideIndex]).toBeGreaterThan(0);
 
     const boundaryIndex = interior.minY * width + interior.minX;
     expect(Math.abs(field.values[boundaryIndex])).toBeLessThanOrEqual(1 / GRID_SIZE);
+  });
+
+  it('produces a smooth radial gradient for a circular brush mask', () => {
+    const width = 13;
+    const height = 13;
+    const centerX = Math.floor(width / 2);
+    const centerY = Math.floor(height / 2);
+    const radius = 4;
+    const data = new Uint8Array(width * height);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        if (dx * dx + dy * dy <= radius * radius) {
+          data[y * width + x] = 1;
+        }
+      }
+    }
+
+    const field = computeSignedDistanceField(data, width, height);
+
+    const insideValues: number[] = [];
+    const outsideValues: number[] = [];
+    for (let i = 0; i < data.length; i += 1) {
+      if (data[i]) {
+        insideValues.push(field.values[i]);
+      } else {
+        outsideValues.push(field.values[i]);
+      }
+    }
+
+    insideValues.forEach((value) => {
+      expect(value).toBeLessThanOrEqual(1e-6);
+    });
+    outsideValues.forEach((value) => {
+      expect(value).toBeGreaterThanOrEqual(-1e-6);
+    });
+
+    const rightwardSamples: number[] = [];
+    for (let offset = 0; offset <= width - centerX - 1; offset += 1) {
+      const sampleIndex = centerY * width + centerX + offset;
+      rightwardSamples.push(field.values[sampleIndex]);
+    }
+    for (let i = 1; i < rightwardSamples.length; i += 1) {
+      expect(rightwardSamples[i]).toBeGreaterThanOrEqual(rightwardSamples[i - 1] - 1e-6);
+    }
+
+    const leftwardSamples: number[] = [];
+    for (let offset = 0; offset <= centerX; offset += 1) {
+      const sampleIndex = centerY * width + (centerX - offset);
+      leftwardSamples.push(field.values[sampleIndex]);
+    }
+    for (let i = 1; i < leftwardSamples.length; i += 1) {
+      expect(leftwardSamples[i]).toBeGreaterThanOrEqual(leftwardSamples[i - 1] - 1e-6);
+    }
+
+    expect(rightwardSamples[0]).toBeLessThan(0);
+    expect(rightwardSamples[rightwardSamples.length - 1]).toBeGreaterThan(0);
+    expect(leftwardSamples[0]).toBeLessThan(0);
+    expect(leftwardSamples[leftwardSamples.length - 1]).toBeGreaterThan(0);
   });
 });
