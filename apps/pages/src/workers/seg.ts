@@ -1,772 +1,759 @@
-import type { Point, SignedDistanceField } from '../state/defineRoomsStore';
+import type { Bounds } from '../../types/geometry';
+
+export interface RasterPoint {
+  x: number;
+  y: number;
+}
+
+export interface MagicWandOptions {
+  tolerance?: number;
+  contiguous?: boolean;
+  sampleAllLayers?: boolean;
+  antiAlias?: boolean;
+  antiAliasFalloff?: number;
+  connectivity?: 4 | 8;
+}
+
+export interface EdgeEnergyOptions {
+  scales?: number;
+  baseSigma?: number;
+}
+
+export interface BoundaryRefinementOptions {
+  bandSize?: number;
+  edgeThreshold?: number;
+  connectivity?: 4 | 8;
+}
+
+export interface RasterizeFreehandOptions {
+  strokeRadius?: number;
+  closePath?: boolean;
+}
+
+export type RasterLayer = Uint8ClampedArray | Uint8Array | Float32Array;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-const nearlyEqual = (a: number, b: number, epsilon = 1e-5) => Math.abs(a - b) <= epsilon;
+const clamp01 = (value: number) => clamp(value, 0, 1);
 
-const pointKey = (point: Point) => `${point.x.toFixed(5)}:${point.y.toFixed(5)}`;
+const srgbToLinear = (value: number) => {
+  const v = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  return v;
+};
 
-export interface CostLevel {
-  width: number;
-  height: number;
-  data: Float32Array;
-  scale: number;
-}
+const linearToXyz = (r: number, g: number, b: number) => ({
+  x: r * 0.4123907992659595 + g * 0.357584339383878 + b * 0.1804807884018343,
+  y: r * 0.21263900587151036 + g * 0.715168678767756 + b * 0.07219231536073371,
+  z: r * 0.01933081871559182 + g * 0.11919477979462598 + b * 0.9505321522496607,
+});
 
-export interface CostPyramid {
-  width: number;
-  height: number;
-  levels: CostLevel[];
-}
+const xyzToLab = (x: number, y: number, z: number) => {
+  const xn = 0.95047;
+  const yn = 1.0;
+  const zn = 1.08883;
+  const pivot = (value: number) => {
+    const epsilon = 216 / 24389;
+    const kappa = 24389 / 27;
+    return value > epsilon ? Math.cbrt(value) : (kappa * value + 16) / 116;
+  };
+  const fx = pivot(x / xn);
+  const fy = pivot(y / yn);
+  const fz = pivot(z / zn);
+  return {
+    l: 116 * fy - 16,
+    a: 500 * (fx - fy),
+    b: 200 * (fy - fz),
+  };
+};
 
-export interface CostPyramidOptions {
-  levels?: number;
-  smoothIterations?: number;
-}
+export const rgbToLabBatch = (source: RasterLayer, width: number, height: number): Float32Array => {
+  const pixelCount = width * height;
+  if (!pixelCount) {
+    return new Float32Array(0);
+  }
+  const stride = Math.floor(source.length / pixelCount);
+  if (stride < 3) {
+    throw new Error('Source image must contain at least three channels per pixel');
+  }
+  const lab = new Float32Array(pixelCount * 3);
+  for (let i = 0; i < pixelCount; i += 1) {
+    const base = i * stride;
+    const r = clamp(source[base] ?? 0, 0, 255) / 255;
+    const g = clamp(source[base + 1] ?? source[base] ?? 0, 0, 255) / 255;
+    const b = clamp(source[base + 2] ?? source[base] ?? 0, 0, 255) / 255;
+    const lr = srgbToLinear(r);
+    const lg = srgbToLinear(g);
+    const lb = srgbToLinear(b);
+    const xyz = linearToXyz(lr, lg, lb);
+    const labColor = xyzToLab(xyz.x, xyz.y, xyz.z);
+    lab[i * 3] = labColor.l;
+    lab[i * 3 + 1] = labColor.a;
+    lab[i * 3 + 2] = labColor.b;
+  }
+  return lab;
+};
 
-export interface LiveWireOptions {
-  smoothing?: number;
-  allowDiagonals?: boolean;
-}
+const deltaE1976 = (
+  labA: { l: number; a: number; b: number },
+  labB: { l: number; a: number; b: number }
+) => {
+  const dl = labA.l - labB.l;
+  const da = labA.a - labB.a;
+  const db = labA.b - labB.b;
+  return Math.sqrt(dl * dl + da * da + db * db);
+};
 
-export interface SmartWandOptions {
-  tolerance?: number;
-  connectivity?: 4 | 8;
-  minArea?: number;
-  softenEdges?: boolean;
-}
+export const deltaEArray = (
+  labPixels: Float32Array,
+  reference: { l: number; a: number; b: number },
+  output?: Float32Array
+): Float32Array => {
+  if (labPixels.length % 3 !== 0) {
+    throw new Error('LAB pixel buffer must be divisible by 3');
+  }
+  const pixelCount = labPixels.length / 3;
+  const result = output ?? new Float32Array(pixelCount);
+  if (result.length !== pixelCount) {
+    throw new Error('Output buffer length mismatch');
+  }
+  for (let i = 0; i < pixelCount; i += 1) {
+    const l = labPixels[i * 3];
+    const a = labPixels[i * 3 + 1];
+    const b = labPixels[i * 3 + 2];
+    result[i] = deltaE1976({ l, a, b }, reference);
+  }
+  return result;
+};
 
-export interface SmartWandResult {
-  mask: Uint8Array;
-  width: number;
-  height: number;
-  polygon: Point[];
-  bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  seed: Point;
-  area: number;
-}
-
-export interface VectorFitOptions {
-  simplifyTolerance?: number;
-}
-
-const toGrayscale = (source: Uint8ClampedArray | Uint8Array | number[], width: number, height: number) => {
-  const grayscale = new Float32Array(width * height);
-  const hasAlpha = source.length === width * height * 4;
-  for (let i = 0; i < width * height; i += 1) {
-    if (hasAlpha) {
-      const index = i * 4;
-      const r = source[index];
-      const g = source[index + 1];
-      const b = source[index + 2];
-      grayscale[i] = 0.2989 * r + 0.587 * g + 0.114 * b;
-    } else {
-      grayscale[i] = source[i];
-    }
+const toGrayscale = (source: RasterLayer, width: number, height: number): Float32Array => {
+  const pixelCount = width * height;
+  const stride = Math.floor(source.length / Math.max(pixelCount, 1)) || 1;
+  const grayscale = new Float32Array(pixelCount);
+  for (let i = 0; i < pixelCount; i += 1) {
+    const base = i * stride;
+    const r = source[base] ?? 0;
+    const g = source[base + 1] ?? r;
+    const b = source[base + 2] ?? r;
+    grayscale[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
   return grayscale;
 };
 
-const blurField = (data: Float32Array, width: number, height: number, iterations: number) => {
-  if (iterations <= 0) {
-    return data;
+const buildGaussianKernel = (sigma: number) => {
+  const clampedSigma = Math.max(0.25, sigma);
+  const radius = Math.max(1, Math.ceil(clampedSigma * 3));
+  const size = radius * 2 + 1;
+  const kernel = new Float32Array(size);
+  const twoSigmaSq = 2 * clampedSigma * clampedSigma;
+  let sum = 0;
+  for (let i = -radius; i <= radius; i += 1) {
+    const value = Math.exp(-(i * i) / twoSigmaSq);
+    kernel[i + radius] = value;
+    sum += value;
   }
-  const temp = new Float32Array(data.length);
-  for (let iter = 0; iter < iterations; iter += 1) {
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        let total = 0;
-        let count = 0;
-        for (let dy = -1; dy <= 1; dy += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-              continue;
-            }
-            total += data[ny * width + nx];
-            count += 1;
-          }
-        }
-        temp[y * width + x] = total / count;
-      }
-    }
-    data.set(temp);
+  for (let i = 0; i < size; i += 1) {
+    kernel[i] /= sum;
   }
-  return data;
+  return { kernel, radius };
 };
 
-export const buildCostPyramid = (
-  image: Uint8ClampedArray | Uint8Array | number[],
+const gaussianBlur = (
+  source: Float32Array,
   width: number,
   height: number,
-  options?: CostPyramidOptions
-): CostPyramid => {
-  const grayscale = image instanceof Float32Array ? image : toGrayscale(image, width, height);
-  const levels = Math.max(1, Math.round(options?.levels ?? 4));
-  const smoothIterations = Math.max(0, Math.round(options?.smoothIterations ?? 1));
+  sigma: number
+): Float32Array => {
+  if (sigma <= 0) {
+    return source.slice();
+  }
+  const { kernel, radius } = buildGaussianKernel(sigma);
+  const pixelCount = width * height;
+  const horizontal = new Float32Array(pixelCount);
+  const output = new Float32Array(pixelCount);
 
-  const base = new Float32Array(width * height);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const center = grayscale[y * width + x];
-      const right = grayscale[y * width + Math.min(width - 1, x + 1)];
-      const bottom = grayscale[Math.min(height - 1, y + 1) * width + x];
-      const gradientX = right - center;
-      const gradientY = bottom - center;
-      const magnitude = Math.sqrt(gradientX * gradientX + gradientY * gradientY);
-      base[y * width + x] = magnitude;
+      let value = 0;
+      for (let k = -radius; k <= radius; k += 1) {
+        const sampleX = clamp(x + k, 0, width - 1);
+        value += source[y * width + sampleX] * kernel[k + radius];
+      }
+      horizontal[y * width + x] = value;
     }
   }
 
-  blurField(base, width, height, smoothIterations);
+  for (let x = 0; x < width; x += 1) {
+    for (let y = 0; y < height; y += 1) {
+      let value = 0;
+      for (let k = -radius; k <= radius; k += 1) {
+        const sampleY = clamp(y + k, 0, height - 1);
+        value += horizontal[sampleY * width + x] * kernel[k + radius];
+      }
+      output[y * width + x] = value;
+    }
+  }
 
-  const pyramidLevels: CostLevel[] = [{ width, height, data: base, scale: 1 }];
+  return output;
+};
 
-  let currentWidth = width;
-  let currentHeight = height;
-  let previous = base;
-  for (let level = 1; level < levels; level += 1) {
-    const nextWidth = Math.max(1, Math.floor(currentWidth / 2));
-    const nextHeight = Math.max(1, Math.floor(currentHeight / 2));
-    const downsampled = new Float32Array(nextWidth * nextHeight);
-    for (let y = 0; y < nextHeight; y += 1) {
-      for (let x = 0; x < nextWidth; x += 1) {
-        let total = 0;
-        let count = 0;
-        for (let dy = 0; dy < 2; dy += 1) {
-          for (let dx = 0; dx < 2; dx += 1) {
-            const srcX = Math.min(currentWidth - 1, x * 2 + dx);
-            const srcY = Math.min(currentHeight - 1, y * 2 + dy);
-            total += previous[srcY * currentWidth + srcX];
-            count += 1;
+const computeGradientMagnitude = (field: Float32Array, width: number, height: number) => {
+  const gradient = new Float32Array(field.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const left = field[y * width + clamp(x - 1, 0, width - 1)];
+      const right = field[y * width + clamp(x + 1, 0, width - 1)];
+      const top = field[clamp(y - 1, 0, height - 1) * width + x];
+      const bottom = field[clamp(y + 1, 0, height - 1) * width + x];
+      const dx = (right - left) * 0.5;
+      const dy = (bottom - top) * 0.5;
+      gradient[index] = Math.hypot(dx, dy);
+    }
+  }
+  return gradient;
+};
+
+export const edgeEnergyMultiScale = (
+  source: RasterLayer,
+  width: number,
+  height: number,
+  options?: EdgeEnergyOptions
+): Float32Array => {
+  const scales = Math.max(1, Math.round(options?.scales ?? 3));
+  const baseSigma = clamp(options?.baseSigma ?? 0.8, 0.25, 4);
+  const grayscale = toGrayscale(source, width, height);
+  const accum = new Float32Array(grayscale.length);
+  let maxEnergy = 0;
+
+  for (let level = 0; level < scales; level += 1) {
+    const sigma = baseSigma * (level + 1);
+    const smoothed = gaussianBlur(grayscale, width, height, sigma);
+    const gradient = computeGradientMagnitude(smoothed, width, height);
+    for (let i = 0; i < gradient.length; i += 1) {
+      if (gradient[i] > accum[i]) {
+        accum[i] = gradient[i];
+      }
+      if (accum[i] > maxEnergy) {
+        maxEnergy = accum[i];
+      }
+    }
+  }
+
+  if (maxEnergy > 0) {
+    const invMax = 1 / maxEnergy;
+    for (let i = 0; i < accum.length; i += 1) {
+      accum[i] = clamp01(accum[i] * invMax);
+    }
+  }
+
+  return accum;
+};
+
+const pointToPixel = (point: RasterPoint, width: number, height: number) => ({
+  x: clamp(Math.round(point.x * (width - 1)), 0, width - 1),
+  y: clamp(Math.round(point.y * (height - 1)), 0, height - 1),
+});
+
+const ensureLayerArray = (source: RasterLayer | RasterLayer[]) =>
+  Array.isArray(source) ? source : [source];
+
+const neighborOffsets = (width: number, connectivity: 4 | 8) =>
+  connectivity === 8
+    ? [-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1]
+    : [-width, -1, 1, width];
+
+export const magicWandSelect = (
+  source: RasterLayer | RasterLayer[],
+  width: number,
+  height: number,
+  seed: RasterPoint,
+  options?: MagicWandOptions
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  if (!pixelCount) {
+    return new Uint8ClampedArray(0);
+  }
+
+  const layers = ensureLayerArray(source);
+  const labLayers = layers.map((layer) => rgbToLabBatch(layer, width, height));
+
+  const seedPixel = pointToPixel(seed, width, height);
+  const seedIndex = seedPixel.y * width + seedPixel.x;
+  const tolerance = Math.max(options?.tolerance ?? 16, 0.1);
+  const contiguous = options?.contiguous ?? true;
+  const sampleAll = options?.sampleAllLayers ?? false;
+  const antiAlias = options?.antiAlias ?? false;
+  const falloff = Math.max(options?.antiAliasFalloff ?? tolerance * 0.35, 0.001);
+  const connectivity: 4 | 8 = options?.connectivity === 4 ? 4 : 8;
+
+  const seedLabs = labLayers.map((layer) => ({
+    l: layer[seedIndex * 3],
+    a: layer[seedIndex * 3 + 1],
+    b: layer[seedIndex * 3 + 2],
+  }));
+
+  const pixelCountFloat = new Float32Array(pixelCount);
+  const distances = new Float32Array(pixelCount);
+  for (let layerIndex = 0; layerIndex < labLayers.length; layerIndex += 1) {
+    const layerDistances = deltaEArray(labLayers[layerIndex], seedLabs[layerIndex], pixelCountFloat);
+    if (layerIndex === 0) {
+      distances.set(layerDistances);
+    } else if (sampleAll) {
+      for (let i = 0; i < pixelCount; i += 1) {
+        distances[i] += layerDistances[i];
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (sampleAll && labLayers.length > 1) {
+    const inv = 1 / labLayers.length;
+    for (let i = 0; i < pixelCount; i += 1) {
+      distances[i] *= inv;
+    }
+  }
+
+  const effectiveTolerance = Math.max(tolerance, distances[seedIndex]);
+  const maskValues = new Float32Array(pixelCount);
+
+  if (!contiguous) {
+    for (let i = 0; i < pixelCount; i += 1) {
+      const distance = distances[i];
+      if (distance <= effectiveTolerance) {
+        maskValues[i] = 1;
+      } else if (antiAlias && distance <= effectiveTolerance + falloff) {
+        maskValues[i] = Math.max(maskValues[i], clamp01(1 - (distance - effectiveTolerance) / falloff));
+      }
+    }
+  } else {
+    const visited = new Uint8Array(pixelCount);
+    const queue = new Uint32Array(pixelCount);
+    let head = 0;
+    let tail = 0;
+
+    if (distances[seedIndex] <= effectiveTolerance + falloff) {
+      queue[tail++] = seedIndex;
+      visited[seedIndex] = 1;
+      maskValues[seedIndex] = 1;
+    } else {
+      maskValues[seedIndex] = 1;
+    }
+
+    const offsets = neighborOffsets(width, connectivity);
+
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % width;
+      const y = Math.floor(index / width);
+      for (const offset of offsets) {
+        const neighbor = index + offset;
+        if (neighbor < 0 || neighbor >= pixelCount) {
+          continue;
+        }
+        const nx = neighbor % width;
+        const ny = Math.floor(neighbor / width);
+        if (Math.abs(nx - x) > 1 || Math.abs(ny - y) > 1) {
+          continue;
+        }
+        if (visited[neighbor]) {
+          continue;
+        }
+        visited[neighbor] = 1;
+        const distance = distances[neighbor];
+        if (distance <= effectiveTolerance) {
+          maskValues[neighbor] = 1;
+          queue[tail++] = neighbor;
+        } else if (antiAlias && distance <= effectiveTolerance + falloff) {
+          maskValues[neighbor] = Math.max(maskValues[neighbor], clamp01(1 - (distance - effectiveTolerance) / falloff));
+        }
+      }
+    }
+
+    if (antiAlias) {
+      const offsets = neighborOffsets(width, connectivity);
+      for (let index = 0; index < pixelCount; index += 1) {
+        if (maskValues[index] < 1) {
+          continue;
+        }
+        const x = index % width;
+        const y = Math.floor(index / width);
+        for (const offset of offsets) {
+          const neighbor = index + offset;
+          if (neighbor < 0 || neighbor >= pixelCount) {
+            continue;
+          }
+          const nx = neighbor % width;
+          const ny = Math.floor(neighbor / width);
+          if (Math.abs(nx - x) > 1 || Math.abs(ny - y) > 1) {
+            continue;
+          }
+          if (maskValues[neighbor] >= 1) {
+            continue;
+          }
+          const distance = distances[neighbor];
+          if (distance <= effectiveTolerance + falloff) {
+            maskValues[neighbor] = Math.max(
+              maskValues[neighbor],
+              clamp01(1 - (distance - effectiveTolerance) / falloff)
+            );
           }
         }
-        downsampled[y * nextWidth + x] = total / count;
       }
     }
-    blurField(downsampled, nextWidth, nextHeight, Math.max(0, smoothIterations - 1));
-    pyramidLevels.push({ width: nextWidth, height: nextHeight, data: downsampled, scale: 2 ** level });
-    previous = downsampled;
-    currentWidth = nextWidth;
-    currentHeight = nextHeight;
   }
 
-  return { width, height, levels: pyramidLevels };
+  const mask = new Uint8ClampedArray(pixelCount);
+  for (let i = 0; i < pixelCount; i += 1) {
+    mask[i] = Math.round(clamp01(maskValues[i]) * 255);
+  }
+  return mask;
+};
+const drawDisc = (
+  mask: Uint8ClampedArray,
+  width: number,
+  height: number,
+  cx: number,
+  cy: number,
+  radius: number
+) => {
+  const radiusSq = radius * radius;
+  const minX = clamp(Math.floor(cx - radius), 0, width - 1);
+  const maxX = clamp(Math.ceil(cx + radius), 0, width - 1);
+  const minY = clamp(Math.floor(cy - radius), 0, height - 1);
+  const maxY = clamp(Math.ceil(cy + radius), 0, height - 1);
+  for (let y = minY; y <= maxY; y += 1) {
+    const dy = y - cy;
+    for (let x = minX; x <= maxX; x += 1) {
+      const dx = x - cx;
+      if (dx * dx + dy * dy <= radiusSq) {
+        mask[y * width + x] = 255;
+      }
+    }
+  }
 };
 
-class MinHeap {
-  private heap: Array<{ index: number; cost: number }> = [];
-
-  push(node: { index: number; cost: number }) {
-    this.heap.push(node);
-    this.bubbleUp(this.heap.length - 1);
+export const rasterizeFreehandPath = (
+  points: RasterPoint[],
+  width: number,
+  height: number,
+  options?: RasterizeFreehandOptions
+): Uint8ClampedArray => {
+  const mask = new Uint8ClampedArray(width * height);
+  if (points.length === 0) {
+    return mask;
   }
+  const radius = Math.max(options?.strokeRadius ?? 0.004, 0) * Math.max(width, height);
+  const closePath = options?.closePath ?? true;
 
-  pop(): { index: number; cost: number } | undefined {
-    if (this.heap.length === 0) {
-      return undefined;
-    }
-    const top = this.heap[0];
-    const end = this.heap.pop()!;
-    if (this.heap.length > 0) {
-      this.heap[0] = end;
-      this.bubbleDown(0);
-    }
-    return top;
-  }
+  const pixels = points.map((point) => pointToPixel(point, width, height));
+  const segments = closePath && pixels.length > 1 ? pixels.concat([pixels[0]]) : pixels;
 
-  private bubbleUp(index: number) {
-    while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (this.heap[parent].cost <= this.heap[index].cost) {
-        break;
-      }
-      [this.heap[parent], this.heap[index]] = [this.heap[index], this.heap[parent]];
-      index = parent;
+  for (let i = 1; i < segments.length; i += 1) {
+    const start = segments[i - 1];
+    const end = segments[i];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const steps = Math.max(Math.abs(dx), Math.abs(dy)) + 1;
+    for (let step = 0; step <= steps; step += 1) {
+      const t = steps === 0 ? 0 : step / steps;
+      const x = start.x + dx * t;
+      const y = start.y + dy * t;
+      drawDisc(mask, width, height, x, y, Math.max(radius, 0.5));
     }
   }
 
-  private bubbleDown(index: number) {
-    const length = this.heap.length;
-    while (true) {
-      let left = index * 2 + 1;
-      let right = left + 1;
-      let smallest = index;
-      if (left < length && this.heap[left].cost < this.heap[smallest].cost) {
-        smallest = left;
-      }
-      if (right < length && this.heap[right].cost < this.heap[smallest].cost) {
-        smallest = right;
-      }
-      if (smallest === index) {
-        break;
-      }
-      [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]];
-      index = smallest;
-    }
+  if (segments.length === 1) {
+    const point = segments[0];
+    drawDisc(mask, width, height, point.x, point.y, Math.max(radius, 0.5));
   }
 
-  get size() {
-    return this.heap.length;
-  }
-}
+  return mask;
+};
 
-export const traceLiveWire = (
-  pyramid: CostPyramid,
-  start: Point,
-  end: Point,
-  options?: LiveWireOptions
-): Point[] => {
-  const base = pyramid.levels[0];
-  const width = base.width;
-  const height = base.height;
-  const startX = clamp(Math.round(start.x * (width - 1)), 0, width - 1);
-  const startY = clamp(Math.round(start.y * (height - 1)), 0, height - 1);
-  const endX = clamp(Math.round(end.x * (width - 1)), 0, width - 1);
-  const endY = clamp(Math.round(end.y * (height - 1)), 0, height - 1);
-  const startIndex = startY * width + startX;
-  const endIndex = endY * width + endX;
+const floodFillExterior = (mask: Uint8ClampedArray, width: number, height: number) => {
+  const pixelCount = width * height;
+  const visited = new Uint8Array(pixelCount);
+  const queue = new Uint32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
 
-  const allowDiagonals = options?.allowDiagonals ?? true;
-
-  const dist = new Float32Array(width * height);
-  dist.fill(Number.POSITIVE_INFINITY);
-  const prev = new Int32Array(width * height);
-  prev.fill(-1);
-  const visited = new Uint8Array(width * height);
-
-  const heap = new MinHeap();
-  dist[startIndex] = 0;
-  heap.push({ index: startIndex, cost: 0 });
-
-  const directions = allowDiagonals
-    ? [
-        { dx: 1, dy: 0, weight: 1 },
-        { dx: -1, dy: 0, weight: 1 },
-        { dx: 0, dy: 1, weight: 1 },
-        { dx: 0, dy: -1, weight: 1 },
-        { dx: 1, dy: 1, weight: Math.SQRT2 },
-        { dx: -1, dy: 1, weight: Math.SQRT2 },
-        { dx: 1, dy: -1, weight: Math.SQRT2 },
-        { dx: -1, dy: -1, weight: Math.SQRT2 },
-      ]
-    : [
-        { dx: 1, dy: 0, weight: 1 },
-        { dx: -1, dy: 0, weight: 1 },
-        { dx: 0, dy: 1, weight: 1 },
-        { dx: 0, dy: -1, weight: 1 },
-      ];
-
-  while (heap.size) {
-    const node = heap.pop();
-    if (!node) break;
-    const { index, cost } = node;
-    if (visited[index]) continue;
+  const push = (index: number) => {
     visited[index] = 1;
-    if (index === endIndex) break;
+    queue[tail++] = index;
+  };
 
+  for (let x = 0; x < width; x += 1) {
+    const topIndex = x;
+    const bottomIndex = (height - 1) * width + x;
+    if (mask[topIndex] === 0 && !visited[topIndex]) push(topIndex);
+    if (mask[bottomIndex] === 0 && !visited[bottomIndex]) push(bottomIndex);
+  }
+  for (let y = 0; y < height; y += 1) {
+    const leftIndex = y * width;
+    const rightIndex = y * width + (width - 1);
+    if (mask[leftIndex] === 0 && !visited[leftIndex]) push(leftIndex);
+    if (mask[rightIndex] === 0 && !visited[rightIndex]) push(rightIndex);
+  }
+
+  const offsets = [-width, 1, width, -1];
+
+  while (head < tail) {
+    const index = queue[head++];
     const x = index % width;
     const y = Math.floor(index / width);
-    for (const direction of directions) {
-      const nx = x + direction.dx;
-      const ny = y + direction.dy;
-      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-      const neighborIndex = ny * width + nx;
-      if (visited[neighborIndex]) continue;
-      const edgeCost = (base.data[neighborIndex] + base.data[index]) * 0.5 + direction.weight;
-      const nextCost = cost + edgeCost;
-      if (nextCost < dist[neighborIndex]) {
-        dist[neighborIndex] = nextCost;
-        prev[neighborIndex] = index;
-        heap.push({ index: neighborIndex, cost: nextCost });
+    for (const offset of offsets) {
+      const neighbor = index + offset;
+      if (neighbor < 0 || neighbor >= pixelCount) {
+        continue;
       }
+      const nx = neighbor % width;
+      const ny = Math.floor(neighbor / width);
+      if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) {
+        continue;
+      }
+      if (visited[neighbor] || mask[neighbor] !== 0) {
+        continue;
+      }
+      push(neighbor);
     }
   }
 
-  const path: Point[] = [];
-  let current = endIndex;
-  if (prev[current] === -1) {
-    path.push(start, end);
-    return path;
-  }
-  while (current !== -1) {
-    const x = (current % width) / (width - 1 || 1);
-    const y = Math.floor(current / width) / (height - 1 || 1);
-    path.push({ x, y });
-    if (current === startIndex) break;
-    current = prev[current];
-  }
-  path.reverse();
-  return path;
+  return visited;
 };
 
-const colorDistance = (a: [number, number, number], b: [number, number, number]) => {
-  const dr = a[0] - b[0];
-  const dg = a[1] - b[1];
-  const db = a[2] - b[2];
-  return Math.sqrt(dr * dr + dg * dg + db * db);
+export const fillMaskInterior = (
+  mask: Uint8ClampedArray,
+  width: number,
+  height: number,
+  bounds?: Bounds
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  if (!pixelCount) {
+    return new Uint8ClampedArray(0);
+  }
+  const filled = new Uint8ClampedArray(mask);
+  const exterior = floodFillExterior(filled, width, height);
+
+  for (let i = 0; i < pixelCount; i += 1) {
+    if (filled[i] > 0) {
+      filled[i] = 255;
+    } else if (!exterior[i]) {
+      filled[i] = 255;
+    } else {
+      filled[i] = 0;
+    }
+  }
+
+  if (bounds) {
+    const minX = clamp(Math.floor(bounds.minX * width), 0, width - 1);
+    const maxX = clamp(Math.ceil(bounds.maxX * width), 0, width - 1);
+    const minY = clamp(Math.floor(bounds.minY * height), 0, height - 1);
+    const maxY = clamp(Math.ceil(bounds.maxY * height), 0, height - 1);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (x < minX || x > maxX || y < minY || y > maxY) {
+          filled[y * width + x] = 0;
+        }
+      }
+    }
+  }
+
+  return filled;
 };
 
-const marchingSquares = (mask: Uint8Array, width: number, height: number) => {
-  const segments: Array<{ start: Point; end: Point }> = [];
-
-  const edgePoint = (x: number, y: number, edge: 'top' | 'bottom' | 'left' | 'right'): Point => {
-    switch (edge) {
-      case 'top':
-        return { x: x + 0.5, y };
-      case 'bottom':
-        return { x: x + 0.5, y: y + 1 };
-      case 'left':
-        return { x, y: y + 0.5 };
-      case 'right':
-        return { x: x + 1, y: y + 0.5 };
-    }
-  };
-
-  const templates: Record<number, Array<[Point, Point]>> = {
-    0: [],
-    1: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'top')]],
-    2: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')]],
-    3: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'right')]],
-    4: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'bottom')]],
-    5: [
-      [edgePoint(0, 0, 'left'), edgePoint(0, 0, 'bottom')],
-      [edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')],
-    ],
-    6: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'bottom')]],
-    7: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'bottom')]],
-    8: [[edgePoint(0, 0, 'bottom'), edgePoint(0, 0, 'left')]],
-    9: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'bottom')]],
-    10: [
-      [edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')],
-      [edgePoint(0, 0, 'bottom'), edgePoint(0, 0, 'left')],
-    ],
-    11: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'bottom')]],
-    12: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'left')]],
-    13: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')]],
-    14: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'top')]],
-    15: [],
-  };
-
-  for (let y = 0; y < height - 1; y += 1) {
-    for (let x = 0; x < width - 1; x += 1) {
-      const topLeft = mask[y * width + x] > 0;
-      const topRight = mask[y * width + x + 1] > 0;
-      const bottomRight = mask[(y + 1) * width + x + 1] > 0;
-      const bottomLeft = mask[(y + 1) * width + x] > 0;
-      let key = 0;
-      if (topLeft) key |= 1;
-      if (topRight) key |= 2;
-      if (bottomRight) key |= 4;
-      if (bottomLeft) key |= 8;
-      if (key === 0 || key === 15) continue;
-      const template = templates[key];
-      for (const [start, end] of template) {
-        segments.push({
-          start: { x: start.x + x, y: start.y + y },
-          end: { x: end.x + x, y: end.y + y },
-        });
+export const dilateMask = (
+  mask: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius = 1
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  if (!pixelCount) {
+    return new Uint8ClampedArray(0);
+  }
+  const input = new Uint8ClampedArray(mask);
+  const result = new Uint8ClampedArray(pixelCount);
+  const r = Math.max(0, Math.floor(radius));
+  const radiusSq = r * r;
+  if (r === 0) {
+    return input;
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (input[index] === 0) {
+        continue;
+      }
+      const minX = clamp(x - r, 0, width - 1);
+      const maxX = clamp(x + r, 0, width - 1);
+      const minY = clamp(y - r, 0, height - 1);
+      const maxY = clamp(y + r, 0, height - 1);
+      for (let ny = minY; ny <= maxY; ny += 1) {
+        for (let nx = minX; nx <= maxX; nx += 1) {
+          const dx = nx - x;
+          const dy = ny - y;
+          if (dx * dx + dy * dy <= radiusSq) {
+            result[ny * width + nx] = 255;
+          }
+        }
       }
     }
   }
-
-  if (segments.length === 0) {
-    return [] as Point[];
-  }
-
-  const polygon: Point[] = [];
-  const used = new Array(segments.length).fill(false);
-  polygon.push(segments[0].start);
-  polygon.push(segments[0].end);
-  used[0] = true;
-
-  const equals = (a: Point, b: Point) => nearlyEqual(a.x, b.x, 1e-3) && nearlyEqual(a.y, b.y, 1e-3);
-
-  while (polygon.length < 5000) {
-    const current = polygon[polygon.length - 1];
-    let advanced = false;
-    for (let i = 0; i < segments.length; i += 1) {
-      if (used[i]) continue;
-      const segment = segments[i];
-      if (equals(segment.start, current)) {
-        polygon.push(segment.end);
-        used[i] = true;
-        advanced = true;
-        break;
-      }
-      if (equals(segment.end, current)) {
-        polygon.push(segment.start);
-        used[i] = true;
-        advanced = true;
-        break;
-      }
-    }
-    if (!advanced) {
-      break;
-    }
-    if (equals(polygon[polygon.length - 1], polygon[0])) {
-      polygon.pop();
-      break;
-    }
-  }
-
-  return polygon;
-};
-
-const dedupePoints = (points: Point[]) => {
-  const seen = new Set<string>();
-  return points.filter((point) => {
-    const key = pointKey(point);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
-
-const simplifyDouglasPeucker = (points: Point[], tolerance: number) => {
-  if (points.length <= 2) {
-    return points.slice();
-  }
-  const sqTolerance = tolerance * tolerance;
-
-  const sqDistanceToSegment = (p: Point, a: Point, b: Point) => {
-    let x = a.x;
-    let y = a.y;
-    let dx = b.x - x;
-    let dy = b.y - y;
-    if (dx !== 0 || dy !== 0) {
-      const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
-      if (t > 1) {
-        x = b.x;
-        y = b.y;
-      } else if (t > 0) {
-        x += dx * t;
-        y += dy * t;
-      }
-    }
-    dx = p.x - x;
-    dy = p.y - y;
-    return dx * dx + dy * dy;
-  };
-
-  const simplifyStep = (pts: Point[], first: number, last: number, simplified: Point[]) => {
-    let maxSqDist = sqTolerance;
-    let index = -1;
-    for (let i = first + 1; i < last; i += 1) {
-      const sqDist = sqDistanceToSegment(pts[i], pts[first], pts[last]);
-      if (sqDist > maxSqDist) {
-        index = i;
-        maxSqDist = sqDist;
-      }
-    }
-    if (index !== -1) {
-      if (index - first > 1) simplifyStep(pts, first, index, simplified);
-      simplified.push(pts[index]);
-      if (last - index > 1) simplifyStep(pts, index, last, simplified);
-    }
-  };
-
-  const last = points.length - 1;
-  const result = [points[0]];
-  simplifyStep(points, 0, last, result);
-  result.push(points[last]);
   return result;
 };
 
-const maskToPolygon = (
-  mask: Uint8Array,
+export const featherMask = (
+  mask: Uint8ClampedArray,
   width: number,
   height: number,
-  bounds: { minX: number; minY: number; maxX: number; maxY: number }
-) => {
-  const raw = marchingSquares(mask, width, height);
-  if (raw.length === 0) {
-    return [] as Point[];
+  radius = 2
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  if (!pixelCount) {
+    return new Uint8ClampedArray(0);
   }
-  const scaleX = bounds.maxX - bounds.minX || 1;
-  const scaleY = bounds.maxY - bounds.minY || 1;
-  const widthDenominator = width - 1 || 1;
-  const heightDenominator = height - 1 || 1;
-  const polygon = raw.map((point) => ({
-    x: bounds.minX + (point.x / widthDenominator) * scaleX,
-    y: bounds.minY + (point.y / heightDenominator) * scaleY,
-  }));
-  return simplifyDouglasPeucker(dedupePoints(polygon), 0.001);
+  if (radius <= 0) {
+    return new Uint8ClampedArray(mask);
+  }
+  const input = new Float32Array(pixelCount);
+  for (let i = 0; i < pixelCount; i += 1) {
+    input[i] = clamp01(mask[i] / 255);
+  }
+  const sigma = Math.max(radius * 0.5, 0.25);
+  const blurred = gaussianBlur(input, width, height, sigma);
+  const output = new Uint8ClampedArray(pixelCount);
+  for (let i = 0; i < pixelCount; i += 1) {
+    output[i] = Math.round(clamp01(blurred[i]) * 255);
+  }
+  return output;
 };
 
-const computeMaskBounds = (mask: Uint8Array, width: number, height: number) => {
-  let minX = width;
-  let minY = height;
-  let maxX = 0;
-  let maxY = 0;
-  let area = 0;
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (mask[y * width + x]) {
-        area += 1;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (area === 0) {
-    return { bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 }, area: 0 };
-  }
-  return {
-    bounds: {
-      minX: minX / (width - 1 || 1),
-      minY: minY / (height - 1 || 1),
-      maxX: maxX / (width - 1 || 1),
-      maxY: maxY / (height - 1 || 1),
-    },
-    area,
-  };
-};
-
-export const smartWand = (
-  image: Uint8ClampedArray | Uint8Array,
-  width: number,
-  height: number,
-  seed: Point,
-  options?: SmartWandOptions
-): SmartWandResult => {
-  const pixels = width * height;
-  const channels = Math.floor(image.length / pixels);
-  if (channels < 3) {
-    throw new Error('Smart wand requires RGB or RGBA image data');
-  }
-  const stride = channels >= 4 ? 4 : 3;
-  const tolerance = clamp(options?.tolerance ?? 24, 1, 255);
-  const connectivity = options?.connectivity === 4 ? 4 : 8;
-
-  const sx = clamp(Math.round(seed.x * (width - 1)), 0, width - 1);
-  const sy = clamp(Math.round(seed.y * (height - 1)), 0, height - 1);
-  const seedIndex = sy * width + sx;
-  const seedColor: [number, number, number] = [
-    image[seedIndex * stride],
-    image[seedIndex * stride + 1],
-    image[seedIndex * stride + 2],
-  ];
-
-  const visited = new Uint8Array(pixels);
-  const mask = new Uint8Array(pixels);
-  const queue = new Uint32Array(pixels);
-  let head = 0;
-  let tail = 0;
-  queue[tail++] = seedIndex;
-  visited[seedIndex] = 1;
-  mask[seedIndex] = 1;
-
-  const neighborOffsets = connectivity === 8 ? [-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1] : [-width, -1, 1, width];
-
-  while (head < tail) {
-    const currentIndex = queue[head++];
-    const currentColor: [number, number, number] = [
-      image[currentIndex * stride],
-      image[currentIndex * stride + 1],
-      image[currentIndex * stride + 2],
-    ];
-    for (const offset of neighborOffsets) {
-      const neighborIndex = currentIndex + offset;
-      if (neighborIndex < 0 || neighborIndex >= pixels) continue;
-      if (visited[neighborIndex]) continue;
-      const nx = neighborIndex % width;
-      const ny = Math.floor(neighborIndex / width);
-      const cx = currentIndex % width;
-      const cy = Math.floor(currentIndex / width);
-      if (Math.abs(nx - cx) > 1 || Math.abs(ny - cy) > 1) continue;
-      visited[neighborIndex] = 1;
-      const neighborColor: [number, number, number] = [
-        image[neighborIndex * stride],
-        image[neighborIndex * stride + 1],
-        image[neighborIndex * stride + 2],
-      ];
-      const diff = colorDistance(currentColor, neighborColor);
-      const seedDiff = colorDistance(seedColor, neighborColor);
-      if (diff <= tolerance && seedDiff <= tolerance * 1.5) {
-        mask[neighborIndex] = 1;
-        queue[tail++] = neighborIndex;
-      }
-    }
-  }
-
-  if (options?.softenEdges) {
-    const smoothed = new Float32Array(pixels);
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        let total = 0;
-        let count = 0;
-        for (let dy = -1; dy <= 1; dy += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-            total += mask[ny * width + nx];
-            count += 1;
-          }
-        }
-        smoothed[y * width + x] = total / count;
-      }
-    }
-    for (let i = 0; i < pixels; i += 1) {
-      mask[i] = smoothed[i] >= 0.35 ? 1 : 0;
-    }
-  }
-
-  let stats = computeMaskBounds(mask, width, height);
-  const minArea = Math.max(1, Math.round(options?.minArea ?? width * height * 0.0005));
-  if (stats.area < minArea) {
-    mask.fill(0);
-    mask[seedIndex] = 1;
-    stats = computeMaskBounds(mask, width, height);
-  }
-
-  const polygon = maskToPolygon(mask, width, height, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
-  if (polygon.length === 0) {
-    polygon.push({ x: seed.x, y: seed.y });
-  }
-
-  return {
-    mask,
-    width,
-    height,
-    polygon,
-    bounds: stats.bounds,
-    seed,
-    area: stats.area,
-  };
-};
-
-const distanceTransform = (mask: Uint8Array, width: number, height: number, invert: boolean) => {
-  const dist = new Float32Array(width * height);
-  const INF = 1e6;
-  for (let i = 0; i < width * height; i += 1) {
-    const inside = mask[i] > 0;
-    dist[i] = invert ? (inside ? INF : 0) : inside ? 0 : INF;
-  }
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = y * width + x;
-      let value = dist[index];
-      if (x > 0) value = Math.min(value, dist[index - 1] + 1);
-      if (y > 0) value = Math.min(value, dist[index - width] + 1);
-      if (x > 0 && y > 0) value = Math.min(value, dist[index - width - 1] + Math.SQRT2);
-      if (x < width - 1 && y > 0) value = Math.min(value, dist[index - width + 1] + Math.SQRT2);
-      dist[index] = value;
-    }
-  }
-  for (let y = height - 1; y >= 0; y -= 1) {
-    for (let x = width - 1; x >= 0; x -= 1) {
-      const index = y * width + x;
-      let value = dist[index];
-      if (x < width - 1) value = Math.min(value, dist[index + 1] + 1);
-      if (y < height - 1) value = Math.min(value, dist[index + width] + 1);
-      if (x < width - 1 && y < height - 1) value = Math.min(value, dist[index + width + 1] + Math.SQRT2);
-      if (x > 0 && y < height - 1) value = Math.min(value, dist[index + width - 1] + Math.SQRT2);
-      dist[index] = value;
-    }
-  }
-  return dist;
-};
-
-export const computeSignedDistanceField = (
-  mask: Uint8Array,
+export const compositeMax = (
+  masks: ArrayLike<Uint8ClampedArray>,
   width: number,
   height: number
-): SignedDistanceField => {
-  const inside = distanceTransform(mask, width, height, false);
-  const outside = distanceTransform(mask, width, height, true);
-  const values = new Float32Array(width * height);
-  const scale = Math.max(width, height) || 1;
-  for (let i = 0; i < values.length; i += 1) {
-    const outsideDist = Math.sqrt(outside[i]);
-    const insideDist = Math.sqrt(inside[i]);
-    values[i] = (insideDist - outsideDist) / scale;
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  const result = new Uint8ClampedArray(pixelCount);
+  for (let index = 0; index < masks.length; index += 1) {
+    const mask = masks[index];
+    if (mask.length !== pixelCount) {
+      throw new Error('Mask dimensions do not match for composite');
+    }
+    for (let i = 0; i < pixelCount; i += 1) {
+      if (mask[i] > result[i]) {
+        result[i] = mask[i];
+      }
+    }
   }
-  return {
-    width,
-    height,
-    bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
-    values,
-  };
+  return result;
 };
 
-export const fitVectorPath = (
-  mask: Uint8Array,
+const erodeMask = (mask: Uint8ClampedArray, width: number, height: number, radius = 1) => {
+  const pixelCount = width * height;
+  const result = new Uint8ClampedArray(pixelCount);
+  const r = Math.max(0, Math.floor(radius));
+  if (r === 0) {
+    return new Uint8ClampedArray(mask);
+  }
+  const radiusSq = r * r;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let keep = true;
+      const minX = clamp(x - r, 0, width - 1);
+      const maxX = clamp(x + r, 0, width - 1);
+      const minY = clamp(y - r, 0, height - 1);
+      const maxY = clamp(y + r, 0, height - 1);
+      for (let ny = minY; ny <= maxY && keep; ny += 1) {
+        for (let nx = minX; nx <= maxX; nx += 1) {
+          const dx = nx - x;
+          const dy = ny - y;
+          if (dx * dx + dy * dy > radiusSq) {
+            continue;
+          }
+          if (mask[ny * width + nx] === 0) {
+            keep = false;
+            break;
+          }
+        }
+      }
+      if (keep) {
+        result[y * width + x] = 255;
+      }
+    }
+  }
+  return result;
+};
+
+export const refineBoundaryToEdges = (
+  initialMask: Uint8ClampedArray,
   width: number,
   height: number,
-  options?: VectorFitOptions
-): Point[] => {
-  const polygon = maskToPolygon(mask, width, height, { minX: 0, minY: 0, maxX: 1, maxY: 1 });
-  if (polygon.length === 0) {
-    return [];
+  energy: Float32Array,
+  options?: BoundaryRefinementOptions
+): Uint8ClampedArray => {
+  const pixelCount = width * height;
+  if (!pixelCount || energy.length !== pixelCount) {
+    return new Uint8ClampedArray(pixelCount);
   }
-  const tolerance = clamp(options?.simplifyTolerance ?? 0.0025, 0.0001, 0.01);
-  return simplifyDouglasPeucker(polygon, tolerance);
+  const filled = fillMaskInterior(initialMask, width, height);
+  const bandSize = Math.max(1, Math.round(options?.bandSize ?? 8));
+  const allowed = dilateMask(filled, width, height, bandSize);
+  const interiorSeeds = erodeMask(filled, width, height, 1);
+  const visited = new Uint8Array(pixelCount);
+  const result = new Uint8ClampedArray(pixelCount);
+  const queue = new Uint32Array(pixelCount);
+  const offsets = neighborOffsets(width, options?.connectivity === 4 ? 4 : 8);
+  const threshold = clamp01(options?.edgeThreshold ?? 0.35);
+  let head = 0;
+  let tail = 0;
+
+  for (let i = 0; i < pixelCount; i += 1) {
+    if (interiorSeeds[i] > 0) {
+      visited[i] = 1;
+      result[i] = 255;
+      queue[tail++] = i;
+    }
+  }
+
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width;
+    const y = Math.floor(index / width);
+    for (const offset of offsets) {
+      const neighbor = index + offset;
+      if (neighbor < 0 || neighbor >= pixelCount) {
+        continue;
+      }
+      const nx = neighbor % width;
+      const ny = Math.floor(neighbor / width);
+      if (Math.abs(nx - x) > 1 || Math.abs(ny - y) > 1) {
+        continue;
+      }
+      if (visited[neighbor] || allowed[neighbor] === 0) {
+        continue;
+      }
+      visited[neighbor] = 1;
+      if (energy[neighbor] >= threshold) {
+        result[neighbor] = 255;
+      } else {
+        result[neighbor] = 255;
+        queue[tail++] = neighbor;
+      }
+    }
+  }
+
+  return fillMaskInterior(result, width, height);
 };
 
-export class SegmentationWorker {
-  private image: Uint8ClampedArray | Uint8Array | null = null;
-
-  private width = 0;
-
-  private height = 0;
-
-  private pyramid: CostPyramid | null = null;
-
-  constructor(private readonly options?: CostPyramidOptions) {}
-
-  loadImage(image: Uint8ClampedArray | Uint8Array, width: number, height: number) {
-    this.image = image;
-    this.width = width;
-    this.height = height;
-    this.pyramid = buildCostPyramid(image, width, height, this.options);
-  }
-
-  ensureImage() {
-    if (!this.image) {
-      throw new Error('Segmentation worker has no source image loaded');
-    }
-  }
-
-  ensurePyramid() {
-    if (!this.pyramid) {
-      this.ensureImage();
-      this.pyramid = buildCostPyramid(this.image!, this.width, this.height, this.options);
-    }
-  }
-
-  async liveWire(start: Point, end: Point, options?: LiveWireOptions): Promise<Point[]> {
-    this.ensurePyramid();
-    return traceLiveWire(this.pyramid!, start, end, options);
-  }
-
-  async smartWand(seed: Point, options?: SmartWandOptions): Promise<SmartWandResult> {
-    this.ensureImage();
-    return smartWand(this.image!, this.width, this.height, seed, options);
-  }
-
-  async signedDistanceFromMask(mask: Uint8Array): Promise<SignedDistanceField> {
-    if (!this.width || !this.height) {
-      throw new Error('Segmentation worker is missing image dimensions');
-    }
-    return computeSignedDistanceField(mask, this.width, this.height);
-  }
-
-  async vectorFromMask(mask: Uint8Array, options?: VectorFitOptions): Promise<Point[]> {
-    if (!this.width || !this.height) {
-      throw new Error('Segmentation worker is missing image dimensions');
-    }
-    return fitVectorPath(mask, this.width, this.height, options);
-  }
-
-  getCostPyramid(): CostPyramid | null {
-    return this.pyramid;
-  }
-}
-
-export const createSegmentationWorker = (options?: CostPyramidOptions) => new SegmentationWorker(options);
-
+export type SegmentationWorker = {
+  magicWandSelect: typeof magicWandSelect;
+  refineBoundaryToEdges: typeof refineBoundaryToEdges;
+  edgeEnergyMultiScale: typeof edgeEnergyMultiScale;
+  rasterizeFreehandPath: typeof rasterizeFreehandPath;
+  fillMaskInterior: typeof fillMaskInterior;
+  dilateMask: typeof dilateMask;
+  featherMask: typeof featherMask;
+  compositeMax: typeof compositeMax;
+};
