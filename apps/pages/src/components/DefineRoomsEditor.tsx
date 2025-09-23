@@ -1,16 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomMaskManifestEntry } from '../types';
 import type { Point } from '../types/geometry';
-import {
-  applyCircularBrushToMask,
-  cloneRoomMask,
-  createRoomMaskFromPolygon,
-  encodeRoomMaskToDataUrl,
-  emptyRoomMask,
-  roomMaskToPolygon,
-  type RoomMask,
-} from '../utils/roomMask';
+import { cloneRoomMask, encodeRoomMaskToDataUrl, roomMaskToPolygon, type RoomMask } from '../utils/roomMask';
 import { createEmptySelectionState, type SelectionState } from '../state/selection';
+import { defineRoomsStore } from '../state/defineRoomsStore';
+import { createAutoWandTool } from '../tools/defineRooms/AutoWandTool';
+import { createLassoTool } from '../tools/defineRooms/LassoTool';
+import { createPaintbrushTool } from '../tools/defineRooms/PaintbrushTool';
+import { createSmartLassoTool } from '../tools/defineRooms/SmartLassoTool';
+import type { DefineRoomsTool, PointerState, RasterContext, ToolContext } from '../tools/defineRooms/ToolContext';
 
 export interface DefineRoomDraft {
   id: string;
@@ -29,26 +27,6 @@ interface DefineRoomsEditorProps {
   onRoomsChange: (nextRooms: DefineRoomDraft[]) => void;
 }
 
-type EditorTool = 'smartLasso' | 'lasso' | 'autoWand' | 'paintbrush';
-
-type BrushMode = 'add' | 'erase';
-
-interface RoomAuthoringState {
-  mode: 'idle' | 'editing';
-  activeRoomId: string | null;
-  selection: SelectionState;
-  previewMask: RoomMask | null;
-  tool: EditorTool;
-  name: string;
-  notes: string;
-  tags: string[];
-  isVisible: boolean;
-  isDirty: boolean;
-  busyMessage: string | null;
-}
-
-type RoomAuthoringListener = (state: RoomAuthoringState) => void;
-
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const createDraftId = () => {
@@ -58,443 +36,73 @@ const createDraftId = () => {
   return `room-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-const dedupePoints = (points: Point[]) => {
-  const seen = new Set<string>();
-  const result: Point[] = [];
-  for (const point of points) {
-    const key = `${point.x.toFixed(4)}:${point.y.toFixed(4)}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(point);
-    }
-  }
-  return result;
-};
-
-const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
-const computeHull = (input: Point[]) => {
-  const points = dedupePoints(input).sort((p1, p2) => (p1.x === p2.x ? p1.y - p2.y : p1.x - p2.x));
-  if (points.length <= 3) {
-    return points.slice();
-  }
-  const lower: Point[] = [];
-  for (const point of points) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
-      lower.pop();
-    }
-    lower.push(point);
-  }
-  const upper: Point[] = [];
-  for (let i = points.length - 1; i >= 0; i -= 1) {
-    const point = points[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
-      upper.pop();
-    }
-    upper.push(point);
-  }
-  lower.pop();
-  upper.pop();
-  return [...lower, ...upper];
-};
-
-const generateCircularPolygon = (center: Point, radius: number, steps = 16): Point[] => {
-  const points: Point[] = [];
-  for (let i = 0; i < steps; i += 1) {
-    const angle = (i / steps) * Math.PI * 2;
-    points.push({
-      x: clamp(center.x + Math.cos(angle) * radius, 0, 1),
-      y: clamp(center.y + Math.sin(angle) * radius, 0, 1),
-    });
-  }
-  return points;
-};
-
-const strokeToSamples = (stroke: Point[], snapStrength: number) => {
-  if (stroke.length === 0) return [];
-  const step = Math.max(1, Math.round(12 - snapStrength * 8));
-  const sampled: Point[] = [];
-  for (let index = 0; index < stroke.length; index += step) {
-    sampled.push(stroke[index]);
-  }
-  if (sampled[sampled.length - 1] !== stroke[stroke.length - 1]) {
-    sampled.push(stroke[stroke.length - 1]);
-  }
-  return sampled;
-};
-
-class SegmentationService {
-  private imageSize: { width: number; height: number } | null;
-
-  constructor(imageSize: { width: number; height: number } | null) {
-    this.imageSize = imageSize;
-  }
-
-  setImageSize(size: { width: number; height: number } | null) {
-    this.imageSize = size;
-  }
-
-  snapPoint(point: Point, snapStrength: number): Point {
-    if (!this.imageSize) {
-      return { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) };
-    }
-    const resolution = clamp(Math.round(12 + snapStrength * 20), 6, 48);
-    return {
-      x: clamp(Math.round(point.x * resolution) / resolution, 0, 1),
-      y: clamp(Math.round(point.y * resolution) / resolution, 0, 1),
-    };
-  }
-
-  smoothStroke(path: Point[], snapStrength: number) {
-    const sampled = strokeToSamples(path, snapStrength);
-    const snapped = sampled.map((point) => this.snapPoint(point, snapStrength));
-    return computeHull(snapped);
-  }
-
-  async wandSelect(point: Point, selection: SelectionState): Promise<Point[]> {
-    const baseRadius = clamp(selection.brushRadius ?? 0.08, 0.02, 0.5);
-    const toleranceInfluence = clamp(selection.wandTolerance ?? 0.25, 0, 1);
-    const featherInfluence = clamp(selection.selectionFeather ?? 0.015, 0, 0.25);
-    const dilationBoost = selection.dilateBy5px ? 0.02 : 0;
-    const radius = clamp(baseRadius + featherInfluence * 0.75 + dilationBoost, 0.02, 0.45);
-    const steps = Math.max(12, Math.round(18 + toleranceInfluence * 8));
-    const basePolygon = generateCircularPolygon(point, radius, steps);
-    const snapped = basePolygon.map((vertex) => this.snapPoint(vertex, selection.snapStrength));
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    return computeHull([...snapped, this.snapPoint(point, selection.snapStrength)]);
-  }
+interface EditingDraft {
+  id: string;
+  name: string;
+  notes: string;
+  tags: string[];
+  isVisible: boolean;
+  isDirty: boolean;
 }
 
-const buildDefaultState = (): RoomAuthoringState => ({
-  mode: 'idle',
-  activeRoomId: null,
-  selection: { ...createEmptySelectionState(), tool: 'smartLasso' },
-  previewMask: null,
-  tool: 'smartLasso',
-  name: '',
-  notes: '',
-  tags: [],
-  isVisible: true,
-  isDirty: false,
-  busyMessage: null,
+type ToolId = NonNullable<SelectionState['tool']>;
+
+const clampPoint = (point: Point): Point => ({
+  x: clamp(point.x, 0, 1),
+  y: clamp(point.y, 0, 1),
 });
 
-class RoomAuthoringStore {
-  private state: RoomAuthoringState = buildDefaultState();
+const snapPoint = (point: Point, snapStrength: number): Point => {
+  const resolution = clamp(Math.round(12 + snapStrength * 20), 6, 48);
+  return {
+    x: clamp(Math.round(point.x * resolution) / resolution, 0, 1),
+    y: clamp(Math.round(point.y * resolution) / resolution, 0, 1),
+  };
+};
 
-  private listeners = new Set<RoomAuthoringListener>();
+const toPointerState = (event: React.PointerEvent<SVGSVGElement>, point: Point): PointerState => ({
+  point,
+  button: event.button,
+  buttons: event.buttons,
+  pressure: event.pressure,
+  altKey: event.altKey,
+  ctrlKey: event.ctrlKey,
+  metaKey: event.metaKey,
+  shiftKey: event.shiftKey,
+});
 
-  constructor(private segmentation: SegmentationService) {}
-
-  getState() {
-    return this.state;
+const rasterFromImage = (image: HTMLImageElement | null): RasterContext | null => {
+  if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) {
+    return null;
   }
-
-  subscribe(listener: RoomAuthoringListener) {
-    this.listeners.add(listener);
-    listener(this.state);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  private setState(updater: (state: RoomAuthoringState) => RoomAuthoringState) {
-    this.state = updater(this.state);
-    this.listeners.forEach((listener) => listener(this.state));
-  }
-
-  setTool(tool: EditorTool) {
-    this.setState((current) => ({
-      ...current,
-      tool,
-      selection: { ...current.selection, tool },
-    }));
-  }
-
-  setBrushSize(size: number) {
-    const radius = clamp(size, 0.02, 0.5);
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, brushRadius: radius },
-    }));
-  }
-
-  setBrushHardness(hardness: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, brushHardness: clamp(hardness, 0, 1) },
-    }));
-  }
-
-  setWandTolerance(value: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, wandTolerance: clamp(value, 0, 1) },
-    }));
-  }
-
-  setSelectionFeather(value: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, selectionFeather: clamp(value, 0, 0.25) },
-    }));
-  }
-
-  setWandContiguous(enabled: boolean) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, wandContiguous: Boolean(enabled) },
-    }));
-  }
-
-  setWandSampleAllLayers(enabled: boolean) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, wandSampleAllLayers: Boolean(enabled) },
-    }));
-  }
-
-  setWandAntiAlias(enabled: boolean) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, wandAntiAlias: Boolean(enabled) },
-    }));
-  }
-
-  setSmartStickiness(value: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, smartStickiness: clamp(value, 0, 1) },
-    }));
-  }
-
-  setEdgeRefinementWidth(value: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, edgeRefinementWidth: clamp(value, 0.005, 0.25) },
-    }));
-  }
-
-  setDilateBy5px(enabled: boolean) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, dilateBy5px: Boolean(enabled) },
-    }));
-  }
-
-  setSnapStrength(value: number) {
-    this.setState((current) => ({
-      ...current,
-      selection: { ...current.selection, snapStrength: clamp(value, 0, 1) },
-    }));
-  }
-
-  setName(name: string) {
-    this.setState((current) => ({ ...current, name, isDirty: true }));
-  }
-
-  setNotes(notes: string) {
-    this.setState((current) => ({ ...current, notes, isDirty: true }));
-  }
-
-  setTags(tags: string[]) {
-    this.setState((current) => ({ ...current, tags, isDirty: true }));
-  }
-
-  setVisibility(visible: boolean) {
-    this.setState((current) => ({ ...current, isVisible: visible, isDirty: true }));
-  }
-
-  setBusy(message: string | null) {
-    this.setState((current) => ({ ...current, busyMessage: message }));
-  }
-
-  previewPolygon(polygon: Point[] | null) {
-    const mask = polygon && polygon.length >= 3 ? createRoomMaskFromPolygon(polygon) : null;
-    this.setState((current) => ({ ...current, previewMask: mask }));
-  }
-
-  commitPolygon(polygon: Point[]) {
-    this.setState((current) => ({
-      ...current,
-      selection: {
-        ...current.selection,
-        mask: polygon.length >= 3 ? createRoomMaskFromPolygon(polygon) : emptyRoomMask(),
-        lastUpdated: Date.now(),
-      },
-      previewMask: null,
-      isDirty: true,
-    }));
-  }
-
-  reset() {
-    this.setState(() => buildDefaultState());
-  }
-
-  startNewRoom(suggestedName: string) {
-    this.setState(() => ({
-      ...buildDefaultState(),
-      mode: 'editing',
-      activeRoomId: createDraftId(),
-      name: suggestedName,
-      isVisible: true,
-    }));
-  }
-
-  startFromRoom(room: DefineRoomDraft) {
-    this.setState(() => ({
-      mode: 'editing',
-      activeRoomId: room.id,
-      selection: {
-        ...createEmptySelectionState(),
-        tool: 'smartLasso',
-        mask: cloneRoomMask(room.mask),
-      },
-      previewMask: null,
-      tool: 'smartLasso',
-      name: room.name,
-      notes: room.notes,
-      tags: room.tags,
-      isVisible: room.isVisible,
-      isDirty: false,
-      busyMessage: null,
-    }));
-  }
-
-  finish(): DefineRoomDraft | null {
-    const current = this.state;
-    if (!current.activeRoomId || !current.selection.mask) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
       return null;
     }
+    context.drawImage(image, 0, 0);
+    const data = context.getImageData(0, 0, canvas.width, canvas.height);
     return {
-      id: current.activeRoomId,
-      name: current.name || 'Untitled Room',
-      mask: cloneRoomMask(current.selection.mask),
-      maskManifest: {
-        roomId: current.activeRoomId,
-        key: `room-masks/${current.activeRoomId}.png`,
-        dataUrl: encodeRoomMaskToDataUrl(current.selection.mask),
-      },
-      notes: current.notes,
-      tags: current.tags,
-      isVisible: current.isVisible,
+      layers: new Uint8ClampedArray(data.data),
+      width: canvas.width,
+      height: canvas.height,
     };
+  } catch (error) {
+    return null;
   }
-
-  applyBrushMask(point: Point, radius: number, mode: BrushMode) {
-    this.setState((current) => ({
-      ...current,
-      selection: {
-        ...current.selection,
-        mask: applyCircularBrushToMask(
-          current.selection.mask ?? emptyRoomMask(),
-          point,
-          radius,
-          mode,
-          current.selection.brushHardness ?? 1
-        ),
-        lastUpdated: Date.now(),
-      },
-      previewMask: null,
-      isDirty: true,
-    }));
-  }
-}
-
-class SmartLassoModule {
-  private stroke: Point[] = [];
-
-  constructor(private store: RoomAuthoringStore, private segmentation: SegmentationService) {}
-
-  begin(point: Point) {
-    this.stroke = [point];
-    const state = this.store.getState();
-    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
-    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
-    const preview = this.segmentation.smoothStroke(this.stroke, snap);
-    this.store.previewPolygon(preview);
-  }
-
-  update(point: Point) {
-    this.stroke.push(point);
-    const state = this.store.getState();
-    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
-    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
-    const preview = this.segmentation.smoothStroke(this.stroke, snap);
-    this.store.previewPolygon(preview);
-  }
-
-  complete() {
-    if (this.stroke.length < 3) {
-      this.store.previewPolygon(null);
-      this.stroke = [];
-      return;
-    }
-    const state = this.store.getState();
-    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
-    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
-    const polygon = this.segmentation.smoothStroke(this.stroke, snap);
-    this.store.commitPolygon(polygon);
-    this.stroke = [];
-  }
-}
-
-class AutoWandModule {
-  private active = false;
-
-  constructor(private store: RoomAuthoringStore, private segmentation: SegmentationService) {}
-
-  async select(point: Point) {
-    if (this.active) return;
-    this.active = true;
-    const state = this.store.getState();
-    this.store.setBusy('Analyzing region…');
-    try {
-      const polygon = await this.segmentation.wandSelect(point, state.selection);
-      this.store.commitPolygon(polygon);
-    } finally {
-      this.store.setBusy(null);
-      this.active = false;
-    }
-  }
-}
-
-class BrushRefinementModule {
-  constructor(private store: RoomAuthoringStore, private segmentation: SegmentationService) {}
-
-  apply(point: Point, mode: BrushMode) {
-    const state = this.store.getState();
-    const snappedCenter = this.segmentation.snapPoint(point, state.selection.snapStrength);
-    const radius = clamp(state.selection.brushRadius, 0.02, 0.4);
-    this.store.applyBrushMask(snappedCenter, radius, mode);
-  }
-}
-
-interface AuthoringCoordinator {
-  store: RoomAuthoringStore;
-  smartLasso: SmartLassoModule;
-  autoWand: AutoWandModule;
-  brush: BrushRefinementModule;
-  segmentation: SegmentationService;
-}
-
-const useAuthoringCoordinator = (imageDimensions: { width: number; height: number } | null) => {
-  const coordinatorRef = useRef<AuthoringCoordinator | null>(null);
-  if (!coordinatorRef.current) {
-    const segmentation = new SegmentationService(imageDimensions);
-    const store = new RoomAuthoringStore(segmentation);
-    coordinatorRef.current = {
-      store,
-      smartLasso: new SmartLassoModule(store, segmentation),
-      autoWand: new AutoWandModule(store, segmentation),
-      brush: new BrushRefinementModule(store, segmentation),
-      segmentation,
-    };
-  } else {
-    coordinatorRef.current.segmentation.setImageSize(imageDimensions);
-  }
-  return coordinatorRef.current;
 };
+
+const defaultTool: ToolId = 'smartLasso';
+
+const createToolRegistry = (): Record<ToolId, DefineRoomsTool> => ({
+  paintbrush: createPaintbrushTool(),
+  lasso: createLassoTool(),
+  smartLasso: createSmartLassoTool(),
+  autoWand: createAutoWandTool(),
+});
 
 interface ViewportMetrics {
   width: number;
@@ -560,70 +168,154 @@ const polygonToAttribute = (polygon: Point[], metrics: ViewportMetrics | null) =
 
 const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   imageUrl,
-  imageDimensions,
   rooms,
   onRoomsChange,
 }) => {
-  const coordinator = useAuthoringCoordinator(imageDimensions);
-  const [authoringState, setAuthoringState] = useState<RoomAuthoringState>(coordinator.store.getState());
+  const [defineState, setDefineState] = useState(defineRoomsStore.getState());
+  const [draft, setDraft] = useState<EditingDraft | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [metrics, setMetrics] = useState<ViewportMetrics | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isPointerDown, setIsPointerDown] = useState(false);
-  const brushModeRef = useRef<BrushMode | null>(null);
-  const pointerToolRef = useRef<EditorTool | null>(null);
+  const [raster, setRaster] = useState<RasterContext | null>(null);
+  const toolRegistryRef = useRef(createToolRegistry());
+  const toolContextRef = useRef<ToolContext>({
+    store: defineRoomsStore,
+    segmentation: null,
+    raster: null,
+    snap: (point: Point) => clampPoint(point),
+    clamp: clampPoint,
+  });
+  const activeToolRef = useRef<DefineRoomsTool | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
 
-  useEffect(() => coordinator.store.subscribe(setAuthoringState), [coordinator]);
+  useEffect(() => defineRoomsStore.subscribe(setDefineState), []);
 
   useEffect(() => {
-    const updateMetrics = () => {
-      setMetrics(computeViewportMetrics(containerRef.current, imageRef.current));
+    toolContextRef.current = {
+      store: defineRoomsStore,
+      segmentation: null,
+      raster,
+      snap: (point: Point) => snapPoint(point, defineState.selection.snapStrength),
+      clamp: clampPoint,
     };
-    updateMetrics();
-    const observer = new ResizeObserver(updateMetrics);
+  }, [defineState.selection.snapStrength, raster]);
+
+  const refreshViewport = useCallback(() => {
+    setMetrics(computeViewportMetrics(containerRef.current, imageRef.current));
+    setRaster(rasterFromImage(imageRef.current));
+  }, []);
+
+  useEffect(() => {
+    refreshViewport();
+    const observer = new ResizeObserver(refreshViewport);
     if (containerRef.current) {
       observer.observe(containerRef.current);
     }
     return () => {
       observer.disconnect();
     };
-  }, [imageUrl]);
+  }, [refreshViewport, imageUrl]);
+
+  const updateSelection = useCallback((updater: (selection: SelectionState) => SelectionState) => {
+    const current = defineRoomsStore.getState().selection;
+    const next = updater({ ...current });
+    defineRoomsStore.setSelection(next);
+  }, []);
+
+  const startEditing = useCallback(
+    (nextDraft: EditingDraft, mask: RoomMask | null) => {
+      defineRoomsStore.clear();
+      const baseSelection = {
+        ...createEmptySelectionState(),
+        tool: defaultTool,
+        mask: mask ? cloneRoomMask(mask) : null,
+      };
+      defineRoomsStore.setMode('editing');
+      defineRoomsStore.setSelection(baseSelection);
+      defineRoomsStore.setTool(defaultTool);
+      defineRoomsStore.previewMask(null);
+      defineRoomsStore.setBusy(null);
+      setDraft(nextDraft);
+    },
+    [setDraft]
+  );
 
   const handleAddRoom = () => {
     const nextIndex = rooms.length + 1;
-    coordinator.store.startNewRoom(`Room ${nextIndex}`);
+    startEditing(
+      {
+        id: createDraftId(),
+        name: `Room ${nextIndex}`,
+        notes: '',
+        tags: [],
+        isVisible: true,
+        isDirty: false,
+      },
+      null
+    );
   };
 
   const handleFinishRoom = () => {
-    const draft = coordinator.store.finish();
     if (!draft) {
       return;
     }
-    const existingIndex = rooms.findIndex((room) => room.id === draft.id);
+    const current = defineRoomsStore.getState();
+    if (!current.selection.mask) {
+      return;
+    }
+    const mask = cloneRoomMask(current.selection.mask);
+    const finalized: DefineRoomDraft = {
+      id: draft.id,
+      name: draft.name.trim() || 'Untitled Room',
+      mask,
+      maskManifest: {
+        roomId: draft.id,
+        key: `room-masks/${draft.id}.png`,
+        dataUrl: encodeRoomMaskToDataUrl(mask),
+      },
+      notes: draft.notes,
+      tags: draft.tags,
+      isVisible: draft.isVisible,
+    };
+    const existingIndex = rooms.findIndex((room) => room.id === finalized.id);
     const nextRooms = [...rooms];
     if (existingIndex >= 0) {
-      nextRooms[existingIndex] = { ...nextRooms[existingIndex], ...draft };
+      nextRooms[existingIndex] = { ...nextRooms[existingIndex], ...finalized };
     } else {
-      nextRooms.push(draft);
+      nextRooms.push(finalized);
     }
     onRoomsChange(nextRooms);
-    coordinator.store.reset();
+    setDraft(null);
+    defineRoomsStore.clear();
   };
 
   const handleCancelEditing = () => {
-    coordinator.store.reset();
+    setDraft(null);
+    defineRoomsStore.clear();
   };
 
   const handleEditRoom = (room: DefineRoomDraft) => {
-    coordinator.store.startFromRoom(room);
+    startEditing(
+      {
+        id: room.id,
+        name: room.name,
+        notes: room.notes,
+        tags: room.tags.slice(),
+        isVisible: room.isVisible,
+        isDirty: false,
+      },
+      room.mask
+    );
   };
 
   const handleDeleteRoom = (roomId: string) => {
     const nextRooms = rooms.filter((room) => room.id !== roomId);
     onRoomsChange(nextRooms);
-    if (authoringState.activeRoomId === roomId) {
-      coordinator.store.reset();
+    if (draft?.id === roomId) {
+      setDraft(null);
+      defineRoomsStore.clear();
     }
   };
 
@@ -632,8 +324,10 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
       existing.id === room.id ? { ...existing, isVisible: !existing.isVisible } : existing
     );
     onRoomsChange(nextRooms);
-    if (authoringState.activeRoomId === room.id) {
-      coordinator.store.setVisibility(!room.isVisible);
+    if (draft?.id === room.id) {
+      setDraft((current) =>
+        current ? { ...current, isVisible: !room.isVisible, isDirty: true } : current
+      );
     }
   };
 
@@ -645,97 +339,120 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   };
 
   const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!metrics || authoringState.mode !== 'editing') {
+    if (!metrics || defineState.mode !== 'editing') {
       return;
     }
     const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current, zoomLevel);
     if (!point) {
       return;
     }
-    pointerToolRef.current = authoringState.tool;
-    if (authoringState.tool === 'smartLasso' || authoringState.tool === 'lasso') {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      coordinator.smartLasso.begin(point);
-      setIsPointerDown(true);
-    } else if (authoringState.tool === 'autoWand') {
-      event.preventDefault();
-      coordinator.autoWand.select(point);
-    } else if (authoringState.tool === 'paintbrush') {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      const mode: BrushMode = event.button === 2 ? 'add' : 'erase';
-      brushModeRef.current = mode;
-      coordinator.brush.apply(point, mode);
-      setIsPointerDown(true);
+    const toolId = defineState.selection.tool ?? defaultTool;
+    const tool = toolRegistryRef.current[toolId];
+    if (!tool) {
+      return;
     }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerIdRef.current = event.pointerId;
+    activeToolRef.current = tool;
+    setIsPointerDown(true);
+    tool.onPointerDown(toolContextRef.current, toPointerState(event, point));
   };
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!metrics || !isPointerDown || authoringState.mode !== 'editing') {
+    if (!metrics || !isPointerDown || defineState.mode !== 'editing') {
+      return;
+    }
+    const tool = activeToolRef.current;
+    if (!tool) {
       return;
     }
     const point = pointFromEvent(event.nativeEvent, metrics, containerRef.current, zoomLevel);
-    if (!point || !pointerToolRef.current) {
+    if (!point) {
       return;
     }
-    if (pointerToolRef.current === 'smartLasso' || pointerToolRef.current === 'lasso') {
-      coordinator.smartLasso.update(point);
-    } else if (pointerToolRef.current === 'paintbrush' && brushModeRef.current) {
-      coordinator.brush.apply(point, brushModeRef.current);
-    }
-  };
-
-  const endPointerInteraction = () => {
-    if (pointerToolRef.current === 'smartLasso' || pointerToolRef.current === 'lasso') {
-      coordinator.smartLasso.complete();
-    }
-    setIsPointerDown(false);
-    brushModeRef.current = null;
-    pointerToolRef.current = null;
+    tool.onPointerMove(toolContextRef.current, toPointerState(event, point));
   };
 
   const onPointerUp = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!isPointerDown) {
       return;
     }
-    event.preventDefault();
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    endPointerInteraction();
+    const tool = activeToolRef.current;
+    const point = metrics
+      ? pointFromEvent(event.nativeEvent, metrics, containerRef.current, zoomLevel)
+      : null;
+    if (tool && point) {
+      tool.onPointerUp(toolContextRef.current, toPointerState(event, point));
+    } else if (tool?.onCancel) {
+      tool.onCancel(toolContextRef.current);
+    }
+    if (pointerIdRef.current !== null) {
+      event.currentTarget.releasePointerCapture(pointerIdRef.current);
+      pointerIdRef.current = null;
+    }
+    activeToolRef.current = null;
+    setIsPointerDown(false);
   };
 
-  const onPointerLeave = () => {
+  const onPointerLeave = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!isPointerDown) {
       return;
     }
-    endPointerInteraction();
+    const tool = activeToolRef.current;
+    if (tool?.onCancel) {
+      tool.onCancel(toolContextRef.current);
+    }
+    if (pointerIdRef.current !== null) {
+      event.currentTarget.releasePointerCapture(pointerIdRef.current);
+      pointerIdRef.current = null;
+    }
+    activeToolRef.current = null;
+    setIsPointerDown(false);
+  };
+
+  const onPointerCancel = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!isPointerDown) {
+      return;
+    }
+    const tool = activeToolRef.current;
+    if (tool?.onCancel) {
+      tool.onCancel(toolContextRef.current);
+    }
+    if (pointerIdRef.current !== null) {
+      event.currentTarget.releasePointerCapture(pointerIdRef.current);
+      pointerIdRef.current = null;
+    }
+    activeToolRef.current = null;
+    setIsPointerDown(false);
   };
 
   const handleContextMenu = (event: React.MouseEvent) => {
-    if (authoringState.mode === 'editing') {
+    if (defineState.mode === 'editing') {
       event.preventDefault();
     }
   };
 
+  const activeToolId = defineState.selection.tool ?? defaultTool;
   const activePolygon = useMemo(
-    () => (authoringState.selection.mask ? roomMaskToPolygon(authoringState.selection.mask) : []),
-    [authoringState.selection.mask]
+    () => (defineState.selection.mask ? roomMaskToPolygon(defineState.selection.mask) : []),
+    [defineState.selection.mask]
   );
   const polygonPath = useMemo(() => polygonToAttribute(activePolygon, metrics), [activePolygon, metrics]);
   const previewPolygonPoints = useMemo(
-    () => (authoringState.previewMask ? roomMaskToPolygon(authoringState.previewMask) : []),
-    [authoringState.previewMask]
+    () => (defineState.previewMask ? roomMaskToPolygon(defineState.previewMask) : []),
+    [defineState.previewMask]
   );
   const previewPath = useMemo(() => polygonToAttribute(previewPolygonPoints, metrics), [previewPolygonPoints, metrics]);
 
-  const canFinish = authoringState.mode === 'editing' && activePolygon.length >= 3;
+  const canFinish = defineState.mode === 'editing' && draft && activePolygon.length >= 3;
   const zoomDisplay = Math.round(zoomLevel * 100);
   const toolLabel =
-    authoringState.tool === 'smartLasso'
+    activeToolId === 'smartLasso'
       ? 'Smart Lasso'
-      : authoringState.tool === 'autoWand'
+      : activeToolId === 'autoWand'
       ? 'Magic Wand'
-      : authoringState.tool === 'lasso'
+      : activeToolId === 'lasso'
       ? 'Lasso'
       : 'Paintbrush';
 
@@ -747,7 +464,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     }`;
 
   const addRoomButtonClasses = `flex h-12 w-12 items-center justify-center rounded-xl text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-teal-400/60 focus:ring-offset-0 ${
-    authoringState.mode === 'editing'
+    defineState.mode === 'editing'
       ? canFinish
         ? 'bg-emerald-500 hover:bg-emerald-400'
         : 'bg-emerald-500/50 cursor-not-allowed opacity-60'
@@ -755,7 +472,8 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   }`;
 
   const renderToolSettings = () => {
-    if (authoringState.tool === 'paintbrush') {
+    const selection = defineState.selection;
+    if (activeToolId === 'paintbrush') {
       return (
         <>
           <div className="h-px w-full border-b border-slate-800/70" />
@@ -767,14 +485,19 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0.02}
                 max={0.4}
                 step={0.01}
-                value={authoringState.selection.brushRadius}
-                onChange={(event) => coordinator.store.setBrushSize(Number(event.currentTarget.value))}
+                value={selection.brushRadius}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    brushRadius: clamp(Number(event.currentTarget.value), 0.02, 0.4),
+                  }))
+                }
                 className="mt-2 w-full"
                 aria-label="Brush Radius"
               />
             </label>
             <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-              Current radius: {Math.round(authoringState.selection.brushRadius * 100)}% of the image width
+              Current radius: {Math.round(selection.brushRadius * 100)}% of the image width
             </p>
             <label className="mt-4 flex flex-col items-center text-[10px] uppercase tracking-[0.35em] text-slate-500">
               Hardness
@@ -783,21 +506,26 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0}
                 max={1}
                 step={0.05}
-                value={authoringState.selection.brushHardness}
-                onChange={(event) => coordinator.store.setBrushHardness(Number(event.currentTarget.value))}
+                value={selection.brushHardness}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    brushHardness: clamp(Number(event.currentTarget.value), 0, 1),
+                  }))
+                }
                 className="mt-2 w-full"
                 aria-label="Brush Hardness"
               />
             </label>
             <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-              Hardness: {Math.round(authoringState.selection.brushHardness * 100)}%
+              Hardness: {Math.round(selection.brushHardness * 100)}%
             </p>
           </div>
         </>
       );
     }
 
-    if (authoringState.tool === 'autoWand') {
+    if (activeToolId === 'autoWand') {
       return (
         <>
           <div className="h-px w-full border-b border-slate-800/70" />
@@ -808,14 +536,19 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 type="range"
                 min={0}
                 max={1}
-                step={0.01}
-                value={authoringState.selection.wandTolerance}
-                onChange={(event) => coordinator.store.setWandTolerance(Number(event.currentTarget.value))}
+                step={0.05}
+                value={selection.wandTolerance}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    wandTolerance: clamp(Number(event.currentTarget.value), 0, 1),
+                  }))
+                }
                 aria-label="Wand Tolerance"
               />
             </label>
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              {Math.round(authoringState.selection.wandTolerance * 100)}% threshold
+              {Math.round(selection.wandTolerance * 100)}% threshold
             </p>
             <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Feather
@@ -824,13 +557,18 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0}
                 max={0.05}
                 step={0.005}
-                value={authoringState.selection.selectionFeather}
-                onChange={(event) => coordinator.store.setSelectionFeather(Number(event.currentTarget.value))}
+                value={selection.selectionFeather}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    selectionFeather: clamp(Number(event.currentTarget.value), 0, 0.25),
+                  }))
+                }
                 aria-label="Selection Feather"
               />
             </label>
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Feather radius: {(authoringState.selection.selectionFeather * 100).toFixed(1)}% of mask size
+              Feather radius: {(selection.selectionFeather * 100).toFixed(1)}% of mask size
             </p>
             <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Edge Width
@@ -839,21 +577,31 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0.005}
                 max={0.08}
                 step={0.005}
-                value={authoringState.selection.edgeRefinementWidth}
-                onChange={(event) => coordinator.store.setEdgeRefinementWidth(Number(event.currentTarget.value))}
+                value={selection.edgeRefinementWidth}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
+                  }))
+                }
                 aria-label="Edge Width"
               />
             </label>
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge band: {(authoringState.selection.edgeRefinementWidth * 100).toFixed(1)}%
+              Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
             </p>
             <div className="flex flex-col gap-2">
               <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
                 <span>Contiguous</span>
                 <input
                   type="checkbox"
-                  checked={authoringState.selection.wandContiguous}
-                  onChange={(event) => coordinator.store.setWandContiguous(event.currentTarget.checked)}
+                  checked={selection.wandContiguous}
+                  onChange={(event) =>
+                    updateSelection((current) => ({
+                      ...current,
+                      wandContiguous: event.currentTarget.checked,
+                    }))
+                  }
                   aria-label="Contiguous Selection"
                 />
               </label>
@@ -861,8 +609,13 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 <span>Sample all layers</span>
                 <input
                   type="checkbox"
-                  checked={authoringState.selection.wandSampleAllLayers}
-                  onChange={(event) => coordinator.store.setWandSampleAllLayers(event.currentTarget.checked)}
+                  checked={selection.wandSampleAllLayers}
+                  onChange={(event) =>
+                    updateSelection((current) => ({
+                      ...current,
+                      wandSampleAllLayers: event.currentTarget.checked,
+                    }))
+                  }
                   aria-label="Sample All Layers"
                 />
               </label>
@@ -870,8 +623,13 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 <span>Anti-alias</span>
                 <input
                   type="checkbox"
-                  checked={authoringState.selection.wandAntiAlias}
-                  onChange={(event) => coordinator.store.setWandAntiAlias(event.currentTarget.checked)}
+                  checked={selection.wandAntiAlias}
+                  onChange={(event) =>
+                    updateSelection((current) => ({
+                      ...current,
+                      wandAntiAlias: event.currentTarget.checked,
+                    }))
+                  }
                   aria-label="Anti Alias"
                 />
               </label>
@@ -879,8 +637,13 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 <span>+5px dilation</span>
                 <input
                   type="checkbox"
-                  checked={authoringState.selection.dilateBy5px}
-                  onChange={(event) => coordinator.store.setDilateBy5px(event.currentTarget.checked)}
+                  checked={selection.dilateBy5px}
+                  onChange={(event) =>
+                    updateSelection((current) => ({
+                      ...current,
+                      dilateBy5px: event.currentTarget.checked,
+                    }))
+                  }
                   aria-label="Apply five pixel dilation"
                 />
               </label>
@@ -890,7 +653,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
       );
     }
 
-    if (authoringState.tool === 'smartLasso' || authoringState.tool === 'lasso') {
+    if (activeToolId === 'smartLasso' || activeToolId === 'lasso') {
       return (
         <>
           <div className="h-px w-full border-b border-slate-800/70" />
@@ -902,13 +665,18 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0}
                 max={0.05}
                 step={0.005}
-                value={authoringState.selection.selectionFeather}
-                onChange={(event) => coordinator.store.setSelectionFeather(Number(event.currentTarget.value))}
+                value={selection.selectionFeather}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    selectionFeather: clamp(Number(event.currentTarget.value), 0, 0.25),
+                  }))
+                }
                 aria-label="Selection Feather"
               />
             </label>
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Feather radius: {(authoringState.selection.selectionFeather * 100).toFixed(1)}% of mask size
+              Feather radius: {(selection.selectionFeather * 100).toFixed(1)}% of mask size
             </p>
             <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Edge Width
@@ -917,15 +685,20 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 min={0.005}
                 max={0.08}
                 step={0.005}
-                value={authoringState.selection.edgeRefinementWidth}
-                onChange={(event) => coordinator.store.setEdgeRefinementWidth(Number(event.currentTarget.value))}
+                value={selection.edgeRefinementWidth}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    edgeRefinementWidth: clamp(Number(event.currentTarget.value), 0.005, 0.25),
+                  }))
+                }
                 aria-label="Edge Width"
               />
             </label>
             <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Edge band: {(authoringState.selection.edgeRefinementWidth * 100).toFixed(1)}%
+              Edge band: {(selection.edgeRefinementWidth * 100).toFixed(1)}%
             </p>
-            {authoringState.tool === 'smartLasso' && (
+            {activeToolId === 'smartLasso' && (
               <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                 Smart Stickiness
                 <input
@@ -933,23 +706,33 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                   min={0}
                   max={1}
                   step={0.05}
-                  value={authoringState.selection.smartStickiness}
-                  onChange={(event) => coordinator.store.setSmartStickiness(Number(event.currentTarget.value))}
+                  value={selection.smartStickiness}
+                  onChange={(event) =>
+                    updateSelection((current) => ({
+                      ...current,
+                      smartStickiness: clamp(Number(event.currentTarget.value), 0, 1),
+                    }))
+                  }
                   aria-label="Smart Stickiness"
                 />
               </label>
             )}
-            {authoringState.tool === 'smartLasso' && (
+            {activeToolId === 'smartLasso' && (
               <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                Stickiness: {Math.round(authoringState.selection.smartStickiness * 100)}%
+                Stickiness: {Math.round(selection.smartStickiness * 100)}%
               </p>
             )}
             <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
               <span>+5px dilation</span>
               <input
                 type="checkbox"
-                checked={authoringState.selection.dilateBy5px}
-                onChange={(event) => coordinator.store.setDilateBy5px(event.currentTarget.checked)}
+                checked={selection.dilateBy5px}
+                onChange={(event) =>
+                  updateSelection((current) => ({
+                    ...current,
+                    dilateBy5px: event.currentTarget.checked,
+                  }))
+                }
                 aria-label="Apply five pixel dilation"
               />
             </label>
@@ -978,13 +761,13 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
               <div className="flex flex-col items-center gap-3">
                 <button
                   type="button"
-                  onClick={authoringState.mode === 'editing' ? handleFinishRoom : handleAddRoom}
-                  disabled={authoringState.mode === 'editing' && !canFinish}
-                  aria-label={authoringState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
-                  title={authoringState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
+                  onClick={defineState.mode === 'editing' ? handleFinishRoom : handleAddRoom}
+                  disabled={defineState.mode === 'editing' && !canFinish}
+                  aria-label={defineState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
+                  title={defineState.mode === 'editing' ? 'Finish Room' : 'Add Room'}
                   className={addRoomButtonClasses}
                 >
-                  {authoringState.mode === 'editing' ? (
+                  {defineState.mode === 'editing' ? (
                     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M5 13.5L10 18l9-12" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -994,7 +777,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                     </svg>
                   )}
                 </button>
-                {authoringState.mode === 'editing' && (
+                {defineState.mode === 'editing' && (
                   <button
                     type="button"
                     onClick={handleCancelEditing}
@@ -1012,11 +795,11 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
               <div className="flex flex-col items-center gap-3" role="group" aria-label="Editor tools">
                 <button
                   type="button"
-                  onClick={() => coordinator.store.setTool('paintbrush')}
+                  onClick={() => defineRoomsStore.setTool('paintbrush')}
                   aria-label="Paintbrush"
                   title="Paintbrush"
-                  aria-pressed={authoringState.tool === 'paintbrush'}
-                  className={toolButtonClasses(authoringState.tool === 'paintbrush')}
+                  aria-pressed={activeToolId === 'paintbrush'}
+                  className={toolButtonClasses(activeToolId === 'paintbrush')}
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M15.5 3.5L20.5 8.5L11 18c-1.1 1.1-2.6 1.5-3.8.8l-1.4-.7" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
@@ -1025,10 +808,10 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => coordinator.store.setTool('lasso')}
+                  onClick={() => defineRoomsStore.setTool('lasso')}
                   aria-label="Lasso"
-                  aria-pressed={authoringState.tool === 'lasso'}
-                  className={toolButtonClasses(authoringState.tool === 'lasso')}
+                  aria-pressed={activeToolId === 'lasso'}
+                  className={toolButtonClasses(activeToolId === 'lasso')}
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 5c3.6 0 6.5 2.2 6.5 5s-2.9 5-6.5 5-6.5-2.2-6.5-5 2.9-5 6.5-5z" stroke="currentColor" strokeWidth={1.6} />
@@ -1037,10 +820,10 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => coordinator.store.setTool('smartLasso')}
+                  onClick={() => defineRoomsStore.setTool('smartLasso')}
                   aria-label="Smart Lasso"
-                  aria-pressed={authoringState.tool === 'smartLasso'}
-                  className={toolButtonClasses(authoringState.tool === 'smartLasso')}
+                  aria-pressed={activeToolId === 'smartLasso'}
+                  className={toolButtonClasses(activeToolId === 'smartLasso')}
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 5.5c3.3 0 6 2 6 4.5s-2.7 4.5-6 4.5-6-2-6-4.5 2.7-4.5 6-4.5z" stroke="currentColor" strokeWidth={1.6} />
@@ -1050,10 +833,10 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => coordinator.store.setTool('autoWand')}
+                  onClick={() => defineRoomsStore.setTool('autoWand')}
                   aria-label="Magic Wand"
-                  aria-pressed={authoringState.tool === 'autoWand'}
-                  className={toolButtonClasses(authoringState.tool === 'autoWand')}
+                  aria-pressed={activeToolId === 'autoWand'}
+                  className={toolButtonClasses(activeToolId === 'autoWand')}
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M6 18l6-6" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
@@ -1087,7 +870,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                   ref={imageRef}
                   src={imageUrl}
                   alt="Map editor"
-                  onLoad={() => setMetrics(computeViewportMetrics(containerRef.current, imageRef.current))}
+                  onLoad={refreshViewport}
                   className="pointer-events-none h-full w-full select-none object-contain transition-transform duration-200"
                   style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
                 />
@@ -1106,7 +889,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                     onPointerDown={onPointerDown}
                     onPointerMove={onPointerMove}
                     onPointerUp={onPointerUp}
-                    onPointerCancel={onPointerUp}
+                    onPointerCancel={onPointerCancel}
                     onPointerLeave={onPointerLeave}
                     onContextMenu={handleContextMenu}
                   >
@@ -1118,7 +901,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                       <polygon points={polygonPath} fill="rgba(59,130,246,0.2)" stroke="rgba(96,165,250,0.85)" strokeWidth={2} />
                     )}
                     {rooms.map((room) => {
-                      if (!room.isVisible || room.id === authoringState.activeRoomId) {
+                      if (!room.isVisible || room.id === draft?.id) {
                         return null;
                       }
                       const roomPolygon = roomMaskToPolygon(room.mask);
@@ -1138,7 +921,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 )}
               </div>
               <div className="border-t border-slate-800/70 py-3 pr-5 pl-5 text-xs text-slate-400">
-                {authoringState.mode === 'editing' ? (
+                {defineState.mode === 'editing' ? (
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span>
                       Active tool:
@@ -1147,7 +930,10 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                       </span>
                     </span>
                     <div className="flex flex-wrap items-center gap-4 text-slate-500">
-                      <span>{authoringState.busyMessage || 'Right click to add, left click to erase when using the brush.'}</span>
+                      <span>
+                        {defineState.busyMessage ||
+                          'Left click to add, right click or hold Alt/Ctrl to erase when using the brush.'}
+                      </span>
                       <span>Zoom {zoomDisplay}%</span>
                     </div>
                   </div>
@@ -1164,14 +950,18 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
         <div className="flex min-h-0 flex-col gap-4">
           <div className="rounded-3xl border border-slate-800/70 bg-slate-950/70 p-5">
             <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Room Metadata</p>
-            {authoringState.mode === 'editing' ? (
+            {defineState.mode === 'editing' && draft ? (
               <div className="mt-4 space-y-4">
                 <label className="block text-sm text-slate-200">
                   <span className="text-xs uppercase tracking-[0.35em] text-slate-500">Name</span>
                   <input
                     type="text"
-                    value={authoringState.name}
-                    onChange={(event) => coordinator.store.setName(event.target.value)}
+                    value={draft?.name ?? ''}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, name: event.target.value, isDirty: true } : current
+                      )
+                    }
                     className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
                     placeholder="Great Hall"
                   />
@@ -1179,8 +969,12 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 <label className="block text-sm text-slate-200">
                   <span className="text-xs uppercase tracking-[0.35em] text-slate-500">Notes</span>
                   <textarea
-                    value={authoringState.notes}
-                    onChange={(event) => coordinator.store.setNotes(event.target.value)}
+                    value={draft?.notes ?? ''}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, notes: event.target.value, isDirty: true } : current
+                      )
+                    }
                     className="mt-2 min-h-[96px] w-full rounded-xl border border-slate-800/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
                     placeholder="Secret door in the northwest corner"
                   />
@@ -1189,13 +983,19 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                   <span className="text-xs uppercase tracking-[0.35em] text-slate-500">Tags</span>
                   <input
                     type="text"
-                    value={authoringState.tags.join(', ')}
+                    value={draft ? draft.tags.join(', ') : ''}
                     onChange={(event) =>
-                      coordinator.store.setTags(
-                        event.target.value
-                          .split(',')
-                          .map((tag) => tag.trim())
-                          .filter(Boolean)
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              tags: event.target.value
+                                .split(',')
+                                .map((tag) => tag.trim())
+                                .filter(Boolean),
+                              isDirty: true,
+                            }
+                          : current
                       )
                     }
                     className="mt-2 w-full rounded-xl border border-slate-800/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
@@ -1205,8 +1005,12 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 <label className="flex items-center gap-3 text-xs uppercase tracking-[0.35em] text-slate-400">
                   <input
                     type="checkbox"
-                    checked={authoringState.isVisible}
-                    onChange={(event) => coordinator.store.setVisibility(event.currentTarget.checked)}
+                    checked={draft?.isVisible ?? true}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, isVisible: event.currentTarget.checked, isDirty: true } : current
+                      )
+                    }
                     className="h-4 w-4 rounded border border-slate-700 bg-slate-900"
                   />
                   Include room in reveal flow
@@ -1234,7 +1038,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                 </div>
               ) : (
                 rooms.map((room) => {
-                  const isActive = authoringState.activeRoomId === room.id;
+                  const isActive = draft?.id === room.id;
                   const roomPolygon = roomMaskToPolygon(room.mask);
                   return (
                     <div
