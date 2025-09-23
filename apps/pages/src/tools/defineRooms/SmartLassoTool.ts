@@ -1,11 +1,157 @@
-import type { Point } from '../../state/defineRoomsStore';
+import type { Bounds, Point } from '../../types/geometry';
+import type { RoomMask } from '../../utils/roomMask';
+import { useSegmentation } from './segmentationHelpers';
 import type { DefineRoomsTool, PointerState, ToolContext } from './ToolContext';
-
-const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
 
 const clampPoint = (point: Point): Point => ({ x: clamp01(point.x), y: clamp01(point.y) });
+
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const computeBounds = (points: Point[]): Bounds => {
+  if (points.length === 0) {
+    return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  }
+  let minX = points[0].x;
+  let minY = points[0].y;
+  let maxX = points[0].x;
+  let maxY = points[0].y;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return { minX, minY, maxX, maxY };
+};
+
+const expandBounds = (bounds: Bounds, padding: number): Bounds => ({
+  minX: clamp01(bounds.minX - padding),
+  minY: clamp01(bounds.minY - padding),
+  maxX: clamp01(bounds.maxX + padding),
+  maxY: clamp01(bounds.maxY + padding),
+});
+
+const buildFreehandMask = (ctx: ToolContext, points: Point[]): RoomMask | null => {
+  if (points.length < 3) {
+    return null;
+  }
+  const baseBounds = computeBounds(points);
+  const rangeX = baseBounds.maxX - baseBounds.minX;
+  const rangeY = baseBounds.maxY - baseBounds.minY;
+  const padding = Math.max(rangeX, rangeY) * 0.12 + 0.015;
+  const bounds = expandBounds(baseBounds, padding);
+  const widthRatio = bounds.maxX - bounds.minX || 1;
+  const heightRatio = bounds.maxY - bounds.minY || 1;
+  const maxDimension = Math.max(widthRatio, heightRatio) || 1;
+  const baseResolution = 896;
+  const scale = baseResolution / Math.max(maxDimension, 0.02);
+  const width = Math.max(48, Math.min(1200, Math.round(Math.max(widthRatio, 0.02) * scale)));
+  const height = Math.max(48, Math.min(1200, Math.round(Math.max(heightRatio, 0.02) * scale)));
+  const localPoints = points.map((point) => ({
+    x: clamp01((point.x - bounds.minX) / widthRatio),
+    y: clamp01((point.y - bounds.minY) / heightRatio),
+  }));
+  const strokeRadius = Math.max(1 / Math.max(width, height), 0.0025);
+  const boundary = useSegmentation(ctx.segmentation, 'rasterizeFreehandPath', localPoints, width, height, {
+    strokeRadius,
+    closePath: true,
+  });
+  const filled = useSegmentation(ctx.segmentation, 'fillMaskInterior', boundary, width, height);
+  return {
+    width,
+    height,
+    bounds,
+    data: filled,
+  };
+};
+
+interface EnergyContext {
+  data: Float32Array;
+  width: number;
+  height: number;
+}
+
+const getEnergyContext = (ctx: ToolContext): EnergyContext | null => {
+  if (!ctx.raster) {
+    return null;
+  }
+  if (ctx.raster.edgeEnergy && ctx.raster.edgeEnergy.length === ctx.raster.width * ctx.raster.height) {
+    return {
+      data: ctx.raster.edgeEnergy,
+      width: ctx.raster.width,
+      height: ctx.raster.height,
+    };
+  }
+  if (!ctx.segmentation) {
+    return null;
+  }
+  const layers = Array.isArray(ctx.raster.layers) ? ctx.raster.layers : [ctx.raster.layers];
+  const source = layers[0];
+  if (!source) {
+    return null;
+  }
+  const energy = useSegmentation(ctx.segmentation, 'edgeEnergyMultiScale', source, ctx.raster.width, ctx.raster.height, {
+    scales: 3,
+    baseSigma: 0.8,
+  });
+  return { data: energy, width: ctx.raster.width, height: ctx.raster.height };
+};
+
+const sampleEnergyForMask = (mask: RoomMask, context: EnergyContext): Float32Array => {
+  const result = new Float32Array(mask.width * mask.height);
+  const { bounds } = mask;
+  const scaleX = bounds.maxX - bounds.minX || 1;
+  const scaleY = bounds.maxY - bounds.minY || 1;
+  const maxX = context.width - 1;
+  const maxY = context.height - 1;
+  for (let y = 0; y < mask.height; y += 1) {
+    const v = bounds.minY + ((y + 0.5) / mask.height) * scaleY;
+    const sourceY = clamp01(v) * maxY;
+    const y0 = Math.floor(sourceY);
+    const y1 = Math.min(maxY, y0 + 1);
+    const wy = sourceY - y0;
+    for (let x = 0; x < mask.width; x += 1) {
+      const u = bounds.minX + ((x + 0.5) / mask.width) * scaleX;
+      const sourceX = clamp01(u) * maxX;
+      const x0 = Math.floor(sourceX);
+      const x1 = Math.min(maxX, x0 + 1);
+      const wx = sourceX - x0;
+      const i00 = context.data[y0 * context.width + x0];
+      const i10 = context.data[y0 * context.width + x1];
+      const i01 = context.data[y1 * context.width + x0];
+      const i11 = context.data[y1 * context.width + x1];
+      const top = i00 * (1 - wx) + i10 * wx;
+      const bottom = i01 * (1 - wx) + i11 * wx;
+      result[y * mask.width + x] = top * (1 - wy) + bottom * wy;
+    }
+  }
+  return result;
+};
+
+const refineMask = (ctx: ToolContext, mask: RoomMask, energyContext: EnergyContext | null): RoomMask => {
+  let refined = mask.data;
+  if (energyContext) {
+    const sampled = sampleEnergyForMask(mask, energyContext);
+    refined = useSegmentation(
+      ctx.segmentation,
+      'refineBoundaryToEdges',
+      mask.data,
+      mask.width,
+      mask.height,
+      sampled,
+      {
+        bandSize: Math.max(4, Math.round(Math.max(mask.width, mask.height) * 0.02)),
+        edgeThreshold: 0.35,
+        connectivity: 8,
+      },
+    );
+  }
+  const featherRadius = Math.max(1, Math.round(Math.max(mask.width, mask.height) * 0.01));
+  const feathered = useSegmentation(ctx.segmentation, 'featherMask', refined, mask.width, mask.height, featherRadius);
+  return { ...mask, data: feathered };
+};
 
 export class SmartLassoTool implements DefineRoomsTool {
   readonly id = 'smartLasso';
@@ -14,7 +160,7 @@ export class SmartLassoTool implements DefineRoomsTool {
 
   private rawPoints: Point[] = [];
 
-  private requestId = 0;
+  private energy: EnergyContext | null = null;
 
   onPointerDown(ctx: ToolContext, pointer: PointerState) {
     if (pointer.button !== undefined && pointer.button !== 0) {
@@ -23,8 +169,8 @@ export class SmartLassoTool implements DefineRoomsTool {
     const start = clampPoint(ctx.snap(ctx.clamp(pointer.point)));
     this.active = true;
     this.rawPoints = [start];
-    this.requestId += 1;
-    ctx.store.previewPolygon([start]);
+    this.energy = getEnergyContext(ctx);
+    ctx.store.previewMask(null);
   }
 
   onPointerMove(ctx: ToolContext, pointer: PointerState) {
@@ -42,7 +188,10 @@ export class SmartLassoTool implements DefineRoomsTool {
         this.rawPoints[this.rawPoints.length - 1] = point;
       }
     }
-    this.updatePreview(ctx);
+    const preview = buildFreehandMask(ctx, this.rawPoints);
+    if (preview) {
+      ctx.store.previewMask(refineMask(ctx, preview, null));
+    }
   }
 
   onPointerUp(ctx: ToolContext, pointer: PointerState) {
@@ -55,111 +204,33 @@ export class SmartLassoTool implements DefineRoomsTool {
     } else {
       this.rawPoints[this.rawPoints.length - 1] = end;
     }
+    const mask = buildFreehandMask(ctx, this.rawPoints);
     this.active = false;
-    const request = ++this.requestId;
-    const finalize = (path: Point[]) => {
-      if (this.requestId !== request) {
-        return;
+    this.rawPoints = [];
+    ctx.store.previewMask(null);
+    if (!mask) {
+      return;
+    }
+    if (this.energy) {
+      ctx.store.setBusy('Refining edges…');
+    }
+    try {
+      const refined = refineMask(ctx, mask, this.energy);
+      ctx.store.commitMask(refined);
+    } finally {
+      if (this.energy) {
+        ctx.store.setBusy(null);
       }
-      if (path.length >= 3) {
-        ctx.store.commitPolygon(path);
-      } else {
-        ctx.store.previewPolygon(null);
-      }
-      ctx.store.setBusy(null);
-      this.rawPoints = [];
-    };
-
-    if (ctx.segmentation && this.rawPoints.length >= 2) {
-      const samples = this.samplePoints(ctx);
-      ctx.store.setBusy('Tracing live-wire…');
-      this.computeLiveWire(ctx, samples)
-        .then((path) => finalize(path))
-        .catch(() => finalize(samples));
-    } else {
-      finalize(this.rawPoints.slice());
+      this.energy = null;
     }
   }
 
   onCancel(ctx: ToolContext) {
-    this.requestId += 1;
     this.active = false;
     this.rawPoints = [];
+    this.energy = null;
     ctx.store.setBusy(null);
-    ctx.store.previewPolygon(null);
-  }
-
-  private updatePreview(ctx: ToolContext) {
-    ctx.store.previewPolygon(this.rawPoints.slice());
-    if (!ctx.segmentation || this.rawPoints.length < 2) {
-      return;
-    }
-    const samples = this.samplePoints(ctx);
-    const request = ++this.requestId;
-    ctx.store.setBusy('Tracing live-wire…');
-    this.computeLiveWire(ctx, samples)
-      .then((path) => {
-        if (this.requestId !== request) {
-          return;
-        }
-        ctx.store.previewPolygon(path);
-        ctx.store.setBusy(null);
-      })
-      .catch(() => {
-        if (this.requestId === request) {
-          ctx.store.setBusy(null);
-        }
-      });
-  }
-
-  private samplePoints(ctx: ToolContext) {
-    const spacing = Math.max(0.01, ctx.store.getState().brushRadius * 0.75);
-    const samples: Point[] = [];
-    for (const point of this.rawPoints) {
-      if (!samples.length) {
-        samples.push(point);
-        continue;
-      }
-      const last = samples[samples.length - 1];
-      if (distance(last, point) >= spacing) {
-        samples.push(point);
-      }
-    }
-    const lastPoint = this.rawPoints[this.rawPoints.length - 1];
-    if (samples.length === 0) {
-      samples.push(lastPoint);
-    } else if (distance(samples[samples.length - 1], lastPoint) > 0) {
-      samples.push(lastPoint);
-    }
-    return samples;
-  }
-
-  private async computeLiveWire(ctx: ToolContext, samples: Point[]): Promise<Point[]> {
-    if (!ctx.segmentation) {
-      return samples;
-    }
-    const result: Point[] = [];
-    for (let i = 0; i < samples.length; i += 1) {
-      const point = samples[i];
-      if (i === 0) {
-        result.push(point);
-        continue;
-      }
-      try {
-        const segment = await ctx.segmentation.liveWire(samples[i - 1], point);
-        if (segment.length === 0) {
-          result.push(point);
-        } else {
-          if (result.length) {
-            result.pop();
-          }
-          result.push(...segment);
-        }
-      } catch (_error) {
-        result.push(point);
-      }
-    }
-    return result;
+    ctx.store.previewMask(null);
   }
 }
 
