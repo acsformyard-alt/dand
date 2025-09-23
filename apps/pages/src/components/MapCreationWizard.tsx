@@ -633,8 +633,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="h-full w-full max-w-6xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+            <div className="flex flex-1 min-h-0">
+              <div className="flex h-full w-full min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
                 <DefineRoomsEditor
                   imageUrl={previewUrl}
                   imageDimensions={imageDimensions}
