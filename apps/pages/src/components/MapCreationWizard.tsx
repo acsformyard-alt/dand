@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { USE_NEW_DEFINE_ROOMS } from './mapCreationWizardConfig';
 import { apiClient } from '../api/client';
 import {
   buildEdgeMap,
@@ -1941,7 +1942,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
-      {step === 2 && (
+      {step === 2 && !USE_NEW_DEFINE_ROOMS && (
         <WizardSidebar
           isOutlining={isOutliningRoom}
           canOutline={Boolean(previewUrl)}
@@ -2146,16 +2147,21 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
             </div>
           )}
         {step === 2 && (
-          <div className="grid h-full min-h-0 grid-rows-[auto,1fr] gap-6 overflow-hidden">
-            <div className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
-              <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
-              <h3 className="mt-1 text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
-              <p className="mt-2 text-xs text-slate-500">
-                Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to keep
-                them hidden until you are ready to reveal them.
-              </p>
+          USE_NEW_DEFINE_ROOMS ? (
+            <div className="flex flex-1 items-center justify-center">
+              <div data-testid="define-rooms-placeholder">Define Rooms (new editor coming soon)</div>
             </div>
-            <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          ) : (
+            <div className="grid h-full min-h-0 grid-rows-[auto,1fr] gap-6 overflow-hidden">
+              <div className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5">
+                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Fog of War</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Define Rooms &amp; Hallways</h3>
+                <p className="mt-2 text-xs text-slate-500">
+                  Outline rooms, corridors, and secret spaces with the lasso, smart snap, paintbrush, or smart wand tools to keep
+                  them hidden until you are ready to reveal them.
+                </p>
+              </div>
+              <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div
                 ref={roomsMapRef}
                 className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
@@ -2421,6 +2427,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({ campaign, onClose
               </div>
             </div>
           </div>
+        )
         )}
         {step === 3 && (
           <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
