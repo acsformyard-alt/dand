@@ -294,11 +294,12 @@ describe('DefineRoomsEditor room authoring', () => {
     expect(call).toBeDefined();
     const roomsArg = call?.[0];
     expect(Array.isArray(roomsArg)).toBe(true);
-    const rooms = roomsArg as Array<{ polygon: Array<{ x: number; y: number }> }>;
+    const rooms = roomsArg as Array<{ mask: { data: Uint8ClampedArray }; maskManifest: { dataUrl: string } }>;
     expect(rooms).toHaveLength(1);
     const room = rooms[0];
     expect(room).toBeDefined();
-    expect(room.polygon.length).toBeGreaterThan(0);
+    expect(room.mask.data.some((value) => value > 0)).toBe(true);
+    expect(room.maskManifest.dataUrl).toMatch(/^data:image\/png;base64,/);
 
     const addRoomButton = await screen.findByRole('button', { name: /add room/i });
     expect(addRoomButton).toBeInTheDocument();

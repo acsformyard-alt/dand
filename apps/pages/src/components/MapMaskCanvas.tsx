@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Marker, Region } from '../types';
+import { roomMaskToPolygon } from '../utils/roomMask';
 
 interface MapMaskCanvasProps {
   imageUrl?: string | null;
@@ -49,6 +50,21 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [hoverRegion, setHoverRegion] = useState<string | null>(null);
   const resolvedMarkers = useMemo(() => normaliseMarkers(markers), [markers]);
+  const regionPolygons = useMemo(
+    () =>
+      regions.map((region) => ({
+        region,
+        polygon: roomMaskToPolygon(region.mask),
+      })),
+    [regions]
+  );
+  const polygonById = useMemo(() => {
+    const map = new Map<string, Array<{ x: number; y: number }>>();
+    for (const entry of regionPolygons) {
+      map.set(entry.region.id, entry.polygon);
+    }
+    return map;
+  }, [regionPolygons]);
 
   useEffect(() => {
     if (!imageUrl) {
@@ -76,10 +92,10 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     context.fillRect(0, 0, maskWidth, maskHeight);
     context.globalCompositeOperation = 'destination-out';
     revealedRegionIds.forEach((regionId) => {
-      const region = regions.find((r) => r.id === regionId);
-      if (!region) return;
+      const polygon = polygonById.get(regionId);
+      if (!polygon || polygon.length === 0) return;
       context.beginPath();
-      region.polygon.forEach((point, index) => {
+      polygon.forEach((point, index) => {
         const x = point.x * maskWidth;
         const y = point.y * maskHeight;
         if (index === 0) {
@@ -93,11 +109,11 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     });
     context.globalCompositeOperation = 'source-over';
     if (hoverRegion && mode === 'dm') {
-      const region = regions.find((r) => r.id === hoverRegion);
-      if (region) {
+      const polygon = polygonById.get(hoverRegion);
+      if (polygon && polygon.length) {
         context.beginPath();
         context.fillStyle = 'rgba(99, 102, 241, 0.25)';
-        region.polygon.forEach((point, index) => {
+        polygon.forEach((point, index) => {
           const x = point.x * maskWidth;
           const y = point.y * maskHeight;
           if (index === 0) {
@@ -110,14 +126,14 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
         context.fill();
       }
     }
-  }, [regions, revealedRegionIds, imageSize, hoverRegion, mode, width, height]);
+  }, [polygonById, revealedRegionIds, imageSize, hoverRegion, mode, width, height]);
 
   const handlePointer = (event: React.MouseEvent) => {
     if (!imageSize) return;
     const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
     const y = (event.clientY - rect.top) / rect.height;
-    const region = regions.find((candidate) => pointInPolygon({ x, y }, candidate.polygon));
+    const region = regionPolygons.find((candidate) => pointInPolygon({ x, y }, candidate.polygon))?.region;
     setHoverRegion(region?.id ?? null);
   };
 
@@ -126,7 +142,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
     const y = (event.clientY - rect.top) / rect.height;
-    const region = regions.find((candidate) => pointInPolygon({ x, y }, candidate.polygon));
+    const region = regionPolygons.find((candidate) => pointInPolygon({ x, y }, candidate.polygon))?.region;
     if (region && onToggleRegion && mode === 'dm') {
       const nextState = !revealedRegionIds.includes(region.id);
       onToggleRegion(region.id, nextState);
