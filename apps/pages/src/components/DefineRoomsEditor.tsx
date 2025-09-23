@@ -619,7 +619,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/70 bg-slate-950/70 px-5 py-4">
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Define Rooms</p>
@@ -662,7 +662,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
           )}
         </div>
       </div>
-      <div className="grid h-full gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="relative flex min-h-[420px] flex-col rounded-3xl border border-slate-800/70 bg-slate-950/70">
           <div ref={containerRef} className="relative flex flex-1 items-center justify-center overflow-hidden rounded-3xl">
             <img
