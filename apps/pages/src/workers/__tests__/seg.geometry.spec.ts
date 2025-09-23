@@ -211,6 +211,19 @@ const toPixelPoint = (point: PixelPoint, width: number, height: number): PixelPo
   y: Math.round(point.y * (height - 1)),
 });
 
+const computePolygonArea = (polygon: PixelPoint[]): number => {
+  if (polygon.length < 3) {
+    return 0;
+  }
+  let area = 0;
+  for (let i = 0; i < polygon.length; i += 1) {
+    const current = polygon[i];
+    const next = polygon[(i + 1) % polygon.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(area) / 2;
+};
+
 const filterPointsInsideCorridor = (
   polygon: PixelPoint[],
   corridor: CorridorFixture['corridor']
@@ -476,6 +489,90 @@ describe('smartWand', () => {
 
     const wallIndex = (region.minY + 1) * width + wallColumn;
     expect(result.mask[wallIndex]).toBe(0);
+  });
+
+  it('fills a softened edge gap when tolerance is moderate but preserves it when tolerance is tight', () => {
+    const width = 16;
+    const height = 16;
+    const data = new Uint8ClampedArray(width * height * 4);
+    const background: [number, number, number, number] = [8, 8, 8, 255];
+    const interiorColor: [number, number, number, number] = [250, 250, 250, 255];
+    const edgeColor: [number, number, number, number] = [230, 230, 230, 255];
+
+    const setPixel = (x: number, y: number, color: [number, number, number, number]) => {
+      const offset = (y * width + x) * 4;
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = color[3];
+    };
+
+    for (let i = 0; i < width * height; i += 1) {
+      data[i * 4] = background[0];
+      data[i * 4 + 1] = background[1];
+      data[i * 4 + 2] = background[2];
+      data[i * 4 + 3] = background[3];
+    }
+
+    const rect = { minX: 3, maxX: 12, minY: 3, maxY: 12 };
+    const rectWidth = rect.maxX - rect.minX + 1;
+    const rectHeight = rect.maxY - rect.minY + 1;
+    const gapStart = rect.minX + 3;
+    const gapEnd = gapStart + 1;
+
+    for (let y = rect.minY; y <= rect.maxY; y += 1) {
+      for (let x = rect.minX; x <= rect.maxX; x += 1) {
+        if (y === rect.minY) {
+          if (x >= gapStart && x <= gapEnd) {
+            continue;
+          }
+          setPixel(x, y, edgeColor);
+        } else {
+          setPixel(x, y, interiorColor);
+        }
+      }
+    }
+
+    const seed = {
+      x: (rect.minX + 1) / (width - 1),
+      y: (rect.minY + 2) / (height - 1),
+    };
+    const expectedRectArea = rectWidth * rectHeight;
+    const interiorOnlyArea = rectWidth * (rectHeight - 1);
+    const gapIndices: number[] = [];
+    for (let x = gapStart; x <= gapEnd; x += 1) {
+      gapIndices.push(rect.minY * width + x);
+    }
+
+    const softened = smartWand(data, width, height, seed, {
+      tolerance: 48,
+      softenEdges: true,
+    });
+    const softenedMaskArea = softened.mask.reduce((total, value) => total + value, 0);
+    expect(softened.area).toBe(softenedMaskArea);
+    expect(Math.abs(softenedMaskArea - expectedRectArea)).toBeLessThanOrEqual(2);
+    gapIndices.forEach((index) => {
+      expect(softened.mask[index]).toBe(1);
+    });
+    const softenedPolygon = toPixelPolygon(softened.polygon, width, height);
+    const softenedPolygonArea = computePolygonArea(softenedPolygon);
+    expect(Math.abs(softenedPolygonArea - expectedRectArea)).toBeLessThanOrEqual(4);
+
+    const tight = smartWand(data, width, height, seed, {
+      tolerance: 12,
+      softenEdges: true,
+    });
+    const tightMaskArea = tight.mask.reduce((total, value) => total + value, 0);
+    expect(tight.area).toBe(tightMaskArea);
+    expect(tightMaskArea).toBeLessThan(softenedMaskArea - rectWidth / 2);
+    expect(tightMaskArea).toBeLessThanOrEqual(interiorOnlyArea + 1);
+    gapIndices.forEach((index) => {
+      expect(tight.mask[index]).toBe(0);
+    });
+    const tightPolygon = toPixelPolygon(tight.polygon, width, height);
+    const tightPolygonArea = computePolygonArea(tightPolygon);
+    expect(tightPolygonArea).toBeLessThan(softenedPolygonArea);
+    expect(tightPolygonArea).toBeLessThanOrEqual(interiorOnlyArea + 2);
   });
 });
 
