@@ -206,7 +206,7 @@ export class SmartLassoTool implements DefineRoomsTool {
     }
     const preview = buildFreehandMask(ctx, this.rawPoints);
     if (preview) {
-      const selection = this.store.getState().selection;
+      const selection = ctx.store.getState().selection;
       ctx.store.previewMask(refineMask(ctx, preview, null, selection));
     }
   }
@@ -232,7 +232,7 @@ export class SmartLassoTool implements DefineRoomsTool {
       ctx.store.setBusy('Refining edges…');
     }
     try {
-      const selection = this.store.getState().selection;
+      const selection = ctx.store.getState().selection;
       const refined = refineMask(ctx, mask, this.energy, selection);
       ctx.store.commitMask(refined);
     } finally {
