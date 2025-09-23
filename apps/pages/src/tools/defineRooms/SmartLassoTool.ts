@@ -1,5 +1,6 @@
 import type { Bounds, Point } from '../../types/geometry';
 import type { RoomMask } from '../../utils/roomMask';
+import type { SelectionState } from '../../state/selection';
 import { useSegmentation } from './segmentationHelpers';
 import type { DefineRoomsTool, PointerState, ToolContext } from './ToolContext';
 
@@ -130,9 +131,18 @@ const sampleEnergyForMask = (mask: RoomMask, context: EnergyContext): Float32Arr
   return result;
 };
 
-const refineMask = (ctx: ToolContext, mask: RoomMask, energyContext: EnergyContext | null): RoomMask => {
+const refineMask = (
+  ctx: ToolContext,
+  mask: RoomMask,
+  energyContext: EnergyContext | null,
+  selection: SelectionState,
+): RoomMask => {
   let refined = mask.data;
   if (energyContext) {
+    const stickiness = clamp01(selection.smartStickiness ?? 0.55);
+    const edgeThreshold = clamp01(0.2 + stickiness * 0.5);
+    const edgeWidth = Math.min(Math.max(selection.edgeRefinementWidth ?? 0.02, 0.005), 0.25);
+    const bandSize = Math.max(1, Math.round(Math.max(mask.width, mask.height) * edgeWidth));
     const sampled = sampleEnergyForMask(mask, energyContext);
     refined = useSegmentation(
       ctx.segmentation,
@@ -142,15 +152,21 @@ const refineMask = (ctx: ToolContext, mask: RoomMask, energyContext: EnergyConte
       mask.height,
       sampled,
       {
-        bandSize: Math.max(4, Math.round(Math.max(mask.width, mask.height) * 0.02)),
-        edgeThreshold: 0.35,
+        bandSize,
+        edgeThreshold,
         connectivity: 8,
       },
     );
   }
-  const featherRadius = Math.max(1, Math.round(Math.max(mask.width, mask.height) * 0.01));
+  const featherAmount = Math.min(Math.max(selection.selectionFeather ?? 0.015, 0), 0.25);
+  const featherRadius = Math.round(Math.max(mask.width, mask.height) * featherAmount);
   const feathered = useSegmentation(ctx.segmentation, 'featherMask', refined, mask.width, mask.height, featherRadius);
-  return { ...mask, data: feathered };
+  const dilationRadius = selection.dilateBy5px ? Math.max(0, Math.round(Math.max(mask.width, mask.height) * 0.01)) : 0;
+  const finalMask =
+    dilationRadius > 0
+      ? useSegmentation(ctx.segmentation, 'dilateMask', feathered, mask.width, mask.height, dilationRadius)
+      : feathered;
+  return { ...mask, data: finalMask };
 };
 
 export class SmartLassoTool implements DefineRoomsTool {
@@ -190,7 +206,8 @@ export class SmartLassoTool implements DefineRoomsTool {
     }
     const preview = buildFreehandMask(ctx, this.rawPoints);
     if (preview) {
-      ctx.store.previewMask(refineMask(ctx, preview, null));
+      const selection = this.store.getState().selection;
+      ctx.store.previewMask(refineMask(ctx, preview, null, selection));
     }
   }
 
@@ -215,7 +232,8 @@ export class SmartLassoTool implements DefineRoomsTool {
       ctx.store.setBusy('Refining edges…');
     }
     try {
-      const refined = refineMask(ctx, mask, this.energy);
+      const selection = this.store.getState().selection;
+      const refined = refineMask(ctx, mask, this.energy, selection);
       ctx.store.commitMask(refined);
     } finally {
       if (this.energy) {

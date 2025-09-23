@@ -29,7 +29,7 @@ interface DefineRoomsEditorProps {
   onRoomsChange: (nextRooms: DefineRoomDraft[]) => void;
 }
 
-type EditorTool = 'smartLasso' | 'lasso' | 'autoWand' | 'refineBrush';
+type EditorTool = 'smartLasso' | 'lasso' | 'autoWand' | 'paintbrush';
 
 type BrushMode = 'add' | 'erase';
 
@@ -151,12 +151,17 @@ class SegmentationService {
     return computeHull(snapped);
   }
 
-  async wandSelect(point: Point, brushSize: number, snapStrength: number): Promise<Point[]> {
-    const radius = clamp(brushSize * 1.25, 0.02, 0.45);
-    const basePolygon = generateCircularPolygon(point, radius, 18);
-    const snapped = basePolygon.map((vertex) => this.snapPoint(vertex, snapStrength));
+  async wandSelect(point: Point, selection: SelectionState): Promise<Point[]> {
+    const baseRadius = clamp(selection.brushRadius ?? 0.08, 0.02, 0.5);
+    const toleranceInfluence = clamp(selection.wandTolerance ?? 0.25, 0, 1);
+    const featherInfluence = clamp(selection.selectionFeather ?? 0.015, 0, 0.25);
+    const dilationBoost = selection.dilateBy5px ? 0.02 : 0;
+    const radius = clamp(baseRadius + featherInfluence * 0.75 + dilationBoost, 0.02, 0.45);
+    const steps = Math.max(12, Math.round(18 + toleranceInfluence * 8));
+    const basePolygon = generateCircularPolygon(point, radius, steps);
+    const snapped = basePolygon.map((vertex) => this.snapPoint(vertex, selection.snapStrength));
     await new Promise((resolve) => setTimeout(resolve, 120));
-    return computeHull([...snapped, this.snapPoint(point, snapStrength)]);
+    return computeHull([...snapped, this.snapPoint(point, selection.snapStrength)]);
   }
 }
 
@@ -211,6 +216,69 @@ class RoomAuthoringStore {
     this.setState((current) => ({
       ...current,
       selection: { ...current.selection, brushRadius: radius },
+    }));
+  }
+
+  setBrushHardness(hardness: number) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, brushHardness: clamp(hardness, 0, 1) },
+    }));
+  }
+
+  setWandTolerance(value: number) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, wandTolerance: clamp(value, 0, 1) },
+    }));
+  }
+
+  setSelectionFeather(value: number) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, selectionFeather: clamp(value, 0, 0.25) },
+    }));
+  }
+
+  setWandContiguous(enabled: boolean) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, wandContiguous: Boolean(enabled) },
+    }));
+  }
+
+  setWandSampleAllLayers(enabled: boolean) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, wandSampleAllLayers: Boolean(enabled) },
+    }));
+  }
+
+  setWandAntiAlias(enabled: boolean) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, wandAntiAlias: Boolean(enabled) },
+    }));
+  }
+
+  setSmartStickiness(value: number) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, smartStickiness: clamp(value, 0, 1) },
+    }));
+  }
+
+  setEdgeRefinementWidth(value: number) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, edgeRefinementWidth: clamp(value, 0.005, 0.25) },
+    }));
+  }
+
+  setDilateBy5px(enabled: boolean) {
+    this.setState((current) => ({
+      ...current,
+      selection: { ...current.selection, dilateBy5px: Boolean(enabled) },
     }));
   }
 
@@ -318,7 +386,13 @@ class RoomAuthoringStore {
       ...current,
       selection: {
         ...current.selection,
-        mask: applyCircularBrushToMask(current.selection.mask ?? emptyRoomMask(), point, radius, mode),
+        mask: applyCircularBrushToMask(
+          current.selection.mask ?? emptyRoomMask(),
+          point,
+          radius,
+          mode,
+          current.selection.brushHardness ?? 1
+        ),
         lastUpdated: Date.now(),
       },
       previewMask: null,
@@ -335,14 +409,18 @@ class SmartLassoModule {
   begin(point: Point) {
     this.stroke = [point];
     const state = this.store.getState();
-    const preview = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
+    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
+    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
+    const preview = this.segmentation.smoothStroke(this.stroke, snap);
     this.store.previewPolygon(preview);
   }
 
   update(point: Point) {
     this.stroke.push(point);
     const state = this.store.getState();
-    const preview = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
+    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
+    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
+    const preview = this.segmentation.smoothStroke(this.stroke, snap);
     this.store.previewPolygon(preview);
   }
 
@@ -353,7 +431,9 @@ class SmartLassoModule {
       return;
     }
     const state = this.store.getState();
-    const polygon = this.segmentation.smoothStroke(this.stroke, state.selection.snapStrength);
+    const stickiness = clamp(state.selection.smartStickiness ?? 0.55, 0, 1);
+    const snap = clamp(state.selection.snapStrength * (0.7 + stickiness * 0.3), 0, 1);
+    const polygon = this.segmentation.smoothStroke(this.stroke, snap);
     this.store.commitPolygon(polygon);
     this.stroke = [];
   }
@@ -370,7 +450,7 @@ class AutoWandModule {
     const state = this.store.getState();
     this.store.setBusy('Analyzing region…');
     try {
-      const polygon = await this.segmentation.wandSelect(point, state.selection.brushRadius, state.selection.snapStrength);
+      const polygon = await this.segmentation.wandSelect(point, state.selection);
       this.store.commitPolygon(polygon);
     } finally {
       this.store.setBusy(null);
@@ -581,7 +661,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     } else if (authoringState.tool === 'autoWand') {
       event.preventDefault();
       coordinator.autoWand.select(point);
-    } else if (authoringState.tool === 'refineBrush') {
+    } else if (authoringState.tool === 'paintbrush') {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       const mode: BrushMode = event.button === 2 ? 'add' : 'erase';
@@ -601,7 +681,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
     }
     if (pointerToolRef.current === 'smartLasso' || pointerToolRef.current === 'lasso') {
       coordinator.smartLasso.update(point);
-    } else if (pointerToolRef.current === 'refineBrush' && brushModeRef.current) {
+    } else if (pointerToolRef.current === 'paintbrush' && brushModeRef.current) {
       coordinator.brush.apply(point, brushModeRef.current);
     }
   };
@@ -657,7 +737,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
       ? 'Magic Wand'
       : authoringState.tool === 'lasso'
       ? 'Lasso'
-      : 'Refine Brush';
+      : 'Paintbrush';
 
   const toolButtonClasses = (active: boolean) =>
     `flex h-12 w-12 items-center justify-center rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-teal-400/60 focus:ring-offset-0 ${
@@ -673,6 +753,213 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
         : 'bg-emerald-500/50 cursor-not-allowed opacity-60'
       : 'bg-blue-500 hover:bg-blue-400'
   }`;
+
+  const renderToolSettings = () => {
+    if (authoringState.tool === 'paintbrush') {
+      return (
+        <>
+          <div className="h-px w-full border-b border-slate-800/70" />
+          <div className="w-full px-2 text-center">
+            <label className="flex flex-col items-center text-[10px] uppercase tracking-[0.35em] text-slate-500">
+              Brush Radius
+              <input
+                type="range"
+                min={0.02}
+                max={0.4}
+                step={0.01}
+                value={authoringState.selection.brushRadius}
+                onChange={(event) => coordinator.store.setBrushSize(Number(event.currentTarget.value))}
+                className="mt-2 w-full"
+                aria-label="Brush Radius"
+              />
+            </label>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+              Current radius: {Math.round(authoringState.selection.brushRadius * 100)}% of the image width
+            </p>
+            <label className="mt-4 flex flex-col items-center text-[10px] uppercase tracking-[0.35em] text-slate-500">
+              Hardness
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={authoringState.selection.brushHardness}
+                onChange={(event) => coordinator.store.setBrushHardness(Number(event.currentTarget.value))}
+                className="mt-2 w-full"
+                aria-label="Brush Hardness"
+              />
+            </label>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+              Hardness: {Math.round(authoringState.selection.brushHardness * 100)}%
+            </p>
+          </div>
+        </>
+      );
+    }
+
+    if (authoringState.tool === 'autoWand') {
+      return (
+        <>
+          <div className="h-px w-full border-b border-slate-800/70" />
+          <div className="flex w-full flex-col gap-3 px-3 py-2 text-xs text-slate-400">
+            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Tolerance
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={authoringState.selection.wandTolerance}
+                onChange={(event) => coordinator.store.setWandTolerance(Number(event.currentTarget.value))}
+                aria-label="Wand Tolerance"
+              />
+            </label>
+            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              {Math.round(authoringState.selection.wandTolerance * 100)}% threshold
+            </p>
+            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Feather
+              <input
+                type="range"
+                min={0}
+                max={0.05}
+                step={0.005}
+                value={authoringState.selection.selectionFeather}
+                onChange={(event) => coordinator.store.setSelectionFeather(Number(event.currentTarget.value))}
+                aria-label="Selection Feather"
+              />
+            </label>
+            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Feather radius: {(authoringState.selection.selectionFeather * 100).toFixed(1)}% of mask size
+            </p>
+            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Edge Width
+              <input
+                type="range"
+                min={0.005}
+                max={0.08}
+                step={0.005}
+                value={authoringState.selection.edgeRefinementWidth}
+                onChange={(event) => coordinator.store.setEdgeRefinementWidth(Number(event.currentTarget.value))}
+                aria-label="Edge Width"
+              />
+            </label>
+            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Edge band: {(authoringState.selection.edgeRefinementWidth * 100).toFixed(1)}%
+            </p>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
+                <span>Contiguous</span>
+                <input
+                  type="checkbox"
+                  checked={authoringState.selection.wandContiguous}
+                  onChange={(event) => coordinator.store.setWandContiguous(event.currentTarget.checked)}
+                  aria-label="Contiguous Selection"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
+                <span>Sample all layers</span>
+                <input
+                  type="checkbox"
+                  checked={authoringState.selection.wandSampleAllLayers}
+                  onChange={(event) => coordinator.store.setWandSampleAllLayers(event.currentTarget.checked)}
+                  aria-label="Sample All Layers"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
+                <span>Anti-alias</span>
+                <input
+                  type="checkbox"
+                  checked={authoringState.selection.wandAntiAlias}
+                  onChange={(event) => coordinator.store.setWandAntiAlias(event.currentTarget.checked)}
+                  aria-label="Anti Alias"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
+                <span>+5px dilation</span>
+                <input
+                  type="checkbox"
+                  checked={authoringState.selection.dilateBy5px}
+                  onChange={(event) => coordinator.store.setDilateBy5px(event.currentTarget.checked)}
+                  aria-label="Apply five pixel dilation"
+                />
+              </label>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (authoringState.tool === 'smartLasso' || authoringState.tool === 'lasso') {
+      return (
+        <>
+          <div className="h-px w-full border-b border-slate-800/70" />
+          <div className="flex w-full flex-col gap-3 px-3 py-2 text-xs text-slate-400">
+            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Feather
+              <input
+                type="range"
+                min={0}
+                max={0.05}
+                step={0.005}
+                value={authoringState.selection.selectionFeather}
+                onChange={(event) => coordinator.store.setSelectionFeather(Number(event.currentTarget.value))}
+                aria-label="Selection Feather"
+              />
+            </label>
+            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Feather radius: {(authoringState.selection.selectionFeather * 100).toFixed(1)}% of mask size
+            </p>
+            <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Edge Width
+              <input
+                type="range"
+                min={0.005}
+                max={0.08}
+                step={0.005}
+                value={authoringState.selection.edgeRefinementWidth}
+                onChange={(event) => coordinator.store.setEdgeRefinementWidth(Number(event.currentTarget.value))}
+                aria-label="Edge Width"
+              />
+            </label>
+            <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Edge band: {(authoringState.selection.edgeRefinementWidth * 100).toFixed(1)}%
+            </p>
+            {authoringState.tool === 'smartLasso' && (
+              <label className="flex flex-col gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                Smart Stickiness
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={authoringState.selection.smartStickiness}
+                  onChange={(event) => coordinator.store.setSmartStickiness(Number(event.currentTarget.value))}
+                  aria-label="Smart Stickiness"
+                />
+              </label>
+            )}
+            {authoringState.tool === 'smartLasso' && (
+              <p className="-mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                Stickiness: {Math.round(authoringState.selection.smartStickiness * 100)}%
+              </p>
+            )}
+            <label className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2 text-[11px] font-medium text-slate-200">
+              <span>+5px dilation</span>
+              <input
+                type="checkbox"
+                checked={authoringState.selection.dilateBy5px}
+                onChange={(event) => coordinator.store.setDilateBy5px(event.currentTarget.checked)}
+                aria-label="Apply five pixel dilation"
+              />
+            </label>
+          </div>
+        </>
+      );
+    }
+
+    return <div className="h-px w-full border-b border-slate-800/70" />;
+  };
 
   if (!imageUrl) {
     return (
@@ -725,10 +1012,11 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
               <div className="flex flex-col items-center gap-3" role="group" aria-label="Editor tools">
                 <button
                   type="button"
-                  onClick={() => coordinator.store.setTool('refineBrush')}
-                  aria-label="Refine Brush"
-                  aria-pressed={authoringState.tool === 'refineBrush'}
-                  className={toolButtonClasses(authoringState.tool === 'refineBrush')}
+                  onClick={() => coordinator.store.setTool('paintbrush')}
+                  aria-label="Paintbrush"
+                  title="Paintbrush"
+                  aria-pressed={authoringState.tool === 'paintbrush'}
+                  className={toolButtonClasses(authoringState.tool === 'paintbrush')}
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M15.5 3.5L20.5 8.5L11 18c-1.1 1.1-2.6 1.5-3.8.8l-1.4-.7" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
@@ -774,25 +1062,7 @@ const DefineRoomsEditor: React.FC<DefineRoomsEditorProps> = ({
                   </svg>
                 </button>
               </div>
-              <div className="h-px w-full border-b border-slate-800/70" />
-              <div className="w-full px-2 text-center">
-                <label className="flex flex-col items-center text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                  Brush Size
-                  <input
-                    type="range"
-                    min={0.02}
-                    max={0.4}
-                    step={0.01}
-                    value={authoringState.selection.brushRadius}
-                    onChange={(event) => coordinator.store.setBrushSize(Number(event.target.value))}
-                    className="mt-2 w-full"
-                    aria-label="Brush Size"
-                  />
-                </label>
-                <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                  Current radius: {Math.round(authoringState.selection.brushRadius * 100)}% of the image width
-                </p>
-              </div>
+              {renderToolSettings()}
               <div className="h-px w-full border-b border-slate-800/70" />
               <div className="flex flex-col items-center gap-2">
                 <button

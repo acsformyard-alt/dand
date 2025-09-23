@@ -607,6 +607,7 @@ export const applyCircularBrushToMask = (
   center: Point,
   radius: number,
   mode: 'add' | 'erase',
+  hardness = 1,
 ): RoomMask => {
   const next = cloneRoomMask(mask);
   const { width, height, bounds } = next;
@@ -616,6 +617,9 @@ export const applyCircularBrushToMask = (
   const pixelRadiusY = Math.max(1, Math.round((radius / scaleY) * height));
   const centerX = Math.round(((center.x - bounds.minX) / scaleX) * width);
   const centerY = Math.round(((center.y - bounds.minY) / scaleY) * height);
+  const clampedHardness = Math.min(Math.max(hardness, 0), 1);
+  const falloffStart = clampedHardness;
+  const falloffRange = Math.max(1e-6, 1 - falloffStart);
   for (let dy = -pixelRadiusY; dy <= pixelRadiusY; dy += 1) {
     const y = centerY + dy;
     if (y < 0 || y >= height) continue;
@@ -623,8 +627,20 @@ export const applyCircularBrushToMask = (
       const x = centerX + dx;
       if (x < 0 || x >= width) continue;
       const distance = Math.sqrt((dx / pixelRadiusX) ** 2 + (dy / pixelRadiusY) ** 2);
-      if (distance <= 1) {
-        next.data[y * width + x] = mode === 'add' ? 255 : 0;
+      if (distance > 1) {
+        continue;
+      }
+      const index = y * width + x;
+      let weight = 1;
+      if (distance > falloffStart) {
+        weight = Math.max(0, 1 - (distance - falloffStart) / falloffRange);
+      }
+      const contribution = Math.round(weight * 255);
+      if (mode === 'add') {
+        next.data[index] = Math.max(next.data[index], contribution);
+      } else {
+        const remaining = Math.round((next.data[index] * (255 - contribution)) / 255);
+        next.data[index] = Math.max(0, remaining);
       }
     }
   }

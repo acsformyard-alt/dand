@@ -36,6 +36,7 @@ const paintStroke = (
   radius: number,
   mode: 'add' | 'erase',
   segmentation: ToolContext['segmentation'],
+  hardness: number,
 ) => {
   if (points.length === 0) {
     return;
@@ -46,10 +47,16 @@ const paintStroke = (
     closePath: false,
   });
   const target = mask.data;
+  const clampedHardness = Math.min(Math.max(hardness, 0), 1);
+  const exponent = clampedHardness >= 1 ? 1 : 1 + (1 - clampedHardness) * 2;
   for (let i = 0; i < target.length; i += 1) {
-    const coverage = stroke[i];
+    let coverage = stroke[i];
     if (coverage === 0) {
       continue;
+    }
+    if (exponent > 1) {
+      const normalized = coverage / 255;
+      coverage = Math.round(Math.pow(normalized, exponent) * 255);
     }
     if (mode === 'add') {
       if (coverage > target[i]) {
@@ -79,7 +86,7 @@ export class PaintbrushTool implements DefineRoomsTool {
     this.lastPoint = initial;
     ctx.store.previewMask(null);
     const mask = this.ensureWorkingMask(ctx);
-    paintStroke(mask, [initial], this.getBrushRadius(ctx, pointer), this.mode, ctx.segmentation);
+    paintStroke(mask, [initial], this.getBrushRadius(ctx, pointer), this.mode, ctx.segmentation, this.getBrushHardness(ctx));
     ctx.store.commitMask(mask);
   }
 
@@ -89,7 +96,14 @@ export class PaintbrushTool implements DefineRoomsTool {
     }
     const point = clampPoint(ctx.snap(ctx.clamp(pointer.point)));
     const mask = this.ensureWorkingMask(ctx);
-    paintStroke(mask, [this.lastPoint, point], this.getBrushRadius(ctx, pointer), this.mode, ctx.segmentation);
+    paintStroke(
+      mask,
+      [this.lastPoint, point],
+      this.getBrushRadius(ctx, pointer),
+      this.mode,
+      ctx.segmentation,
+      this.getBrushHardness(ctx)
+    );
     this.lastPoint = point;
     ctx.store.commitMask(mask);
   }
@@ -101,7 +115,14 @@ export class PaintbrushTool implements DefineRoomsTool {
     const point = clampPoint(ctx.snap(ctx.clamp(pointer.point)));
     const mask = this.ensureWorkingMask(ctx);
     if (this.lastPoint) {
-      paintStroke(mask, [this.lastPoint, point], this.getBrushRadius(ctx, pointer), this.mode, ctx.segmentation);
+      paintStroke(
+        mask,
+        [this.lastPoint, point],
+        this.getBrushRadius(ctx, pointer),
+        this.mode,
+        ctx.segmentation,
+        this.getBrushHardness(ctx)
+      );
       ctx.store.commitMask(mask);
     }
     this.active = false;
@@ -131,6 +152,10 @@ export class PaintbrushTool implements DefineRoomsTool {
       return Math.max(base * clamp01(pointer.pressure), 0.001);
     }
     return Math.max(base, 0.001);
+  }
+
+  private getBrushHardness(ctx: ToolContext) {
+    return Math.min(Math.max(ctx.store.getState().selection.brushHardness ?? 1, 0), 1);
   }
 }
 

@@ -1,5 +1,6 @@
 import type { Bounds, Point } from '../../types/geometry';
 import type { RoomMask } from '../../utils/roomMask';
+import type { SelectionState } from '../../state/selection';
 import { useSegmentation } from './segmentationHelpers';
 import type { DefineRoomsTool, PointerState, ToolContext } from './ToolContext';
 
@@ -147,6 +148,7 @@ const buildMaskFromSelection = (
   selection: Uint8ClampedArray,
   width: number,
   height: number,
+  selectionState: SelectionState,
 ): RoomMask | null => {
   const cropped = cropMask(selection, width, height);
   if (!cropped) {
@@ -155,6 +157,10 @@ const buildMaskFromSelection = (
   const energy = getEnergyContext(ctx);
   let data = cropped.mask.data;
   if (energy) {
+    const stickiness = clamp01(selectionState.smartStickiness ?? 0.55);
+    const edgeThreshold = clamp01(0.2 + stickiness * 0.5);
+    const edgeWidth = Math.min(Math.max(selectionState.edgeRefinementWidth ?? 0.02, 0.005), 0.25);
+    const bandSize = Math.max(1, Math.round(Math.max(cropped.mask.width, cropped.mask.height) * edgeWidth));
     const sampled = sampleEnergyForMask(cropped.mask, energy);
     data = useSegmentation(
       ctx.segmentation,
@@ -164,26 +170,37 @@ const buildMaskFromSelection = (
       cropped.mask.height,
       sampled,
       {
-        bandSize: Math.max(6, Math.round(Math.max(cropped.mask.width, cropped.mask.height) * 0.02)),
-        edgeThreshold: 0.35,
-        connectivity: 8,
+        bandSize,
+        edgeThreshold,
+        connectivity: selectionState.wandConnectivity ?? 8,
       },
     );
   }
-  const featherRadius = Math.max(1, Math.round(Math.max(cropped.mask.width, cropped.mask.height) * 0.01));
-  const feathered = useSegmentation(
-    ctx.segmentation,
-    'featherMask',
-    data,
-    cropped.mask.width,
-    cropped.mask.height,
-    featherRadius,
-  );
+  const featherAmount = Math.min(Math.max(selectionState.selectionFeather ?? 0.015, 0), 0.25);
+  const featherRadius = Math.round(Math.max(cropped.mask.width, cropped.mask.height) * featherAmount);
+  const feathered = useSegmentation(ctx.segmentation, 'featherMask', data, cropped.mask.width, cropped.mask.height, featherRadius);
+  const dilationRadius = selectionState.dilateBy5px
+    ? Math.max(
+        0,
+        Math.round((5 / Math.max(width, height, 1)) * Math.max(cropped.mask.width, cropped.mask.height))
+      )
+    : 0;
+  const finalMask =
+    dilationRadius > 0
+      ? useSegmentation(
+          ctx.segmentation,
+          'dilateMask',
+          feathered,
+          cropped.mask.width,
+          cropped.mask.height,
+          dilationRadius
+        )
+      : feathered;
   return {
     width: cropped.mask.width,
     height: cropped.mask.height,
     bounds: cropped.bounds,
-    data: feathered,
+    data: finalMask,
   };
 };
 
@@ -209,14 +226,17 @@ export class AutoWandTool implements DefineRoomsTool {
     const width = ctx.raster.width;
     const height = ctx.raster.height;
     const selectionState = ctx.store.getState().selection;
-    const tolerance = Math.max(4, Math.round(12 + (selectionState.wandTolerance ?? 0.15) * 48));
+    const tolerance = Math.max(4, Math.round(12 + (selectionState.wandTolerance ?? 0.25) * 48));
+    const contiguous = selectionState.wandContiguous ?? true;
+    const antiAlias = selectionState.wandAntiAlias ?? true;
+    const sampleAllLayers = selectionState.wandSampleAllLayers ?? Array.isArray(layers);
     const wandMask = useSegmentation(ctx.segmentation, 'magicWandSelect', layers, width, height, seed, {
       tolerance,
       connectivity: selectionState.wandConnectivity ?? 8,
-      contiguous: true,
-      antiAlias: true,
+      contiguous,
+      antiAlias,
       antiAliasFalloff: tolerance * 0.3,
-      sampleAllLayers: Array.isArray(layers),
+      sampleAllLayers,
     });
 
     if (this.requestId !== request) {
@@ -225,7 +245,7 @@ export class AutoWandTool implements DefineRoomsTool {
 
     ctx.store.setBusy('Detecting region…');
     try {
-      const mask = buildMaskFromSelection(ctx, wandMask, width, height);
+      const mask = buildMaskFromSelection(ctx, wandMask, width, height, selectionState);
       if (this.requestId !== request) {
         return;
       }
