@@ -528,7 +528,7 @@ export class DefineRoom {
 
   private hoverLabel!: HTMLElement;
 
-  private closeButton!: HTMLButtonElement;
+  private closeButton: HTMLButtonElement | null = null;
 
   private imageContext!: CanvasRenderingContext2D;
 
@@ -626,15 +626,24 @@ export class DefineRoom {
 
   constructor(options: DefineRoomOptions = {}) {
     this.mode = options.mode ?? 'overlay';
+    const header =
+      this.mode === 'embedded'
+        ? null
+        : (
+            <div class="define-room-header">
+              <h1>Define Rooms</h1>
+              <button class="define-room-close" type="button">
+                Close
+              </button>
+            </div>
+          );
+
     this.root = (
       <div
         class={`define-room-overlay hidden${this.mode === 'embedded' ? ' define-room-embedded' : ''}`}
       >
         <div class="define-room-window">
-          <div class="define-room-header">
-            <h1>Define Rooms</h1>
-            <button class="define-room-close" type="button">Close</button>
-          </div>
+          {header}
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">
@@ -823,7 +832,9 @@ export class DefineRoom {
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
     this.selectionCanvas = this.root.querySelector(".selection-layer") as HTMLCanvasElement;
     this.hoverLabel = this.root.querySelector(".room-hover-label") as HTMLElement;
-    this.closeButton = this.root.querySelector(".define-room-close") as HTMLButtonElement;
+    this.closeButton = this.root.querySelector(
+      ".define-room-close",
+    ) as HTMLButtonElement | null;
 
     this.initializeColorMenu();
 
@@ -949,7 +960,9 @@ export class DefineRoom {
   }
 
   private attachEventListeners(): void {
-    this.closeButton.addEventListener("click", () => this.close());
+    if (this.closeButton) {
+      this.closeButton.addEventListener("click", () => this.close());
+    }
     this.root.addEventListener("click", (event) => {
       if (event.target === this.root) {
         this.close();
