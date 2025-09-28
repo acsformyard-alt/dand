@@ -195,6 +195,7 @@
 .define-room-body {
   display: flex;
   flex: 1;
+  min-height: 0;
 }
 
 .define-room-sidebar {
@@ -508,6 +509,7 @@
   align-items: stretch;
   padding: 18px;
   gap: 18px;
+  min-height: 0;
 }
 
 .toolbar-area {
@@ -845,6 +847,7 @@
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.18);
+  min-height: 0;
 }
 
 .canvas-wrapper canvas {
