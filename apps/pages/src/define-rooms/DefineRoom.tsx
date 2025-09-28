@@ -524,11 +524,13 @@ export class DefineRoom {
 
   private selectionCanvas!: HTMLCanvasElement;
 
-  private canvasWrapper!: HTMLElement;
+  private canvasWrapper: HTMLElement | null = null;
+
+  private canvasStage: HTMLElement | null = null;
 
   private hoverLabel!: HTMLElement;
 
-  private closeButton!: HTMLButtonElement;
+  private closeButton: HTMLButtonElement | null = null;
 
   private imageContext!: CanvasRenderingContext2D;
 
@@ -620,21 +622,51 @@ export class DefineRoom {
 
   private height = 0;
 
+  private fitAnimationFrame: number | null = null;
+
+  private handleViewportResize = () => {
+    if (this.root.classList.contains('hidden')) {
+      return;
+    }
+    if (!this.width || !this.height) {
+      return;
+    }
+    if (!this.canvasWrapper || !this.canvasStage) {
+      return;
+    }
+    if (this.magnifyIndex === 0 && this.panOffset.x === 0 && this.panOffset.y === 0) {
+      this.fitImageToViewport(true);
+      return;
+    }
+    if (this.updateCanvasStageSize()) {
+      this.updateCanvasTransform(this.magnifyScales[this.magnifyIndex], this.magnifyOrigin, false);
+    }
+  };
+
   private historyStacks: Map<string, { undo: Uint8Array[]; redo: Uint8Array[] }> = new Map();
 
   private mode: DefineRoomMode;
 
   constructor(options: DefineRoomOptions = {}) {
     this.mode = options.mode ?? 'overlay';
+    const header =
+      this.mode === 'embedded'
+        ? null
+        : (
+            <div class="define-room-header">
+              <h1>Define Rooms</h1>
+              <button class="define-room-close" type="button">
+                Close
+              </button>
+            </div>
+          );
+
     this.root = (
       <div
         class={`define-room-overlay hidden${this.mode === 'embedded' ? ' define-room-embedded' : ''}`}
       >
         <div class="define-room-window">
-          <div class="define-room-header">
-            <h1>Define Rooms</h1>
-            <button class="define-room-close" type="button">Close</button>
-          </div>
+          {header}
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">
@@ -705,9 +737,11 @@ export class DefineRoom {
                 </div>
               </div>
               <div class="canvas-wrapper">
-                <canvas class="image-layer"></canvas>
-                <canvas class="mask-layer"></canvas>
-                <canvas class="selection-layer"></canvas>
+                <div class="canvas-stage">
+                  <canvas class="image-layer"></canvas>
+                  <canvas class="mask-layer"></canvas>
+                  <canvas class="selection-layer"></canvas>
+                </div>
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
             </section>
@@ -769,6 +803,7 @@ export class DefineRoom {
     if (shouldReset) {
       this.prepareImage(image);
     }
+    this.fitImageToViewport(true);
   }
 
   public show(): void {
@@ -780,6 +815,10 @@ export class DefineRoom {
     this.stopBrushSliderInteraction();
     this.closeColorMenu();
     this.hideDeleteDialog();
+    if (typeof window !== 'undefined' && this.fitAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.fitAnimationFrame);
+      this.fitAnimationFrame = null;
+    }
   }
 
   public getRooms(): DefineRoomData[] {
@@ -797,6 +836,13 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.handleViewportResize);
+      if (this.fitAnimationFrame !== null) {
+        window.cancelAnimationFrame(this.fitAnimationFrame);
+        this.fitAnimationFrame = null;
+      }
+    }
     this.root.remove();
   }
 
@@ -818,12 +864,15 @@ export class DefineRoom {
     this.deleteConfirmButton = this.root.querySelector(".room-delete-confirm") as HTMLButtonElement;
     this.deleteDialogIcon = this.root.querySelector(".room-delete-icon") as HTMLElement;
     const toolGroup = this.root.querySelector(".tool-group") as HTMLElement;
-    this.canvasWrapper = this.root.querySelector(".canvas-wrapper") as HTMLElement;
+    this.canvasWrapper = this.root.querySelector(".canvas-wrapper") as HTMLElement | null;
+    this.canvasStage = this.root.querySelector(".canvas-stage") as HTMLElement | null;
     this.imageCanvas = this.root.querySelector(".image-layer") as HTMLCanvasElement;
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
     this.selectionCanvas = this.root.querySelector(".selection-layer") as HTMLCanvasElement;
     this.hoverLabel = this.root.querySelector(".room-hover-label") as HTMLElement;
-    this.closeButton = this.root.querySelector(".define-room-close") as HTMLButtonElement;
+    this.closeButton = this.root.querySelector(
+      ".define-room-close",
+    ) as HTMLButtonElement | null;
 
     this.initializeColorMenu();
 
@@ -949,7 +998,9 @@ export class DefineRoom {
   }
 
   private attachEventListeners(): void {
-    this.closeButton.addEventListener("click", () => this.close());
+    if (this.closeButton) {
+      this.closeButton.addEventListener("click", () => this.close());
+    }
     this.root.addEventListener("click", (event) => {
       if (event.target === this.root) {
         this.close();
@@ -964,6 +1015,10 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.handleViewportResize);
+    }
   }
 
   private initializeColorMenu(): void {
@@ -1319,9 +1374,9 @@ export class DefineRoom {
     this.overlayCanvas.style.width = "100%";
     this.selectionCanvas.style.width = "100%";
 
-    this.imageCanvas.style.height = "auto";
-    this.overlayCanvas.style.height = "auto";
-    this.selectionCanvas.style.height = "auto";
+    this.imageCanvas.style.height = "100%";
+    this.overlayCanvas.style.height = "100%";
+    this.selectionCanvas.style.height = "100%";
 
     this.resetMagnifyTransform(true);
 
@@ -1345,6 +1400,49 @@ export class DefineRoom {
     this.editingOriginalMask = null;
     this.updateNewRoomControls();
     this.updateHistoryControls();
+  }
+
+  private updateCanvasStageSize(): boolean {
+    if (!this.canvasWrapper || !this.canvasStage || !this.width || !this.height) {
+      return false;
+    }
+    const rect = this.canvasWrapper.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return false;
+    }
+    const scale = Math.min(rect.width / this.width, rect.height / this.height);
+    const displayWidth = Math.max(this.width * scale, 1);
+    const displayHeight = Math.max(this.height * scale, 1);
+    this.canvasStage.style.width = `${displayWidth}px`;
+    this.canvasStage.style.height = `${displayHeight}px`;
+    return true;
+  }
+
+  private fitImageToViewport(useDefaultOrigin = true): void {
+    if (!this.canvasWrapper || !this.canvasStage || !this.width || !this.height) {
+      return;
+    }
+    const applyFit = () => {
+      this.fitAnimationFrame = null;
+      const updated = this.updateCanvasStageSize();
+      if (updated) {
+        this.resetMagnifyTransform(useDefaultOrigin);
+        return;
+      }
+      if (typeof window !== 'undefined' && !this.root.classList.contains('hidden')) {
+        this.fitAnimationFrame = window.requestAnimationFrame(applyFit);
+      }
+    };
+
+    if (typeof window === 'undefined') {
+      applyFit();
+      return;
+    }
+
+    if (this.fitAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.fitAnimationFrame);
+    }
+    this.fitAnimationFrame = window.requestAnimationFrame(applyFit);
   }
 
   private generateGrayscaleMaps(): void {
@@ -2158,12 +2256,13 @@ export class DefineRoom {
   }
 
   private updateCanvasTransform(scale: number, origin: string, withTransition = true): void {
+    if (!this.canvasStage) {
+      return;
+    }
     const transformValue = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${scale})`;
-    [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
-      canvas.style.transition = withTransition ? this.magnifyTransition : "none";
-      canvas.style.transformOrigin = origin;
-      canvas.style.transform = transformValue;
-    });
+    this.canvasStage.style.transition = withTransition ? this.magnifyTransition : "none";
+    this.canvasStage.style.transformOrigin = origin;
+    this.canvasStage.style.transform = transformValue;
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
