@@ -316,8 +316,9 @@ body {
 }
 
 .define-room-sidebar {
-  width: 20%;
-  min-width: 220px;
+  flex: 0 0 28%;
+  min-width: 260px;
+  max-width: 360px;
   background: rgba(15, 23, 42, 0.6);
   border-right: 1px solid rgba(148, 163, 184, 0.16);
   padding: 18px;
@@ -1046,11 +1047,14 @@ body {
   }
 
   .define-room-sidebar {
+    flex: 1 1 100%;
     width: 100%;
     border-right: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.16);
     flex-direction: row;
     flex-wrap: wrap;
+    min-width: 0;
+    max-width: none;
   }
 
   .rooms-list {
