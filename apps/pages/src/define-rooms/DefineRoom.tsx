@@ -631,10 +631,12 @@ export class DefineRoom {
         class={`define-room-overlay hidden${this.mode === 'embedded' ? ' define-room-embedded' : ''}`}
       >
         <div class="define-room-window">
-          <div class="define-room-header">
-            <h1>Define Rooms</h1>
-            <button class="define-room-close" type="button">Close</button>
-          </div>
+          {this.mode !== 'embedded' && (
+            <div class="define-room-header">
+              <h1>Define Rooms</h1>
+              <button class="define-room-close" type="button">Close</button>
+            </div>
+          )}
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">

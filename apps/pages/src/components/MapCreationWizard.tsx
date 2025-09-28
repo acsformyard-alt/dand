@@ -837,11 +837,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
-            <div className="flex flex-1 items-stretch justify-center">
-              <div className="flex h-full w-full max-w-6xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+            <div className="flex h-full min-h-0 w-full">
+              <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
                   ref={defineRoomContainerRef}
-                  className={`flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
+                  className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
                     canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
                   }`}
                 >
@@ -1023,7 +1023,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
         </div>
       </main>
-      <footer className="border-t border-slate-800/70 px-6 py-5">
+      <footer className="border-t border-slate-800/70 px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <button
             type="button"
