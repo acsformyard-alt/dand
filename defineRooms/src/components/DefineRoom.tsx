@@ -1267,6 +1267,10 @@ export class DefineRoom {
     this.selectionCanvas.width = width;
     this.selectionCanvas.height = height;
 
+    if (this.canvasWrapper) {
+      this.canvasWrapper.style.setProperty("--image-aspect-ratio", `${width} / ${height}`);
+    }
+
     this.imageCanvas.style.width = "100%";
     this.overlayCanvas.style.width = "100%";
     this.selectionCanvas.style.width = "100%";
