@@ -5,14 +5,17 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { DefineRoom, type DefineRoomData } from '../define-rooms/DefineRoom';
+import '../define-rooms/styles.css';
 import { apiClient } from '../api/client';
 import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
+import type { RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
-type WizardStep = 0 | 1 | 2;
+type WizardStep = 0 | 1 | 2 | 3;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -29,6 +32,16 @@ interface DraftMarker {
   y: number;
 }
 
+interface DraftRoom {
+  id: string;
+  name: string;
+  description: string;
+  tags: string;
+  visibleAtStart: boolean;
+  mask: RoomMask | null;
+  color: string;
+}
+
 const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Upload Map Image',
@@ -37,6 +50,10 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Map Details',
     description: 'Name your map, assign it to a folder, and capture quick notes or tags.',
+  },
+  {
+    title: 'Define Rooms',
+    description: 'Use the room editor to outline areas before placing your markers.',
   },
   {
     title: 'Add Markers',
@@ -168,6 +185,83 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+const createRoomMaskFromBinary = (
+  mask: Uint8Array,
+  width: number,
+  height: number,
+): RoomMask | null => {
+  if (!mask || mask.length === 0 || width === 0 || height === 0) {
+    return null;
+  }
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (mask[index]) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return null;
+  }
+
+  const maskWidth = maxX - minX + 1;
+  const maskHeight = maxY - minY + 1;
+  const data = new Uint8ClampedArray(maskWidth * maskHeight);
+
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const sourceIndex = y * width + x;
+      const targetIndex = (y - minY) * maskWidth + (x - minX);
+      data[targetIndex] = mask[sourceIndex] ? 255 : 0;
+    }
+  }
+
+  return {
+    width: maskWidth,
+    height: maskHeight,
+    bounds: {
+      minX: minX / width,
+      minY: minY / height,
+      maxX: (maxX + 1) / width,
+      maxY: (maxY + 1) / height,
+    },
+    data,
+  };
+};
+
+const summariseRooms = (
+  rooms: DefineRoomData[],
+  dimensions: { width: number; height: number },
+): DraftRoom[] => {
+  const { width, height } = dimensions;
+  if (!width || !height) {
+    return [];
+  }
+
+  return rooms
+    .filter((room) => room.isConfirmed)
+    .map((room) => ({
+      id: room.id,
+      name: room.name?.trim() || 'Room',
+      description: room.description ?? '',
+      tags: room.tags ?? '',
+      visibleAtStart: room.visibleAtStart,
+      color: room.color,
+      mask: createRoomMaskFromBinary(room.mask, width, height),
+    }));
+};
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   campaign,
   onClose,
@@ -190,8 +284,64 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const defineRoomRef = useRef<DefineRoom | null>(null);
+  const defineRoomContainerRef = useRef<HTMLDivElement | null>(null);
+  const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
+  const [defineRoomReady, setDefineRoomReady] = useState(false);
+
+  const syncRoomsFromEditor = useCallback(() => {
+    const instance = defineRoomRef.current;
+    if (!instance) {
+      setDefinedRooms([]);
+      return;
+    }
+    const dimensions = instance.getImageDimensions();
+    if (!dimensions.width || !dimensions.height) {
+      setDefinedRooms([]);
+      return;
+    }
+    const rooms = summariseRooms(instance.getRooms(), dimensions);
+    setDefinedRooms(rooms);
+  }, []);
+
+  useEffect(() => {
+    const editor = new DefineRoom({ mode: 'inline' });
+    defineRoomRef.current = editor;
+    setDefineRoomReady(true);
+
+    const originalClose = editor.close.bind(editor);
+    (editor as unknown as { close: () => void }).close = () => {
+      syncRoomsFromEditor();
+      originalClose();
+    };
+
+    return () => {
+      (editor as unknown as { close: () => void }).close = originalClose;
+      editor.destroy();
+      defineRoomRef.current = null;
+      defineRoomImageRef.current = null;
+      setDefineRoomReady(false);
+    };
+  }, [syncRoomsFromEditor]);
+
+  useEffect(() => {
+    if (!defineRoomReady || step !== 2) {
+      return;
+    }
+    const container = defineRoomContainerRef.current;
+    const instance = defineRoomRef.current;
+    if (!container || !instance) {
+      return;
+    }
+    const element = instance.element;
+    if (!container.contains(element)) {
+      container.innerHTML = '';
+      instance.mount(container);
+    }
+  }, [defineRoomReady, step]);
 
   useEffect(() => {
     if (!file) {
@@ -221,6 +371,45 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       }
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    if (!defineRoomReady) {
+      return;
+    }
+    if (!previewUrl) {
+      defineRoomRef.current?.close();
+      defineRoomImageRef.current = null;
+      setDefinedRooms([]);
+      return;
+    }
+
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled) {
+        return;
+      }
+      defineRoomImageRef.current = image;
+      defineRoomRef.current?.loadImage(image);
+      setDefinedRooms([]);
+    };
+    image.src = previewUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [defineRoomReady, previewUrl]);
+
+  useEffect(() => {
+    if (!defineRoomReady) {
+      return;
+    }
+    if (step === 2 && previewUrl) {
+      defineRoomRef.current?.show();
+    } else {
+      defineRoomRef.current?.close();
+    }
+  }, [defineRoomReady, previewUrl, step]);
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
@@ -285,6 +474,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setFile(selected);
     setMarkers([]);
     setExpandedMarkerId(null);
+    setDefinedRooms([]);
+    defineRoomRef.current?.close();
+    defineRoomImageRef.current = null;
   }, []);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -333,6 +525,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   };
 
   const handleContinue = () => {
+    if (step === 2) {
+      syncRoomsFromEditor();
+    }
     if (step < steps.length - 1) {
       setStep((current) => (current + 1) as WizardStep);
     }
@@ -342,6 +537,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (step === 0) {
       onClose();
       return;
+    }
+    if (step === 2) {
+      syncRoomsFromEditor();
     }
     setStep((current) => (current - 1) as WizardStep);
   };
@@ -355,6 +553,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setError('Image dimensions could not be determined. Try uploading the file again.');
       return;
     }
+    syncRoomsFromEditor();
     try {
       setCreating(true);
       setError(null);
@@ -407,7 +606,34 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdMarkers.push(payload);
       }
 
-      onComplete(map, createdMarkers, []);
+      const createdRegions: Region[] = [];
+      for (const [index, room] of definedRooms.entries()) {
+        if (!room.mask) {
+          continue;
+        }
+        const notesSections: string[] = [];
+        const trimmedDescription = room.description.trim();
+        const trimmedTags = room.tags.trim();
+        if (trimmedDescription) {
+          notesSections.push(trimmedDescription);
+        }
+        if (trimmedTags) {
+          notesSections.push(`Tags: ${trimmedTags}`);
+        }
+        if (room.visibleAtStart) {
+          notesSections.push('Visible at start of session');
+        }
+        const notesValue = notesSections.length > 0 ? notesSections.join('\n\n') : undefined;
+        const region = await apiClient.createRegion(map.id, {
+          name: room.name.trim() || `Room ${index + 1}`,
+          mask: room.mask,
+          notes: notesValue,
+          revealOrder: room.visibleAtStart ? index : undefined,
+        });
+        createdRegions.push(region);
+      }
+
+      onComplete(map, createdMarkers, createdRegions);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -596,7 +822,75 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-          {step === 2 && (
+        {step === 2 && (
+          <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="relative flex h-full min-h-0 items-stretch overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70">
+              <div ref={defineRoomContainerRef} className="flex h-full w-full flex-col" />
+              {!previewUrl && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-3xl border border-dashed border-slate-800/60 bg-slate-950/60 p-6 text-center text-sm text-slate-400">
+                  Upload a map image to start defining rooms.
+                </div>
+              )}
+            </div>
+            <div className="flex h-full min-h-0 flex-col gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Room Summary</p>
+                  <h3 className="text-lg font-semibold text-white">
+                    {definedRooms.length} {definedRooms.length === 1 ? 'Room' : 'Rooms'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={syncRoomsFromEditor}
+                  className="rounded-full border border-slate-700/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+                >
+                  Refresh
+                </button>
+              </div>
+              <p className="text-sm text-slate-400">
+                Confirm rooms in the editor to capture them here. Refresh before continuing to ensure the latest data is saved.
+              </p>
+              <div className="mt-2 flex-1 overflow-y-auto pr-1">
+                {definedRooms.length === 0 ? (
+                  <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-800/60 bg-slate-950/60 p-6 text-sm text-slate-400">
+                    No rooms defined yet. Use the editor to add and confirm rooms.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {definedRooms.map((room, index) => (
+                      <div key={room.id} className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Room {index + 1}</p>
+                            <h4 className="mt-1 text-base font-semibold text-white">{room.name}</h4>
+                          </div>
+                          <span
+                            className="mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-700/70"
+                            style={{ backgroundColor: room.color }}
+                          />
+                        </div>
+                        {room.description && <p className="mt-3 text-sm text-slate-300">{room.description}</p>}
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                          <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">
+                            {room.visibleAtStart ? 'Visible at Start' : 'Hidden at Start'}
+                          </span>
+                          {room.tags && (
+                            <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">Tags: {room.tags}</span>
+                          )}
+                          <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">
+                            {room.mask ? `${room.mask.width}×${room.mask.height} mask` : 'No mask yet'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+{step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
