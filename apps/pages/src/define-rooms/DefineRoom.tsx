@@ -528,7 +528,7 @@ export class DefineRoom {
 
   private hoverLabel!: HTMLElement;
 
-  private closeButton!: HTMLButtonElement;
+  private closeButton: HTMLButtonElement | null = null;
 
   private imageContext!: CanvasRenderingContext2D;
 
@@ -620,21 +620,36 @@ export class DefineRoom {
 
   private height = 0;
 
+  private baseScale = 1;
+
+  private baseOffset: Point = { x: 0, y: 0 };
+
+  private resizeObserver: ResizeObserver | null = null;
+
   private historyStacks: Map<string, { undo: Uint8Array[]; redo: Uint8Array[] }> = new Map();
 
   private mode: DefineRoomMode;
 
   constructor(options: DefineRoomOptions = {}) {
     this.mode = options.mode ?? 'overlay';
+    const header =
+      this.mode === 'embedded'
+        ? null
+        : (
+            <div class="define-room-header">
+              <h1>Define Rooms</h1>
+              <button class="define-room-close" type="button">
+                Close
+              </button>
+            </div>
+          );
+
     this.root = (
       <div
         class={`define-room-overlay hidden${this.mode === 'embedded' ? ' define-room-embedded' : ''}`}
       >
         <div class="define-room-window">
-          <div class="define-room-header">
-            <h1>Define Rooms</h1>
-            <button class="define-room-close" type="button">Close</button>
-          </div>
+          {header}
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">
@@ -768,6 +783,9 @@ export class DefineRoom {
     this.root.classList.remove("hidden");
     if (shouldReset) {
       this.prepareImage(image);
+    } else {
+      this.updateBaseTransform();
+      this.resetMagnifyTransform(true);
     }
   }
 
@@ -797,6 +815,10 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
     this.root.remove();
   }
 
@@ -823,7 +845,16 @@ export class DefineRoom {
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
     this.selectionCanvas = this.root.querySelector(".selection-layer") as HTMLCanvasElement;
     this.hoverLabel = this.root.querySelector(".room-hover-label") as HTMLElement;
-    this.closeButton = this.root.querySelector(".define-room-close") as HTMLButtonElement;
+    this.closeButton = this.root.querySelector(
+      ".define-room-close",
+    ) as HTMLButtonElement | null;
+
+    if (typeof ResizeObserver !== "undefined" && this.canvasWrapper) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.updateBaseTransform();
+      });
+      this.resizeObserver.observe(this.canvasWrapper);
+    }
 
     this.initializeColorMenu();
 
@@ -949,7 +980,9 @@ export class DefineRoom {
   }
 
   private attachEventListeners(): void {
-    this.closeButton.addEventListener("click", () => this.close());
+    if (this.closeButton) {
+      this.closeButton.addEventListener("click", () => this.close());
+    }
     this.root.addEventListener("click", (event) => {
       if (event.target === this.root) {
         this.close();
@@ -1302,6 +1335,42 @@ export class DefineRoom {
     }
   }
 
+  private updateBaseTransform(): void {
+    if (!this.canvasWrapper) {
+      return;
+    }
+
+    if (!this.width || !this.height) {
+      this.baseScale = 1;
+      this.baseOffset = { x: 0, y: 0 };
+      return;
+    }
+
+    const rect = this.canvasWrapper.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      this.baseScale = 1;
+      this.baseOffset = { x: 0, y: 0 };
+      return;
+    }
+
+    const rawScale = Math.min(rect.width / this.width, rect.height / this.height);
+    const nextScale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+    this.baseScale = nextScale;
+    const scaledWidth = this.width * nextScale;
+    const scaledHeight = this.height * nextScale;
+    this.baseOffset = {
+      x: (rect.width - scaledWidth) / 2,
+      y: (rect.height - scaledHeight) / 2,
+    };
+
+    if (this.magnifyIndex === 0) {
+      this.panOffset = { x: 0, y: 0 };
+      this.magnifyOrigin = "50% 50%";
+    }
+
+    this.updateCanvasTransform(this.magnifyScales[this.magnifyIndex], this.magnifyOrigin, false);
+  }
+
   private prepareImage(image: HTMLImageElement): void {
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
@@ -1323,6 +1392,7 @@ export class DefineRoom {
     this.overlayCanvas.style.height = "auto";
     this.selectionCanvas.style.height = "auto";
 
+    this.updateBaseTransform();
     this.resetMagnifyTransform(true);
 
     this.imageContext.clearRect(0, 0, width, height);
@@ -2158,7 +2228,10 @@ export class DefineRoom {
   }
 
   private updateCanvasTransform(scale: number, origin: string, withTransition = true): void {
-    const transformValue = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${scale})`;
+    const effectiveScale = this.baseScale * scale;
+    const translateX = this.baseOffset.x + this.panOffset.x;
+    const translateY = this.baseOffset.y + this.panOffset.y;
+    const transformValue = `translate(${translateX}px, ${translateY}px) scale(${effectiveScale})`;
     [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
       canvas.style.transition = withTransition ? this.magnifyTransition : "none";
       canvas.style.transformOrigin = origin;
@@ -2179,7 +2252,7 @@ export class DefineRoom {
     this.panHasMoved = false;
     this.pendingSelectionPoint = null;
     this.pendingSelectionPointerId = null;
-    this.updateCanvasTransform(1, this.magnifyOrigin);
+    this.updateCanvasTransform(this.magnifyScales[this.magnifyIndex], this.magnifyOrigin);
     this.updateCanvasCursor();
   }
 
