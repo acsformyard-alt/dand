@@ -1023,12 +1023,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
         </div>
       </main>
-      <footer className="border-t border-slate-800/70 px-5 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <footer className="border-t border-slate-800/70 px-5 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+            className="rounded-full border border-slate-700/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
           >
             {step === 0 ? 'Cancel' : 'Back'}
           </button>
@@ -1039,7 +1039,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 type="button"
                 disabled={!allowNext}
                 onClick={handleContinue}
-                className={`rounded-full border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                className={`rounded-full border px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   allowNext
                     ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
                     : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
@@ -1052,7 +1052,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 type="button"
                 onClick={handleComplete}
                 disabled={creating}
-                className={`rounded-full border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                className={`rounded-full border px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   creating
                     ? 'cursor-wait border-slate-800/70 bg-slate-900/70 text-slate-500'
                     : 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'

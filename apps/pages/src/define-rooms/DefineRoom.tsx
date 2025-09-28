@@ -777,6 +777,8 @@ export class DefineRoom {
     this.root.classList.remove("hidden");
     if (shouldReset) {
       this.prepareImage(image);
+    } else {
+      this.resetMagnifyTransform(true);
     }
   }
 
