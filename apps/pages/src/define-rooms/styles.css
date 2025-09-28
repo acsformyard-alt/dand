@@ -195,6 +195,7 @@
 .define-room-body {
   display: flex;
   flex: 1;
+  min-height: 0;
 }
 
 .define-room-sidebar {
