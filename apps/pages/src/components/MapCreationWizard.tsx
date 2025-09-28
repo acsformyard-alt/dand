@@ -6,13 +6,16 @@ import React, {
   useState,
 } from 'react';
 import { apiClient } from '../api/client';
+import DefineRoomsStep from './DefineRoomsStep';
 import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
+import type { RoomMask } from '../utils/roomMask';
+import type { DefineRoomSerializedRoom } from '../define-rooms/DefineRoom';
 
-type WizardStep = 0 | 1 | 2;
+type WizardStep = 0 | 1 | 2 | 3;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -37,6 +40,10 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Map Details',
     description: 'Name your map, assign it to a folder, and capture quick notes or tags.',
+  },
+  {
+    title: 'Define Rooms',
+    description: 'Paint room boundaries and capture their details before you add encounter markers.',
   },
   {
     title: 'Add Markers',
@@ -187,6 +194,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<DefineRoomSerializedRoom[]>([]);
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -279,11 +287,65 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     return true;
   }, [file, name, step]);
 
+  const convertToRoomMask = useCallback(
+    (mask: Uint8Array): RoomMask | null => {
+      if (!imageDimensions) {
+        return null;
+      }
+      const { width, height } = imageDimensions;
+      if (mask.length !== width * height) {
+        return null;
+      }
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const index = y * width + x;
+          if (mask[index]) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < minX || maxY < minY) {
+        return null;
+      }
+      const cropWidth = maxX - minX + 1;
+      const cropHeight = maxY - minY + 1;
+      const data = new Uint8ClampedArray(cropWidth * cropHeight);
+      for (let y = minY; y <= maxY; y += 1) {
+        for (let x = minX; x <= maxX; x += 1) {
+          const sourceIndex = y * width + x;
+          const targetIndex = (y - minY) * cropWidth + (x - minX);
+          data[targetIndex] = mask[sourceIndex] ? 255 : 0;
+        }
+      }
+      const bounds = {
+        minX: minX / width,
+        minY: minY / height,
+        maxX: (maxX + 1) / width,
+        maxY: (maxY + 1) / height,
+      } as RoomMask['bounds'];
+      return {
+        width: cropWidth,
+        height: cropHeight,
+        bounds,
+        data,
+      };
+    },
+    [imageDimensions],
+  );
+
   const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
 
   const handleFileSelected = useCallback((selected: File) => {
     setFile(selected);
     setMarkers([]);
+    setRooms([]);
     setExpandedMarkerId(null);
   }, []);
 
@@ -407,7 +469,28 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdMarkers.push(payload);
       }
 
-      onComplete(map, createdMarkers, []);
+      const createdRegions: Region[] = [];
+      const confirmedRooms = rooms.filter((room) => room.isConfirmed);
+      for (const [index, room] of confirmedRooms.entries()) {
+        const mask = convertToRoomMask(room.mask);
+        if (!mask) {
+          continue;
+        }
+        const description = room.description.trim();
+        const tags = room.tags.trim();
+        const notes = [description, tags ? `Tags: ${tags}` : '']
+          .filter((value) => value.length > 0)
+          .join('\n\n');
+        const region = await apiClient.createRegion(map.id, {
+          name: room.name.trim() || 'Room',
+          mask,
+          notes: notes || undefined,
+          revealOrder: room.visibleAtStart ? index : undefined,
+        });
+        createdRegions.push(region);
+      }
+
+      onComplete(map, createdMarkers, createdRegions);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -597,6 +680,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
+            <DefineRoomsStep
+              previewUrl={previewUrl}
+              imageDimensions={imageDimensions}
+              rooms={rooms}
+              onRoomsChange={setRooms}
+            />
+          )}
+          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
