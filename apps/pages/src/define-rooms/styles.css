@@ -14,6 +14,35 @@
   display: none;
 }
 
+.define-room-overlay.define-room-embedded {
+  position: static;
+  inset: auto;
+  background: transparent;
+  backdrop-filter: none;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  z-index: auto;
+}
+
+.define-room-overlay.define-room-embedded.hidden {
+  display: none;
+}
+
+.define-room-overlay.define-room-embedded .define-room-window {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  border: none;
+  box-shadow: none;
+}
+
+.define-room-overlay.define-room-embedded .define-room-close {
+  display: none;
+}
+
 .define-room-window {
   width: min(1200px, 92vw);
   height: min(760px, 88vh);

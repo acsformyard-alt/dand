@@ -285,11 +285,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
+  const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
   const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
+  const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setDefineRoomContainer(node);
+  }, []);
 
   const syncRoomsFromEditor = useCallback(() => {
     const instance = defineRoomRef.current;
@@ -307,8 +311,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   }, []);
 
   useEffect(() => {
-    const editor = new DefineRoom();
-    editor.mount(document.body);
+    const editor = new DefineRoom({ mode: 'embedded' });
     defineRoomRef.current = editor;
     setDefineRoomReady(true);
 
@@ -326,6 +329,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setDefineRoomReady(false);
     };
   }, [syncRoomsFromEditor]);
+
+  useEffect(() => {
+    const editor = defineRoomRef.current;
+    const container = defineRoomContainer;
+    if (!editor || !container) {
+      return undefined;
+    }
+    if (!container.contains(editor.element)) {
+      editor.mount(container);
+    }
+    return () => {
+      if (container.contains(editor.element)) {
+        container.removeChild(editor.element);
+      }
+    };
+  }, [defineRoomContainer]);
 
   useEffect(() => {
     if (!file) {
@@ -376,13 +395,33 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       defineRoomImageRef.current = image;
       defineRoomRef.current?.loadImage(image);
       setDefinedRooms([]);
+      if (step === 2) {
+        defineRoomRef.current?.open(image, { resetExisting: true });
+      } else {
+        defineRoomRef.current?.close();
+      }
     };
     image.src = previewUrl;
 
     return () => {
       cancelled = true;
     };
-  }, [defineRoomReady, previewUrl]);
+  }, [defineRoomReady, previewUrl, step]);
+
+  useEffect(() => {
+    if (!defineRoomReady) {
+      return;
+    }
+    const editor = defineRoomRef.current;
+    if (!editor) {
+      return;
+    }
+    if (step === 2 && defineRoomImageRef.current) {
+      editor.open(defineRoomImageRef.current, { resetExisting: false });
+    } else {
+      editor.close();
+    }
+  }, [defineRoomReady, step]);
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
@@ -499,13 +538,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setExpandedMarkerId(newMarker.id);
   };
 
-  const handleLaunchDefineRooms = () => {
-    if (!defineRoomRef.current || !defineRoomImageRef.current) {
-      return;
-    }
-    defineRoomRef.current.open(defineRoomImageRef.current, { resetExisting: false });
-  };
-
   const handleContinue = () => {
     if (step === 2) {
       syncRoomsFromEditor();
@@ -519,6 +551,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (step === 0) {
       onClose();
       return;
+    }
+    if (step === 2) {
+      syncRoomsFromEditor();
     }
     setStep((current) => (current - 1) as WizardStep);
   };
@@ -801,99 +836,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-{step === 2 && (
+          {step === 2 && (
             <div className="flex flex-1 items-stretch justify-center">
-              <div className="flex h-full w-full max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
-                <div className="flex h-full flex-col gap-6 overflow-y-auto">
-                  <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-6">
-                    <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Room Mask Editor</p>
-                    <h3 className="mt-2 text-xl font-semibold text-white">Define rooms on your map</h3>
-                    <p className="mt-3 text-sm text-slate-400">
-                      Launch the dedicated editor to outline encounter areas, capture notes, and flag which spaces begin revealed.
-                      The editor automatically reuses the map image you uploaded in the first step.
-                    </p>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleLaunchDefineRooms}
-                        disabled={!canLaunchRoomsEditor}
-                        className={`rounded-full border px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                          canLaunchRoomsEditor
-                            ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
-                            : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
-                        }`}
-                      >
-                        Open Room Editor
-                      </button>
-                      <span className="text-xs text-slate-500">
-                        {previewUrl
-                          ? 'Close the editor to sync your changes back to this wizard.'
-                          : 'Upload a map image to enable the editor.'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex-1 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-6">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Current Rooms</p>
-                        <h3 className="text-lg font-semibold text-white">
-                          {definedRooms.length} {definedRooms.length === 1 ? 'Room' : 'Rooms'}
-                        </h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={syncRoomsFromEditor}
-                        className="rounded-full border border-slate-700/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                    <div className="mt-4 h-full overflow-y-auto pr-1">
-                      {definedRooms.length === 0 ? (
-                        <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-800/60 bg-slate-950/60 p-6 text-sm text-slate-400">
-                          No rooms defined yet. Open the editor to start outlining encounter spaces.
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {definedRooms.map((room, index) => (
-                            <div
-                              key={room.id}
-                              className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4"
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                                    Room {index + 1}
-                                  </p>
-                                  <h4 className="mt-1 text-base font-semibold text-white">{room.name}</h4>
-                                </div>
-                                <span
-                                  className="mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-700/70"
-                                  style={{ backgroundColor: room.color }}
-                                />
-                              </div>
-                              {room.description && (
-                                <p className="mt-3 text-sm text-slate-300">{room.description}</p>
-                              )}
-                              <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                                <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">
-                                  {room.visibleAtStart ? 'Visible at Start' : 'Hidden at Start'}
-                                </span>
-                                {room.tags && (
-                                  <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">
-                                    Tags: {room.tags}
-                                  </span>
-                                )}
-                                <span className="rounded-full border border-slate-800/70 bg-slate-900/70 px-2 py-1">
-                                  {room.mask ? `${room.mask.width}×${room.mask.height} mask` : 'No mask yet'}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              <div className="flex h-full w-full max-w-6xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+                <div
+                  ref={defineRoomContainerRef}
+                  className={`flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
+                    canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
+                  }`}
+                >
+                  {!canLaunchRoomsEditor && (
+                    <p>{previewUrl ? 'Loading room editor…' : 'Upload a map image to start defining rooms.'}</p>
+                  )}
                 </div>
               </div>
             </div>

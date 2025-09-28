@@ -33,6 +33,12 @@ type Room = {
 
 export type DefineRoomData = Room;
 
+type DefineRoomMode = 'overlay' | 'embedded';
+
+interface DefineRoomOptions {
+  mode?: DefineRoomMode;
+}
+
 const TOOL_LABELS: Record<ToolType, string> = {
   brush: "Paintbrush Select",
   eraser: "Eraser",
@@ -616,9 +622,14 @@ export class DefineRoom {
 
   private historyStacks: Map<string, { undo: Uint8Array[]; redo: Uint8Array[] }> = new Map();
 
-  constructor() {
+  private mode: DefineRoomMode;
+
+  constructor(options: DefineRoomOptions = {}) {
+    this.mode = options.mode ?? 'overlay';
     this.root = (
-      <div class="define-room-overlay hidden">
+      <div
+        class={`define-room-overlay hidden${this.mode === 'embedded' ? ' define-room-embedded' : ''}`}
+      >
         <div class="define-room-window">
           <div class="define-room-header">
             <h1>Define Rooms</h1>
