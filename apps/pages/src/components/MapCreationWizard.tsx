@@ -11,8 +11,11 @@ import {
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
+import { DefineRoom, type DefinedRoomSummary } from '../define-rooms/DefineRoom';
+import type { RoomMask } from '../utils/roomMask';
+import './DefineRoomsOverlay.css';
 
-type WizardStep = 0 | 1 | 2;
+type WizardStep = 0 | 1 | 2 | 3;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -37,6 +40,10 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Map Details',
     description: 'Name your map, assign it to a folder, and capture quick notes or tags.',
+  },
+  {
+    title: 'Define Rooms',
+    description: 'Launch the room editor to paint regions that you want to reveal during play.',
   },
   {
     title: 'Add Markers',
@@ -168,6 +175,49 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+const buildRoomMaskFromBinary = (
+  mask: Uint8Array,
+  dimensions: { width: number; height: number },
+): RoomMask => {
+  const { width, height } = dimensions;
+  const data = new Uint8ClampedArray(width * height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (mask[index]) {
+        data[index] = 255;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      } else {
+        data[index] = 0;
+      }
+    }
+  }
+
+  if (maxX === -1 || maxY === -1) {
+    minX = 0;
+    minY = 0;
+    maxX = Math.max(0, width - 1);
+    maxY = Math.max(0, height - 1);
+  }
+
+  const bounds = {
+    minX: width === 0 ? 0 : minX / width,
+    minY: height === 0 ? 0 : minY / height,
+    maxX: width === 0 ? 1 : (maxX + 1) / width,
+    maxY: height === 0 ? 1 : (maxY + 1) / height,
+  };
+
+  return { width, height, bounds, data };
+};
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   campaign,
   onClose,
@@ -190,13 +240,128 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [definedRooms, setDefinedRooms] = useState<DefinedRoomSummary[]>([]);
+  const [defineRoomsError, setDefineRoomsError] = useState<string | null>(null);
+  const [defineRoomsLoading, setDefineRoomsLoading] = useState(false);
+  const [defineRoomDimensions, setDefineRoomDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const defineRoomRef = useRef<DefineRoom | null>(null);
+  const defineRoomContainerRef = useRef<HTMLDivElement | null>(null);
+  const defineRoomImageRef = useRef<{ url: string; image: HTMLImageElement } | null>(null);
+  const skipNextDefineRoomsSyncRef = useRef(false);
+
+  const syncDefinedRooms = useCallback(() => {
+    if (skipNextDefineRoomsSyncRef.current) {
+      skipNextDefineRoomsSyncRef.current = false;
+      setDefinedRooms([]);
+      setDefineRoomDimensions(null);
+      return;
+    }
+
+    const instance = defineRoomRef.current;
+    if (!instance) {
+      return;
+    }
+
+    const rooms = instance
+      .getRooms()
+      .filter((room) => room.isConfirmed);
+    setDefinedRooms(rooms);
+    const dimensions = instance.getDimensions();
+    if (dimensions) {
+      setDefineRoomDimensions(dimensions);
+    }
+  }, [setDefinedRooms, setDefineRoomDimensions]);
+
+  const loadImageForDefineRooms = useCallback(() => {
+    if (!previewUrl) {
+      return Promise.reject(new Error('Upload a map image before defining rooms.'));
+    }
+    if (defineRoomImageRef.current?.url === previewUrl) {
+      return Promise.resolve(defineRoomImageRef.current.image);
+    }
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        defineRoomImageRef.current = { url: previewUrl, image };
+        resolve(image);
+      };
+      image.onerror = () => {
+        reject(new Error('Unable to load the uploaded map image.'));
+      };
+      image.src = previewUrl;
+    });
+  }, [previewUrl]);
+
+  const handleOpenDefineRooms = useCallback(async () => {
+    const instance = defineRoomRef.current;
+    if (!instance) {
+      return;
+    }
+    setDefineRoomsError(null);
+    setDefineRoomsLoading(true);
+    try {
+      const image = await loadImageForDefineRooms();
+      instance.open(image);
+      const dimensions = instance.getDimensions();
+      if (dimensions) {
+        setDefineRoomDimensions(dimensions);
+      } else {
+        setDefineRoomDimensions({
+          width: image.naturalWidth || image.width,
+          height: image.naturalHeight || image.height,
+        });
+      }
+    } catch (err) {
+      setDefineRoomsError((err as Error).message);
+    } finally {
+      setDefineRoomsLoading(false);
+    }
+  }, [loadImageForDefineRooms]);
+
+  const handleRefreshDefinedRooms = useCallback(() => {
+    setDefineRoomsError(null);
+    syncDefinedRooms();
+  }, [syncDefinedRooms]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    defineRoomContainerRef.current = container;
+    const instance = new DefineRoom();
+    instance.mount(container);
+    defineRoomRef.current = instance;
+    const unsubscribe = instance.onClose(() => {
+      syncDefinedRooms();
+    });
+
+    return () => {
+      unsubscribe();
+      skipNextDefineRoomsSyncRef.current = true;
+      instance.close();
+      defineRoomRef.current = null;
+      defineRoomImageRef.current = null;
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+      defineRoomContainerRef.current = null;
+    };
+  }, [syncDefinedRooms]);
 
   useEffect(() => {
     if (!file) {
       setPreviewUrl(null);
       setImageDimensions(null);
+      setDefinedRooms([]);
+      setDefineRoomDimensions(null);
+      defineRoomImageRef.current = null;
       return;
     }
 
@@ -281,11 +446,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
 
   const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
 
-  const handleFileSelected = useCallback((selected: File) => {
-    setFile(selected);
-    setMarkers([]);
-    setExpandedMarkerId(null);
-  }, []);
+  const handleFileSelected = useCallback(
+    (selected: File) => {
+      setFile(selected);
+      setMarkers([]);
+      setExpandedMarkerId(null);
+      setDefinedRooms([]);
+      setDefineRoomsError(null);
+      setDefineRoomDimensions(null);
+      defineRoomImageRef.current = null;
+      if (defineRoomRef.current) {
+        skipNextDefineRoomsSyncRef.current = true;
+        defineRoomRef.current.close();
+      }
+    },
+    [defineRoomRef, skipNextDefineRoomsSyncRef],
+  );
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -333,6 +509,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   };
 
   const handleContinue = () => {
+    if (step === 2) {
+      syncDefinedRooms();
+    }
     if (step < steps.length - 1) {
       setStep((current) => (current + 1) as WizardStep);
     }
@@ -353,6 +532,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     }
     if (!imageDimensions) {
       setError('Image dimensions could not be determined. Try uploading the file again.');
+      return;
+    }
+    syncDefinedRooms();
+    const instance = defineRoomRef.current;
+    const roomsFromInstance =
+      instance?.getRooms().filter((room) => room.isConfirmed) ?? definedRooms;
+    const roomDimensions = instance?.getDimensions() ?? defineRoomDimensions;
+    if (roomsFromInstance.length > 0 && !roomDimensions) {
+      setError('Room boundaries could not be saved. Reopen the Define Rooms editor and try again.');
       return;
     }
     try {
@@ -407,7 +595,34 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdMarkers.push(payload);
       }
 
-      onComplete(map, createdMarkers, []);
+      const createdRegions: Region[] = [];
+      if (roomsFromInstance.length > 0 && roomDimensions) {
+        for (const [index, room] of roomsFromInstance.entries()) {
+          const mask = buildRoomMaskFromBinary(room.mask, roomDimensions);
+          const noteSections: string[] = [];
+          const trimmedDescription = room.description.trim();
+          const trimmedTags = room.tags.trim();
+          if (trimmedDescription) {
+            noteSections.push(trimmedDescription);
+          }
+          if (trimmedTags) {
+            noteSections.push(`Tags: ${trimmedTags}`);
+          }
+          if (room.visibleAtStart) {
+            noteSections.push('Visible at start of game');
+          }
+          const notesValue = noteSections.length > 0 ? noteSections.join('\n\n') : undefined;
+          const region = await apiClient.createRegion(map.id, {
+            name: room.name.trim() || `Room ${index + 1}`,
+            notes: notesValue,
+            revealOrder: room.visibleAtStart ? index : undefined,
+            mask,
+          });
+          createdRegions.push(region);
+        }
+      }
+
+      onComplete(map, createdMarkers, createdRegions);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -597,6 +812,111 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex h-full w-full max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+                <div className="max-w-3xl">
+                  <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Room Boundaries</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">Define rooms on your map</h3>
+                  <p className="mt-3 text-sm text-slate-400">
+                    Launch the room editor to paint the spaces that your players can reveal. Close the editor to
+                    sync your progress back into this wizard.
+                  </p>
+                </div>
+                <div className="mt-8 flex flex-wrap items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleOpenDefineRooms}
+                    disabled={defineRoomsLoading || !previewUrl}
+                    className={`rounded-full border px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                      defineRoomsLoading || !previewUrl
+                        ? 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
+                        : 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
+                    }`}
+                  >
+                    {defineRoomsLoading ? 'Preparing editor…' : 'Launch Room Editor'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRefreshDefinedRooms}
+                    className="rounded-full border border-slate-700/70 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+                  >
+                    Refresh Saved Rooms
+                  </button>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                    Rooms are linked to the image uploaded in step one.
+                  </p>
+                </div>
+                {defineRoomsError && (
+                  <p className="mt-4 text-sm text-rose-300">{defineRoomsError}</p>
+                )}
+                <div className="mt-8 flex-1 overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/60 p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Saved Rooms</p>
+                      <h4 className="text-lg font-semibold text-white">
+                        {definedRooms.length > 0 ? `${definedRooms.length} room${definedRooms.length === 1 ? '' : 's'} saved` : 'No rooms saved yet'}
+                      </h4>
+                    </div>
+                    {defineRoomDimensions && (
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                        {defineRoomDimensions.width} × {defineRoomDimensions.height} pixels
+                      </p>
+                    )}
+                  </div>
+                  {definedRooms.length > 0 ? (
+                    <ul className="mt-4 space-y-3 overflow-y-auto pr-1">
+                      {definedRooms.map((room, index) => {
+                        const visibleLabel = room.visibleAtStart ? 'Visible at start' : 'Hidden until reveal';
+                        return (
+                          <li
+                            key={room.id}
+                            className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 shadow-inner"
+                          >
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className="h-3 w-3 rounded-full border border-slate-700/70"
+                                    style={{ backgroundColor: room.color || '#38bdf8' }}
+                                  />
+                                  <p className="text-sm font-semibold text-white">
+                                    {room.name.trim() || `Room ${index + 1}`}
+                                  </p>
+                                </div>
+                                {room.description.trim() && (
+                                  <p className="mt-2 whitespace-pre-line text-xs text-slate-400">
+                                    {room.description.trim()}
+                                  </p>
+                                )}
+                                {room.tags.trim() && (
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                                    Tags: {room.tags}
+                                  </p>
+                                )}
+                              </div>
+                              <span
+                                className={`text-[10px] uppercase tracking-[0.35em] ${
+                                  room.visibleAtStart ? 'text-teal-200' : 'text-slate-500'
+                                }`}
+                              >
+                                {visibleLabel}
+                              </span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-700/70 px-6 py-8 text-sm text-slate-400">
+                      Launch the editor to paint room shapes and capture their details. Close the editor when you are done to
+                      keep them in sync.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
