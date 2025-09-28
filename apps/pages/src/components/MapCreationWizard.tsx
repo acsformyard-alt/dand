@@ -10,9 +10,12 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
+import type { RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
+import DefineRoomsStep from './DefineRoomsStep';
+import type { DefineRoom } from '../defineRooms/DefineRoom';
 
-type WizardStep = 0 | 1 | 2;
+type WizardStep = 0 | 1 | 2 | 3;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -29,6 +32,24 @@ interface DraftMarker {
   y: number;
 }
 
+interface EditorRoom {
+  id: string;
+  name: string;
+  description: string;
+  tags: string;
+  visibleAtStart: boolean;
+  isConfirmed: boolean;
+  mask: Uint8Array;
+  color: string;
+}
+
+interface DraftRegionPayload {
+  name: string;
+  mask: RoomMask;
+  notes?: string;
+  revealOrder?: number;
+}
+
 const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Upload Map Image',
@@ -37,6 +58,10 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Map Details',
     description: 'Name your map, assign it to a folder, and capture quick notes or tags.',
+  },
+  {
+    title: 'Define Rooms',
+    description: 'Mark room boundaries on your map to control what players see.',
   },
   {
     title: 'Add Markers',
@@ -168,6 +193,88 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+const createRoomMaskFromBinary = (mask: Uint8Array, width: number, height: number): RoomMask => {
+  const totalPixels = width * height;
+  const data = new Uint8ClampedArray(totalPixels);
+  const length = Math.min(mask.length, totalPixels);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let index = 0; index < length; index += 1) {
+    if (!mask[index]) {
+      continue;
+    }
+    data[index] = 255;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  if (maxX < minX || maxY < minY) {
+    return {
+      width,
+      height,
+      bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+      data,
+    };
+  }
+  const safeWidth = width || 1;
+  const safeHeight = height || 1;
+  return {
+    width,
+    height,
+    bounds: {
+      minX: Math.max(0, minX / safeWidth),
+      minY: Math.max(0, minY / safeHeight),
+      maxX: Math.min(1, (maxX + 1) / safeWidth),
+      maxY: Math.min(1, (maxY + 1) / safeHeight),
+    },
+    data,
+  };
+};
+
+const buildRegionPayloads = (
+  rooms: EditorRoom[],
+  width: number,
+  height: number,
+): DraftRegionPayload[] => {
+  let revealOrder = 0;
+  return rooms
+    .filter((room) => room.isConfirmed)
+    .map((room, index) => {
+      const hasMask = room.mask && room.mask.some((value) => value > 0);
+      if (!hasMask) {
+        return null;
+      }
+      const mask = createRoomMaskFromBinary(room.mask, width, height);
+      const description = room.description.trim();
+      const tags = room.tags.trim();
+      const notesParts: string[] = [];
+      if (description) {
+        notesParts.push(description);
+      }
+      if (tags) {
+        notesParts.push(`Tags: ${tags}`);
+      }
+      const payload: DraftRegionPayload = {
+        name: room.name.trim() || `Room ${index + 1}`,
+        mask,
+      };
+      if (notesParts.length > 0) {
+        payload.notes = notesParts.join('\n');
+      }
+      if (room.visibleAtStart) {
+        payload.revealOrder = revealOrder;
+        revealOrder += 1;
+      }
+      return payload;
+    })
+    .filter((payload): payload is DraftRegionPayload => payload !== null);
+};
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   campaign,
   onClose,
@@ -190,6 +297,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [markers, setMarkers] = useState<DraftMarker[]>([]);
   const [expandedMarkerId, setExpandedMarkerId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const defineRoomInstanceRef = useRef<DefineRoom | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -355,6 +463,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setError('Image dimensions could not be determined. Try uploading the file again.');
       return;
     }
+    const editorRooms: EditorRoom[] =
+      ((defineRoomInstanceRef.current?.getRooms?.() as EditorRoom[]) ?? []).map((room) => ({
+        ...room,
+      }));
+    const regionPayloads = buildRegionPayloads(editorRooms, imageDimensions.width, imageDimensions.height);
     try {
       setCreating(true);
       setError(null);
@@ -395,6 +508,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       await uploadFile(uploads.original);
       await uploadFile(uploads.display);
 
+      const createdRegions: Region[] = [];
+      for (const payload of regionPayloads) {
+        const region = await apiClient.createRegion(map.id, payload);
+        createdRegions.push(region);
+      }
+
       const createdMarkers: Marker[] = [];
       for (const marker of markers) {
         const payload = await apiClient.createMarker(map.id, {
@@ -407,7 +526,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdMarkers.push(payload);
       }
 
-      onComplete(map, createdMarkers, []);
+      onComplete(map, createdMarkers, createdRegions);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -597,6 +716,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
+            <DefineRoomsStep
+              imageUrl={previewUrl}
+              isActive={step === 2}
+              onInstanceReady={(instance) => {
+                defineRoomInstanceRef.current = instance;
+              }}
+            />
+          )}
+          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
