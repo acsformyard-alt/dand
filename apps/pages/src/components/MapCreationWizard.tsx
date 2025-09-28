@@ -657,7 +657,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
-      <header className="border-b border-slate-800/70 px-6 py-5">
+      <header className="mb-0.5 border-b border-slate-800/70 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-teal-300">New Map Wizard</p>
@@ -1023,7 +1023,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
         </div>
       </main>
-      <footer className="border-t border-slate-800/70 px-5 py-2">
+      <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
