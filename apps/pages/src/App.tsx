@@ -5,6 +5,7 @@ import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
 import MapFolderList from './components/MapFolderList';
 import LandingPage from './components/LandingPage';
+import TorchLogo from './components/TorchLogo';
 import type {
   AuthResponse,
   Campaign,
@@ -63,6 +64,25 @@ const App: React.FC = () => {
   const [newCampaignPublic, setNewCampaignPublic] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showMapWizard, setShowMapWizard] = useState(false);
+
+  const parchmentTexture = useMemo(
+    () => new URL('../../../textures/parchment-bg.jpg', import.meta.url).href,
+    []
+  );
+
+  const parchmentBackground = useMemo<React.CSSProperties>(
+    () => ({
+      backgroundColor: theme === 'dark' ? '#1a1510' : '#f5ebd3',
+      backgroundImage:
+        theme === 'dark'
+          ? `linear-gradient(rgba(10, 8, 6, 0.85), rgba(10, 8, 6, 0.9)), url(${parchmentTexture})`
+          : `url(${parchmentTexture})`,
+      backgroundSize: 'cover',
+      backgroundAttachment: 'fixed',
+      backgroundPosition: 'center',
+    }),
+    [parchmentTexture, theme]
+  );
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -539,8 +559,8 @@ const App: React.FC = () => {
   const navButtonClasses = (view: 'join' | 'manage' | 'create' | 'admin') =>
     `group flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left text-sm font-semibold uppercase tracking-[0.3em] transition ${
       activeView === view
-        ? 'border-teal-400 bg-teal-400/90 text-slate-900 shadow-lg shadow-teal-500/40'
-        : 'border-slate-800/70 bg-slate-900/60 text-slate-300 hover:border-teal-400/60 hover:bg-slate-800/80'
+        ? 'border-amber-600/60 bg-amber-500/40 text-amber-900 shadow-lg shadow-amber-900/20 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-100'
+        : 'border-amber-900/30 bg-amber-50/60 text-amber-900/80 hover:bg-amber-100/70 dark:border-amber-500/30 dark:bg-amber-900/30 dark:text-amber-200/80 dark:hover:bg-amber-900/50'
     }`;
 
   if (!token || !user) {
@@ -549,96 +569,106 @@ const App: React.FC = () => {
 
   if (activeSession) {
     return (
-      <div className="min-h-screen bg-slate-100 p-6 dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-primary">D&D Map Reveal</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Logged in as {user.displayName}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              {themeLabel}
-            </button>
-            <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
-              onClick={handleLogout}
-            >
-              Logout
-            </button>
+      <div
+        className="min-h-screen px-6 py-8 text-stone-900 transition-colors dark:text-amber-100"
+        style={parchmentBackground}
+      >
+        <div className="mx-auto flex max-w-6xl flex-col gap-6">
+          <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-amber-900/30 bg-amber-50/70 px-6 py-4 shadow-lg shadow-amber-900/20 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-900/40">
+            <TorchLogo theme={theme} showTagline={false} className="gap-3" />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-[0.35em] text-amber-900/70 dark:text-amber-200/70">Logged in</p>
+                <p className="text-sm font-semibold text-stone-900 dark:text-amber-100">{user.displayName}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-full border border-amber-900/30 bg-amber-50/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-amber-900 transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-amber-500 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  {themeLabel}
+                </button>
+                <button
+                  className="rounded-full border border-rose-500/60 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-rose-900 transition hover:bg-rose-500/30 focus-visible:outline focus-visible:outline-rose-500 dark:border-rose-400/60 dark:bg-rose-500/30 dark:text-rose-100"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </header>
+          {statusMessage && (
+            <div className="rounded-3xl border border-amber-900/30 bg-amber-50/80 px-5 py-3 text-sm text-stone-700 shadow-md shadow-amber-900/15 dark:border-amber-500/30 dark:bg-amber-900/40 dark:text-amber-200/80">
+              {statusMessage}
+            </div>
+          )}
+          <div className="rounded-3xl border border-amber-900/30 bg-amber-50/80 p-4 shadow-xl shadow-amber-900/20 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-900/40">
+            <SessionViewer
+              session={activeSession}
+              mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
+              mapWidth={selectedMap?.width}
+              mapHeight={selectedMap?.height}
+              regions={regions}
+              baseMarkers={markers}
+              mode={sessionMode}
+              user={user}
+              onLeave={handleLeaveSession}
+              onSaveSession={sessionMode === 'dm' ? handleSaveSession : undefined}
+              onEndSession={sessionMode === 'dm' ? handleEndSession : undefined}
+            />
           </div>
         </div>
-        {statusMessage && (
-          <div className="mb-4 rounded border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            {statusMessage}
-          </div>
-        )}
-        <SessionViewer
-          session={activeSession}
-          mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
-          mapWidth={selectedMap?.width}
-          mapHeight={selectedMap?.height}
-          regions={regions}
-          baseMarkers={markers}
-          mode={sessionMode}
-          user={user}
-          onLeave={handleLeaveSession}
-          onSaveSession={sessionMode === 'dm' ? handleSaveSession : undefined}
-          onEndSession={sessionMode === 'dm' ? handleEndSession : undefined}
-        />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-8 md:flex-row md:py-12">
-        <aside className="flex flex-col gap-6 rounded-3xl border border-slate-800/70 bg-slate-950/70 p-6 shadow-2xl md:w-72">
-          <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Mission Control</p>
-            <h2 className="mt-3 text-2xl font-black uppercase tracking-wide text-teal-300">Command Deck</h2>
-          </div>
-          <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
-            <p className="text-xs uppercase tracking-[0.5em] text-slate-500">Logged in</p>
-            <p className="mt-2 text-lg font-semibold text-white">{user.displayName}</p>
-            <p className="text-xs text-slate-500">Ready for launch</p>
+    <div
+      className="min-h-screen px-4 py-8 text-stone-900 transition-colors dark:text-amber-100"
+      style={parchmentBackground}
+    >
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 md:flex-row md:py-12">
+        <aside className="flex flex-col gap-6 rounded-3xl border border-amber-900/30 bg-amber-50/70 p-6 shadow-2xl shadow-amber-900/20 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-900/40 md:w-72">
+          <TorchLogo theme={theme} showTagline={false} className="gap-3" />
+          <div className="rounded-2xl border border-amber-900/30 bg-amber-100/70 p-4 text-amber-900/80 dark:border-amber-500/30 dark:bg-amber-900/50 dark:text-amber-200/80">
+            <p className="text-xs uppercase tracking-[0.45em]">Torchbearer</p>
+            <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-amber-100">{user.displayName}</p>
+            <p className="text-xs">Keep the story aglow.</p>
           </div>
           <nav className="space-y-3">
             <button className={navButtonClasses('join')} onClick={() => setActiveView('join')}>
               <span>Join Campaign</span>
-              <span className="text-[10px] tracking-[0.4em] text-slate-900/70 transition group-hover:text-slate-900/90">START</span>
+              <span className="text-[10px] tracking-[0.4em] text-amber-900/70 transition group-hover:text-amber-900">START</span>
             </button>
             <button className={navButtonClasses('manage')} onClick={() => setActiveView('manage')}>
               <span>Manage Campaigns</span>
-              <span className="text-[10px] tracking-[0.4em] text-slate-900/70 transition group-hover:text-slate-900/90">HANGAR</span>
+              <span className="text-[10px] tracking-[0.4em] text-amber-900/70 transition group-hover:text-amber-900">HANGAR</span>
             </button>
             <button className={navButtonClasses('create')} onClick={() => setActiveView('create')}>
               <span>Create Campaign</span>
-              <span className="text-[10px] tracking-[0.4em] text-slate-900/70 transition group-hover:text-slate-900/90">NEW</span>
+              <span className="text-[10px] tracking-[0.4em] text-amber-900/70 transition group-hover:text-amber-900">NEW</span>
             </button>
           </nav>
-          <div className="mt-auto space-y-2 text-xs text-slate-500">
-            <p>Need a room code? Ask your DM to share their campaign key.</p>
-            <p>Switch tabs to manage, create, or join adventures.</p>
+          <div className="mt-auto space-y-2 text-xs text-amber-900/70 dark:text-amber-200/70">
+            <p>Need a table key? Share the campaign code with your players.</p>
+            <p>Switch tabs to join, manage, or kindle new adventures.</p>
           </div>
         </aside>
         <section className="flex-1 space-y-6">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-800/70 bg-slate-950/70 px-6 py-4 shadow-xl">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-amber-900/30 bg-amber-50/80 px-6 py-4 shadow-lg shadow-amber-900/20 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-900/40">
             <div>
-              <p className="text-xs uppercase tracking-[0.5em] text-teal-300">Campaign Control</p>
-              <h1 className="text-3xl font-black uppercase tracking-wide text-white">D&D Map Reveal</h1>
+              <p className="text-xs uppercase tracking-[0.45em] text-amber-900/70 dark:text-amber-200/70">Campaign Ledger</p>
+              <h1 className="text-3xl font-black tracking-wide text-stone-900 dark:text-amber-100">TableTorch Command Board</h1>
             </div>
             <div className="flex items-center gap-3">
               <button
-                className="rounded-full border border-teal-400/60 bg-teal-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:bg-teal-400/20"
+                className="rounded-full border border-amber-900/30 bg-amber-50/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-amber-900 transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-amber-500 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100"
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >
                 {themeLabel}
               </button>
               <button
-                className="rounded-full border border-rose-400/60 bg-rose-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                className="rounded-full border border-rose-500/60 bg-rose-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-rose-900 transition hover:bg-rose-500/30 focus-visible:outline focus-visible:outline-rose-500 dark:border-rose-400/60 dark:bg-rose-500/30 dark:text-rose-100"
                 onClick={handleLogout}
               >
                 Logout
@@ -646,43 +676,43 @@ const App: React.FC = () => {
             </div>
           </header>
           {statusMessage && (
-            <div className="rounded-3xl border border-teal-500/40 bg-teal-500/10 px-5 py-3 text-sm text-teal-200 shadow-lg shadow-teal-500/10">
+            <div className="rounded-3xl border border-amber-900/30 bg-amber-50/80 px-5 py-3 text-sm text-amber-900/80 shadow-lg shadow-amber-900/15 dark:border-amber-500/30 dark:bg-amber-900/40 dark:text-amber-200/80">
               {statusMessage}
             </div>
           )}
-          <div className="flex-1 rounded-3xl border border-slate-800/70 bg-slate-950/70 p-6 shadow-2xl">
+          <div className="flex-1 rounded-3xl border border-amber-900/30 bg-amber-50/80 p-6 shadow-2xl shadow-amber-900/20 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-900/40">
             {activeView === 'join' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-black uppercase tracking-wide text-teal-200">Join Campaign</h2>
-                <p className="max-w-xl text-sm text-slate-300">
-                  Enter the campaign key provided by your Dungeon Master to hop into their room.
+                <h2 className="text-3xl font-black tracking-wide text-amber-900 dark:text-amber-100">Join Campaign</h2>
+                <p className="max-w-xl text-sm text-amber-900/80 dark:text-amber-200/80">
+                  Enter the campaign key provided by your storyteller to step into their illuminated view.
                 </p>
                 <form onSubmit={handleJoinByKey} className="space-y-4">
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">
+                  <label className="block text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">
                     Campaign Key
                     <div className="mt-2 flex flex-col gap-3 sm:flex-row">
                       <input
                         value={joinKey}
                         onChange={(event) => setJoinKey(event.target.value)}
                         placeholder="e.g. A1B2C3"
-                        className="flex-1 rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm uppercase tracking-[0.3em] text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="flex-1 rounded-xl border border-amber-900/30 bg-amber-100/70 px-4 py-3 text-sm uppercase tracking-[0.3em] text-amber-900 placeholder:text-amber-700/60 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30 dark:border-amber-500/30 dark:bg-amber-900/50 dark:text-amber-100 dark:placeholder:text-amber-200/50 dark:focus:border-amber-300"
                       />
                       <button
                         type="submit"
-                        className="rounded-xl border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="rounded-xl border border-amber-900/40 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-amber-50 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                       >
                         Join Room
                       </button>
                     </div>
                   </label>
-                  {joinError && <p className="text-xs font-semibold text-rose-300">{joinError}</p>}
+                  {joinError && <p className="text-xs font-semibold text-rose-500 dark:text-rose-300">{joinError}</p>}
                 </form>
-                <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-4">
+                <div className="rounded-2xl border border-amber-900/30 bg-amber-100/60 p-4 dark:border-amber-500/30 dark:bg-amber-900/40">
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">Active Rooms</h3>
+                    <h3 className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Active Rooms</h3>
                     <button
                       type="button"
-                      className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
+                      className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-900/70 transition hover:text-amber-900 dark:text-amber-200/80 dark:hover:text-amber-100"
                       onClick={refreshLobby}
                     >
                       Refresh
@@ -690,27 +720,27 @@ const App: React.FC = () => {
                   </div>
                   <ul className="max-h-48 space-y-2 overflow-y-auto pr-1 text-sm">
                     {lobbySessions.map((session) => (
-                      <li key={session.id} className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-3">
+                      <li key={session.id} className="rounded-xl border border-amber-900/30 bg-amber-50/80 p-3 dark:border-amber-500/30 dark:bg-amber-900/40">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <p className="font-semibold text-slate-100">{session.name}</p>
-                            <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Key: {session.id}</p>
+                            <p className="font-semibold text-amber-900 dark:text-amber-100">{session.name}</p>
+                            <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Key: {session.id}</p>
                           </div>
                           <button
                             type="button"
-                            className="rounded-lg border border-teal-400/60 bg-teal-500/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                            className="rounded-lg border border-amber-900/40 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-50 transition hover:scale-105"
                             onClick={() => handleJoinSession(session)}
                           >
                             Join
                           </button>
                         </div>
-                        <p className="mt-2 text-xs text-slate-400">
+                        <p className="mt-2 text-xs text-amber-900/70 dark:text-amber-200/70">
                           Campaign: {session.campaignName ?? 'Unknown'} • Map: {session.mapName ?? 'Unknown'}
                         </p>
                       </li>
                     ))}
                     {lobbySessions.length === 0 && (
-                      <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
+                      <li className="rounded-xl border border-dashed border-amber-900/30 px-3 py-6 text-center text-xs text-amber-900/60 dark:border-amber-500/30 dark:text-amber-200/70">
                         No active rooms yet.
                       </li>
                     )}
@@ -722,12 +752,12 @@ const App: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-3xl font-black uppercase tracking-wide text-teal-200">Manage Campaigns</h2>
-                    <p className="text-sm text-slate-300">Select a campaign to open the admin hangar.</p>
+                    <h2 className="text-3xl font-black tracking-wide text-amber-900 dark:text-amber-100">Manage Campaigns</h2>
+                    <p className="text-sm text-amber-900/80 dark:text-amber-200/80">Select a campaign to open the TableTorch toolkit.</p>
                   </div>
                   <button
                     type="button"
-                    className="rounded-full border border-teal-400/60 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:bg-teal-500/20"
+                    className="rounded-full border border-amber-900/30 bg-amber-50/70 px-5 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-amber-900 transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-amber-500 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100"
                     onClick={() => refreshCampaigns()}
                   >
                     Refresh
@@ -737,22 +767,22 @@ const App: React.FC = () => {
                   {campaigns.map((campaign) => (
                     <button
                       key={campaign.id}
-                      className="group flex h-full flex-col justify-between rounded-2xl border border-slate-800/70 bg-slate-950/60 p-4 text-left transition hover:border-teal-400/60 hover:bg-slate-900/70"
+                      className="group flex h-full flex-col justify-between rounded-2xl border border-amber-900/30 bg-amber-50/80 p-4 text-left transition hover:-translate-y-1 hover:border-amber-600/50 hover:shadow-lg hover:shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-900/40"
                       onClick={() => handleOpenCampaignAdmin(campaign)}
                     >
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Campaign</p>
-                        <h3 className="mt-2 text-lg font-semibold text-white">{campaign.name}</h3>
-                        <p className="mt-2 text-xs text-slate-400">{campaign.description || 'No description provided.'}</p>
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase tracking-[0.4em] text-amber-900/60 dark:text-amber-200/60">Campaign</p>
+                        <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">{campaign.name}</h3>
+                        <p className="text-sm text-amber-900/70 dark:text-amber-200/70">{campaign.description || 'No description provided.'}</p>
                       </div>
-                      <span className="mt-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-teal-200">
-                        Open Hangar <span aria-hidden>→</span>
+                      <span className="mt-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.35em] text-amber-900 transition group-hover:text-amber-600 dark:text-amber-100">
+                        Open Tools <span aria-hidden>→</span>
                       </span>
                     </button>
                   ))}
                   {campaigns.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 p-6 text-center text-sm text-slate-400">
-                      You haven't created any campaigns yet. Try the create tab to launch a new adventure.
+                    <div className="rounded-2xl border border-dashed border-amber-900/30 bg-amber-100/60 p-6 text-center text-sm text-amber-900/70 dark:border-amber-500/30 dark:bg-amber-900/40 dark:text-amber-200/70">
+                      You haven't created any campaigns yet. Try the create tab to kindle a new adventure.
                     </div>
                   )}
                 </div>
@@ -760,48 +790,48 @@ const App: React.FC = () => {
             )}
             {activeView === 'create' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-black uppercase tracking-wide text-teal-200">Create Campaign</h2>
-                <p className="max-w-xl text-sm text-slate-300">Set up a new campaign for your players and start building encounters.</p>
+                <h2 className="text-3xl font-black tracking-wide text-amber-900 dark:text-amber-100">Create Campaign</h2>
+                <p className="max-w-xl text-sm text-amber-900/80 dark:text-amber-200/80">Set up a new campaign for your players and keep every reveal within reach.</p>
                 <form onSubmit={handleCreateCampaign} className="space-y-5">
                   <div>
-                    <label className="text-xs uppercase tracking-[0.4em] text-slate-400">Campaign Name</label>
+                    <label className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Campaign Name</label>
                     <input
                       value={newCampaignName}
                       onChange={(event) => setNewCampaignName(event.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                      className="mt-2 w-full rounded-xl border border-amber-900/30 bg-amber-100/70 px-4 py-3 text-sm text-amber-900 placeholder:text-amber-700/60 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30 dark:border-amber-500/30 dark:bg-amber-900/50 dark:text-amber-100 dark:placeholder:text-amber-200/60 dark:focus:border-amber-300"
                       placeholder="Give your mission a title"
                     />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-[0.4em] text-slate-400">Description</label>
+                    <label className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Description</label>
                     <textarea
                       value={newCampaignDescription}
                       onChange={(event) => setNewCampaignDescription(event.target.value)}
                       rows={4}
-                      className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                      className="mt-2 w-full rounded-xl border border-amber-900/30 bg-amber-100/70 px-4 py-3 text-sm text-amber-900 placeholder:text-amber-700/60 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30 dark:border-amber-500/30 dark:bg-amber-900/50 dark:text-amber-100 dark:placeholder:text-amber-200/60 dark:focus:border-amber-300"
                       placeholder="Share a quick briefing for your players"
                     />
                   </div>
-                  <label className="flex items-center gap-3 text-xs uppercase tracking-[0.4em] text-slate-400">
+                  <label className="flex items-center gap-3 text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">
                     <input
                       type="checkbox"
                       checked={newCampaignPublic}
                       onChange={(event) => setNewCampaignPublic(event.target.checked)}
-                      className="h-4 w-4 rounded border border-slate-700 bg-slate-900 text-teal-400 focus:ring-teal-400"
+                      className="h-4 w-4 rounded border border-amber-900/40 bg-amber-100 text-amber-600 focus:ring-amber-500 dark:border-amber-500/40 dark:bg-amber-900/50 dark:text-amber-300"
                     />
-                    <span className="text-slate-300">List publicly for players to discover</span>
+                    <span className="text-amber-900/80 dark:text-amber-200/80">List publicly for players to discover</span>
                   </label>
-                  {createError && <p className="text-xs font-semibold text-rose-300">{createError}</p>}
+                  {createError && <p className="text-xs font-semibold text-rose-500 dark:text-rose-300">{createError}</p>}
                   <div className="flex flex-wrap gap-3">
                     <button
                       type="submit"
-                      className="rounded-xl border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                      className="rounded-xl border border-amber-900/40 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-amber-50 transition hover:scale-105"
                     >
                       Launch Campaign
                     </button>
                     <button
                       type="button"
-                      className="rounded-xl border border-slate-700/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+                      className="rounded-xl border border-amber-900/30 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-amber-900/70 transition hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-200/80 dark:hover:bg-amber-900/50"
                       onClick={() => {
                         setNewCampaignName('');
                         setNewCampaignDescription('');
@@ -819,28 +849,28 @@ const App: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Managing Campaign</p>
-                    <h2 className="text-3xl font-black uppercase tracking-wide text-white">{selectedCampaign.name}</h2>
-                    {selectedCampaign.description && <p className="text-sm text-slate-300">{selectedCampaign.description}</p>}
+                    <p className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Managing Campaign</p>
+                    <h2 className="text-3xl font-black tracking-wide text-amber-900 dark:text-amber-100">{selectedCampaign.name}</h2>
+                    {selectedCampaign.description && <p className="text-sm text-amber-900/80 dark:text-amber-200/80">{selectedCampaign.description}</p>}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
-                      className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+                      className="rounded-full border border-amber-900/30 bg-amber-50/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-amber-900 transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-amber-500 dark:border-amber-500/30 dark:bg-amber-500/20 dark:text-amber-100"
                       onClick={handleBackToManage}
                     >
                       Campaign List
                     </button>
                     <button
                       type="button"
-                      className="rounded-full border border-rose-400/60 bg-rose-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-500/30"
+                      className="rounded-full border border-rose-500/60 bg-rose-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-rose-900 transition hover:bg-rose-500/30 focus-visible:outline focus-visible:outline-rose-500 dark:border-rose-400/60 dark:bg-rose-500/30 dark:text-rose-100"
                       onClick={handleDeleteCampaign}
                     >
                       Delete Campaign
                     </button>
                     <button
                       type="button"
-                      className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                      className="rounded-full border border-amber-900/40 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-amber-50 transition hover:scale-105"
                       onClick={handleStartSession}
                     >
                       Launch Session
@@ -859,14 +889,14 @@ const App: React.FC = () => {
                   <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
                     <div className="space-y-6">
                       {selectedMap ? (
-                        <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-6">
+                        <div className="rounded-2xl border border-amber-900/30 bg-amber-100/70 p-6 shadow-md shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-900/40">
                           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                             <div>
-                              <h3 className="text-2xl font-semibold text-white">{selectedMap.name}</h3>
-                              {mapDescription && <p className="mt-2 text-sm text-slate-300">{mapDescription}</p>}
-                              {!mapDescription && mapNotes && <p className="mt-2 text-sm text-slate-400">{mapNotes}</p>}
+                              <h3 className="text-2xl font-semibold text-amber-900 dark:text-amber-100">{selectedMap.name}</h3>
+                              {mapDescription && <p className="mt-2 text-sm text-amber-900/80 dark:text-amber-200/80">{mapDescription}</p>}
+                              {!mapDescription && mapNotes && <p className="mt-2 text-sm text-amber-900/70 dark:text-amber-200/70">{mapNotes}</p>}
                             </div>
-                            <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.4em] text-slate-500">
+                            <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.4em] text-amber-900/60 dark:text-amber-200/60">
                               <span>Regions: {regions.length}</span>
                               <span>Markers: {markers.length}</span>
                               <span>
@@ -874,7 +904,7 @@ const App: React.FC = () => {
                               </span>
                             </div>
                           </div>
-                          <div className="overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
+                          <div className="overflow-hidden rounded-2xl border border-amber-900/30 bg-amber-200/40 dark:border-amber-500/30 dark:bg-amber-950/30">
                             <MapMaskCanvas
                               imageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
                               width={selectedMap.width}
@@ -886,72 +916,72 @@ const App: React.FC = () => {
                             />
                           </div>
                           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Grouping</p>
-                              <p className="mt-2 text-sm font-semibold text-teal-200">{mapGrouping}</p>
+                            <div className="rounded-2xl border border-amber-900/30 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-900/40">
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/60 dark:text-amber-200/60">Grouping</p>
+                              <p className="mt-2 text-sm font-semibold text-amber-900 dark:text-amber-100">{mapGrouping}</p>
                               {mapNotes && mapDescription && (
-                                <p className="mt-3 text-xs text-slate-400">Notes: {mapNotes}</p>
+                                <p className="mt-3 text-xs text-amber-900/70 dark:text-amber-200/70">Notes: {mapNotes}</p>
                               )}
                             </div>
-                            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Tags</p>
+                            <div className="rounded-2xl border border-amber-900/30 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-900/40">
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/60 dark:text-amber-200/60">Tags</p>
                               {mapTags.length > 0 ? (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   {mapTags.map((tag) => (
                                     <span
                                       key={tag}
-                                      className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
+                                      className="inline-flex items-center rounded-full border border-amber-900/30 bg-amber-100/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-amber-900 dark:border-amber-500/30 dark:bg-amber-900/50 dark:text-amber-100"
                                     >
                                       {tag}
                                     </span>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="mt-3 text-xs text-slate-500">No tags assigned yet.</p>
+                                <p className="mt-3 text-xs text-amber-900/70 dark:text-amber-200/70">No tags assigned yet.</p>
                               )}
                             </div>
                           </div>
                           {!mapDescription && !mapNotes && (
-                            <p className="mt-4 text-xs text-slate-500">
+                            <p className="mt-4 text-xs text-amber-900/70 dark:text-amber-200/70">
                               Add details and notes through the map wizard to give your players extra context.
                             </p>
                           )}
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-700/70 p-12 text-center text-sm text-slate-400">
+                        <div className="rounded-2xl border border-dashed border-amber-900/30 p-12 text-center text-sm text-amber-900/70 dark:border-amber-500/30 dark:text-amber-200/70">
                           Select or create a map to begin shaping your encounter.
                         </div>
                       )}
                     </div>
                     <div className="space-y-6">
-                      <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5">
+                      <div className="rounded-2xl border border-amber-900/30 bg-amber-100/70 p-5 dark:border-amber-500/30 dark:bg-amber-900/40">
                         <div className="mb-3 flex items-center justify-between">
-                          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">My Sessions</h3>
+                          <h3 className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">My Sessions</h3>
                         </div>
                         <ul className="space-y-2 text-sm">
                           {mySessions.map((session) => (
                             <li key={session.id}>
                               <button
                                 onClick={() => handleJoinSession(session)}
-                                className="w-full rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-left text-slate-300 transition hover:border-teal-400/60 hover:text-teal-100"
+                                className="w-full rounded-xl border border-amber-900/30 bg-amber-50/80 px-3 py-2 text-left text-amber-900 transition hover:border-amber-600/50 hover:text-amber-700 dark:border-amber-500/30 dark:bg-amber-900/40 dark:text-amber-100"
                               >
                                 {session.name}
                               </button>
                             </li>
                           ))}
                           {mySessions.length === 0 && (
-                            <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
+                            <li className="rounded-xl border border-dashed border-amber-900/30 px-3 py-6 text-center text-xs text-amber-900/60 dark:border-amber-500/30 dark:text-amber-200/70">
                               No active sessions.
                             </li>
                           )}
                         </ul>
                       </div>
-                      <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5">
+                      <div className="rounded-2xl border border-amber-900/30 bg-amber-100/70 p-5 dark:border-amber-500/30 dark:bg-amber-900/40">
                         <div className="mb-3 flex items-center justify-between">
-                          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-400">Lobby</h3>
+                          <h3 className="text-xs uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Lobby</h3>
                           <button
                             type="button"
-                            className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-200 transition hover:text-teal-100"
+                            className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-900/70 transition hover:text-amber-900 dark:text-amber-200/80 dark:hover:text-amber-100"
                             onClick={refreshLobby}
                           >
                             Refresh
@@ -959,13 +989,13 @@ const App: React.FC = () => {
                         </div>
                         <ul className="space-y-2 text-sm">
                           {lobbySessions.map((session) => (
-                            <li key={session.id} className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-3">
-                              <p className="font-semibold text-slate-100">{session.name}</p>
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Campaign: {session.campaignName ?? 'Unknown'}</p>
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Map: {session.mapName ?? 'Unknown'}</p>
+                            <li key={session.id} className="rounded-xl border border-amber-900/30 bg-amber-50/80 p-3 dark:border-amber-500/30 dark:bg-amber-900/40">
+                              <p className="font-semibold text-amber-900 dark:text-amber-100">{session.name}</p>
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Campaign: {session.campaignName ?? 'Unknown'}</p>
+                              <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/70 dark:text-amber-200/70">Map: {session.mapName ?? 'Unknown'}</p>
                               <button
                                 type="button"
-                                className="mt-3 w-full rounded-xl border border-teal-400/60 bg-teal-500/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                                className="mt-3 w-full rounded-xl border border-amber-900/40 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-50 transition hover:scale-105"
                                 onClick={() => handleJoinSession(session)}
                               >
                                 Join as {session.hostId === user.id ? 'DM' : 'Player'}
@@ -973,7 +1003,7 @@ const App: React.FC = () => {
                             </li>
                           ))}
                           {lobbySessions.length === 0 && (
-                            <li className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-xs text-slate-500">
+                            <li className="rounded-xl border border-dashed border-amber-900/30 px-3 py-6 text-center text-xs text-amber-900/60 dark:border-amber-500/30 dark:text-amber-200/70">
                               No active sessions available.
                             </li>
                           )}
@@ -985,7 +1015,7 @@ const App: React.FC = () => {
               </div>
             )}
             {activeView === 'admin' && !selectedCampaign && (
-              <div className="rounded-2xl border border-dashed border-slate-700/70 p-12 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-amber-900/30 p-12 text-center text-sm text-amber-900/70 dark:border-amber-500/30 dark:text-amber-200/70">
                 Choose a campaign from the manage tab to configure it here.
               </div>
             )}
