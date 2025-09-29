@@ -697,7 +697,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         </div>
       </header>
       <main className="flex-1 overflow-x-visible overflow-y-auto px-[10vw] py-4">
-        <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex h-full flex-col overflow-x-visible overflow-y-hidden">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
