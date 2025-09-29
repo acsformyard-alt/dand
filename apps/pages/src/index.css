@@ -21,22 +21,27 @@ body.dark {
 @layer utilities {
   .bg-landing {
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(56, 189, 248, 0.35), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(20, 184, 166, 0.25), transparent 40%),
-      radial-gradient(circle at 0% 80%, rgba(14, 165, 233, 0.2), transparent 45%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      linear-gradient(135deg, rgba(253, 244, 220, 0.92) 0%, rgba(250, 234, 198, 0.88) 45%, rgba(236, 216, 182, 0.9) 100%),
+      url('/textures/parchment-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
   }
 
   .dark .bg-landing {
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.2), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.18), transparent 45%),
-      radial-gradient(circle at 10% 85%, rgba(45, 212, 191, 0.18), transparent 45%),
-      linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      linear-gradient(135deg, rgba(16, 10, 6, 0.9) 0%, rgba(36, 19, 10, 0.88) 55%, rgba(16, 10, 6, 0.92) 100%),
+      url('/textures/parchment-bg.jpg');
+    background-blend-mode: multiply;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
   }
 
   .bg-grid-mask {
-    --grid-color: rgba(15, 23, 42, 0.08);
+    --grid-color: rgba(68, 64, 60, 0.08);
     background-image:
       linear-gradient(var(--grid-color) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
@@ -44,7 +49,7 @@ body.dark {
   }
 
   .dark .bg-grid-mask {
-    --grid-color: rgba(148, 163, 184, 0.1);
+    --grid-color: rgba(248, 250, 252, 0.08);
   }
 
   .animate-gradient {
@@ -54,6 +59,77 @@ body.dark {
 
   .animate-float-slow {
     animation: floatSlow 14s ease-in-out infinite;
+  }
+}
+
+@layer components {
+  .torch-logo {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 3.5rem;
+    width: 3.5rem;
+    border-radius: 1.25rem;
+    background: linear-gradient(160deg, rgba(120, 53, 15, 0.95), rgba(180, 83, 9, 0.85));
+    box-shadow:
+      0 12px 35px rgba(120, 53, 15, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    color: theme('colors.amber.100');
+    border: 2px solid rgba(253, 230, 138, 0.45);
+    backdrop-filter: blur(6px);
+  }
+
+  .torch-logo__flame,
+  .torch-logo__handle {
+    position: absolute;
+    display: block;
+  }
+
+  .torch-logo__flame {
+    width: 1.4rem;
+    height: 2.1rem;
+    border-radius: 0 1.1rem 0.9rem 1.1rem;
+    background: radial-gradient(circle at 40% 25%, rgba(254, 249, 195, 0.95), rgba(253, 186, 116, 0.95) 55%, rgba(217, 119, 6, 0.9) 100%);
+    transform: rotate(-8deg) translateY(-0.2rem);
+    box-shadow: 0 0 12px rgba(253, 215, 90, 0.6);
+  }
+
+  .torch-logo__flame--secondary {
+    width: 0.8rem;
+    height: 1.2rem;
+    border-radius: 0 0.9rem 0.7rem 0.9rem;
+    background: radial-gradient(circle at 50% 20%, rgba(255, 247, 237, 0.95), rgba(253, 186, 116, 0.85) 60%, rgba(217, 119, 6, 0.75) 100%);
+    transform: rotate(6deg) translate(0.25rem, -0.15rem);
+    box-shadow: 0 0 10px rgba(253, 230, 138, 0.5);
+  }
+
+  .torch-logo__handle {
+    width: 0.55rem;
+    height: 1.6rem;
+    bottom: 0.35rem;
+    border-radius: 0.5rem;
+    background: linear-gradient(180deg, rgba(71, 41, 16, 0.95) 0%, rgba(30, 15, 6, 0.85) 100%);
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.45);
+  }
+
+  .dark .torch-logo {
+    background: linear-gradient(160deg, rgba(30, 15, 6, 0.8), rgba(71, 32, 7, 0.75));
+    box-shadow:
+      0 12px 35px rgba(248, 250, 252, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: theme('colors.amber.200');
+    border-color: rgba(253, 230, 138, 0.35);
+  }
+
+  .dark .torch-logo::after {
+    content: '';
+    position: absolute;
+    inset: -18%;
+    border-radius: inherit;
+    background: radial-gradient(circle, rgba(253, 230, 138, 0.4), rgba(253, 186, 116, 0.15) 45%, rgba(15, 10, 6, 0) 70%);
+    filter: blur(8px);
+    z-index: -1;
   }
 }
 
