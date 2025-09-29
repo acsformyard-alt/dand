@@ -754,7 +754,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
           {step === 1 && (
             <div className="flex flex-1 items-stretch justify-center">
-              <div className="flex h-full w-[80vw] max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+              <div className="mx-[10vw] flex h-full w-[80vw] max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
                 <div className="grid flex-1 min-h-0 gap-6 md:grid-cols-[minmax(0,1fr)_260px]">
                   <div className="flex flex-col gap-5">
                     <div>
