@@ -808,6 +808,9 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", this.updateBrushSliderPosition);
+    }
     this.root.remove();
   }
 
@@ -979,6 +982,17 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", this.updateBrushSliderPosition);
+      if (typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => this.updateBrushSliderPosition());
+      } else {
+        this.updateBrushSliderPosition();
+      }
+    } else {
+      this.updateBrushSliderPosition();
+    }
   }
 
   private initializeColorMenu(): void {
@@ -1303,6 +1317,45 @@ export class DefineRoom {
     this.brushSliderContainer.setAttribute("aria-orientation", "vertical");
   }
 
+  private updateBrushSliderPosition = (): void => {
+    if (!this.brushSliderContainer || !this.toolbarContainer) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!this.brushSliderContainer.classList.contains("visible")) {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+      return;
+    }
+
+    const sliderHeight = this.brushSliderContainer.offsetHeight;
+    if (sliderHeight === 0) {
+      return;
+    }
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || sliderHeight;
+    const toolbarRect = this.toolbarContainer.getBoundingClientRect();
+    const sliderHalf = sliderHeight / 2;
+    const toolbarCenter = toolbarRect.top + toolbarRect.height / 2;
+    const viewportPadding = 16;
+
+    const lowerBound = viewportPadding - (toolbarCenter - sliderHalf);
+    const upperBound = (viewportHeight - viewportPadding) - (toolbarCenter + sliderHalf);
+
+    let offset = 0;
+
+    if (lowerBound <= upperBound) {
+      offset = clamp(0, lowerBound, upperBound);
+    } else {
+      offset = lowerBound > 0 ? lowerBound : upperBound;
+    }
+
+    this.brushSliderContainer.style.setProperty("--brush-slider-offset", `${offset}px`);
+  };
+
   private updateBrushSliderVisibility(): void {
     if (!this.brushSliderContainer) {
       return;
@@ -1311,6 +1364,16 @@ export class DefineRoom {
     const isBrushTool = this.currentTool === "brush" || this.currentTool === "eraser";
     this.brushSliderContainer.classList.toggle("visible", isBrushTool);
     this.brushSliderContainer.setAttribute("aria-hidden", isBrushTool ? "false" : "true");
+
+    if (isBrushTool) {
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => this.updateBrushSliderPosition());
+      } else {
+        this.updateBrushSliderPosition();
+      }
+    } else {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+    }
 
     if (!isBrushTool && this.isAdjustingBrushSize) {
       this.stopBrushSliderInteraction();

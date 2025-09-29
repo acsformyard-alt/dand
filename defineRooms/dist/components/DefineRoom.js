@@ -468,6 +468,37 @@ export class DefineRoom {
             this.updateBrushRadiusFromPointer(event);
             this.stopBrushSliderInteraction();
         };
+        this.updateBrushSliderPosition = () => {
+            if (!this.brushSliderContainer || !this.toolbarContainer) {
+                return;
+            }
+            if (typeof window === "undefined") {
+                return;
+            }
+            if (!this.brushSliderContainer.classList.contains("visible")) {
+                this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+                return;
+            }
+            const sliderHeight = this.brushSliderContainer.offsetHeight;
+            if (sliderHeight === 0) {
+                return;
+            }
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || sliderHeight;
+            const toolbarRect = this.toolbarContainer.getBoundingClientRect();
+            const sliderHalf = sliderHeight / 2;
+            const toolbarCenter = toolbarRect.top + toolbarRect.height / 2;
+            const viewportPadding = 16;
+            const lowerBound = viewportPadding - (toolbarCenter - sliderHalf);
+            const upperBound = (viewportHeight - viewportPadding) - (toolbarCenter + sliderHalf);
+            let offset = 0;
+            if (lowerBound <= upperBound) {
+                offset = clamp(0, lowerBound, upperBound);
+            }
+            else {
+                offset = lowerBound > 0 ? lowerBound : upperBound;
+            }
+            this.brushSliderContainer.style.setProperty("--brush-slider-offset", `${offset}px`);
+        };
         this.root = (_jsxs("div", { class: "define-room-overlay hidden", children: [_jsxs("div", { class: "define-room-window", children: [_jsxs("div", { class: "define-room-header", children: [_jsx("h1", { children: "Define Rooms" }), _jsx("button", { class: "define-room-close", type: "button", children: "Close" })] }), _jsxs("div", { class: "define-room-body", children: [_jsxs("section", { class: "define-room-editor", children: [_jsxs("div", { class: "toolbar-area", children: [_jsxs("div", { class: "brush-slider-container", ref: (node) => node && (this.brushSliderContainer = node), "aria-hidden": "true", "aria-label": "Brush size", children: [_jsxs("div", { class: "brush-slider-track", ref: (node) => node && (this.brushSliderTrack = node), children: [_jsx("div", { class: "brush-slider-fill", ref: (node) => node && (this.brushSliderFill = node) }), _jsx("div", { class: "brush-slider-thumb", ref: (node) => node && (this.brushSliderThumb = node) })] }), _jsx("div", { class: "brush-slider-value", "aria-hidden": "true", ref: (node) => node && (this.brushSliderValueLabel = node) })] }), _jsxs("div", { class: "toolbar", ref: (node) => node && (this.toolbarContainer = node), children: [_jsxs("div", { class: "toolbar-primary-group", children: [_jsxs("button", { class: "toolbar-button toolbar-primary", type: "button", "aria-label": "New Room", title: "New Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "New Room" })] }), _jsxs("div", { class: "toolbar-confirm-group", children: [_jsxs("button", { class: "toolbar-button toolbar-confirm", type: "button", "aria-label": "Confirm Room", title: "Confirm Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Confirm" })] }), _jsxs("button", { class: "toolbar-button toolbar-cancel", type: "button", "aria-label": "Cancel Room", title: "Cancel Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Cancel" })] })] })] }), _jsxs("div", { class: "history-group", children: [_jsxs("button", { class: "toolbar-button tool-button history-button toolbar-undo", type: "button", "aria-label": "Undo", title: "Undo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Undo" })] }), _jsxs("button", { class: "toolbar-button tool-button history-button toolbar-redo", type: "button", "aria-label": "Redo", title: "Redo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Redo" })] })] }), _jsx("div", { class: "tool-group" })] })] }), _jsxs("div", { class: "canvas-wrapper", children: [_jsx("canvas", { class: "image-layer" }), _jsx("canvas", { class: "mask-layer" }), _jsx("canvas", { class: "selection-layer" }), _jsx("div", { class: "room-hover-label", "aria-hidden": "true" })] })] }), _jsxs("aside", { class: "define-room-sidebar", ref: (node) => node && (this.roomsPanel = node), children: [_jsx("div", { class: "rooms-header", children: _jsx("h2", { children: "Rooms" }) }), _jsx("p", { class: "rooms-empty", ref: (node) => node && (this.roomsEmptyState = node), children: "No rooms defined yet." }), _jsx("div", { class: "rooms-list" }), _jsx("div", { class: "room-color-menu hidden", "aria-hidden": "true" })] })] })] }), _jsx("div", { class: "room-delete-backdrop hidden", "aria-hidden": "true", children: _jsxs("div", { class: "room-delete-card", role: "dialog", "aria-modal": "true", "aria-labelledby": "room-delete-title", tabindex: "-1", children: [_jsx("div", { class: "room-delete-icon-wrapper", children: _jsx("div", { class: "room-delete-icon", "aria-hidden": "true" }) }), _jsx("h2", { id: "room-delete-title", class: "room-delete-title", children: "Are you sure?" }), _jsx("p", { class: "room-delete-message", children: "Do you really want to continue ? This process cannot be undone" }), _jsxs("div", { class: "room-delete-actions", children: [_jsx("button", { class: "room-delete-cancel", type: "button", children: "Cancel" }), _jsx("button", { class: "room-delete-confirm", type: "button", children: "Confirm" })] })] }) })] }));
         this.initializeDomReferences();
         this.attachEventListeners();
@@ -617,6 +648,18 @@ export class DefineRoom {
         this.overlayCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
         this.overlayCanvas.style.touchAction = "none";
         this.attachBrushSliderEvents();
+        if (typeof window !== "undefined") {
+            window.addEventListener("resize", this.updateBrushSliderPosition);
+            if (typeof window.requestAnimationFrame === "function") {
+                window.requestAnimationFrame(() => this.updateBrushSliderPosition());
+            }
+            else {
+                this.updateBrushSliderPosition();
+            }
+        }
+        else {
+            this.updateBrushSliderPosition();
+        }
     }
     initializeColorMenu() {
         if (!this.colorMenu) {
@@ -871,6 +914,17 @@ export class DefineRoom {
         const isBrushTool = this.currentTool === "brush" || this.currentTool === "eraser";
         this.brushSliderContainer.classList.toggle("visible", isBrushTool);
         this.brushSliderContainer.setAttribute("aria-hidden", isBrushTool ? "false" : "true");
+        if (isBrushTool) {
+            if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+                window.requestAnimationFrame(() => this.updateBrushSliderPosition());
+            }
+            else {
+                this.updateBrushSliderPosition();
+            }
+        }
+        else {
+            this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+        }
         if (!isBrushTool && this.isAdjustingBrushSize) {
             this.stopBrushSliderInteraction();
         }
