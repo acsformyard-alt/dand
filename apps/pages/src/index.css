@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: light dark;
+  --parchment-texture-fallback: none;
 }
 
 a {
@@ -19,11 +20,33 @@ body.dark {
 }
 
 @layer utilities {
+  .parchment-surface {
+    background-image:
+      linear-gradient(145deg, rgba(255, 252, 245, 0.85), rgba(248, 237, 215, 0.65)),
+      var(--parchment-texture, var(--parchment-texture-fallback));
+    background-size: 160% 160%, cover;
+    background-position: center;
+    background-repeat: repeat;
+    background-color: #f5ead4;
+    background-blend-mode: multiply, normal;
+  }
+
+  .dark .parchment-surface {
+    background-image:
+      linear-gradient(160deg, rgba(8, 11, 19, 0.94), rgba(24, 18, 10, 0.88)),
+      var(--parchment-texture, var(--parchment-texture-fallback));
+    background-size: 180% 180%, cover;
+    background-position: center;
+    background-repeat: repeat;
+    background-color: #0b0f1a;
+    background-blend-mode: screen, multiply;
+  }
+
   .bg-landing {
     background-image:
       radial-gradient(circle at 20% -10%, rgba(252, 211, 77, 0.45), rgba(249, 115, 22, 0)),
       linear-gradient(135deg, rgba(255, 241, 214, 0.95), rgba(254, 230, 200, 0.9)),
-      url('/textures/parchment-bg.jpg');
+      var(--parchment-texture, var(--parchment-texture-fallback));
     background-size: 130% 130%, 100% 100%, cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -35,7 +58,7 @@ body.dark {
     background-image:
       radial-gradient(circle at 20% 20%, rgba(251, 191, 36, 0.25), rgba(17, 24, 39, 0)),
       linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(12, 31, 53, 0.94)),
-      url('/textures/parchment-bg.jpg');
+      var(--parchment-texture, var(--parchment-texture-fallback));
     background-size: 140% 140%, 100% 100%, cover;
     background-position: center;
     background-repeat: no-repeat;

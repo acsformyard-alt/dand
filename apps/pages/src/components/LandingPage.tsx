@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AuthResponse } from '../types';
 import AuthPanel from './AuthPanel';
+import { parchmentTextureUrl } from '../theme/textures';
 
 interface LandingPageProps {
   theme: 'light' | 'dark';
@@ -62,8 +63,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  const parchmentStyle = React.useMemo(
+    () => ({ '--parchment-texture': `url(${parchmentTextureUrl})` }) as React.CSSProperties,
+    []
+  );
+
   return (
-    <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
+    <div
+      className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100"
+      style={parchmentStyle}
+    >
       <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
       <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/30 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
       <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-rose-500/20 animate-float-slow" />

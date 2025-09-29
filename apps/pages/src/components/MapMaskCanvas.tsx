@@ -155,7 +155,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   const displayHeight = imageSize?.height || height || 768;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900/60 shadow-inner dark:border-slate-700">
+    <div className="relative w-full overflow-hidden rounded-lg border border-amber-900/25 bg-white/85 shadow-inner backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/60">
       {imageUrl ? (
         <img
           src={imageUrl}
@@ -164,7 +164,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
           style={{ maxHeight: '70vh', objectFit: 'contain' }}
         />
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+        <div className="flex h-64 items-center justify-center text-sm text-slate-600 dark:text-slate-400">
           Upload a map to begin
         </div>
       )}

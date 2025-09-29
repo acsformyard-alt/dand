@@ -16,7 +16,9 @@ const hasModule = (specifier: string) => {
   }
 };
 
-const alias: Record<string, string> = {};
+const alias: Record<string, string> = {
+  '@textures': resolvePath('../../textures'),
+};
 
 if (!hasModule('@testing-library/react')) {
   alias['@testing-library/react'] = resolvePath('./src/test-utils/testing-library-react.tsx');
@@ -33,6 +35,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    fs: {
+      allow: [resolvePath('.'), resolvePath('../../textures')],
+    },
   },
   build: {
     outDir: 'dist',

@@ -14,7 +14,8 @@
     "baseUrl": ".",
     "paths": {
       "@testing-library/react": ["src/test-utils/testing-library-react"],
-      "@testing-library/user-event": ["src/test-utils/testing-library-user-event"]
+      "@testing-library/user-event": ["src/test-utils/testing-library-user-event"],
+      "@textures/*": ["../../textures/*"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
