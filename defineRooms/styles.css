@@ -658,7 +658,8 @@ body {
   position: absolute;
   top: 50%;
   left: -94px;
-  transform: translateX(28px) translateY(-50%);
+  --brush-slider-offset: 0px;
+  transform: translateX(28px) translateY(calc(-50% + var(--brush-slider-offset)));
   width: 68px;
   padding: 18px 16px 22px;
   border-radius: 22px;
@@ -676,7 +677,7 @@ body {
 }
 
 .brush-slider-container.visible {
-  transform: translateX(0) translateY(-50%);
+  transform: translateX(0) translateY(calc(-50% + var(--brush-slider-offset)));
   opacity: 1;
   pointer-events: auto;
 }

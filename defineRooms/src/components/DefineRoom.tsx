@@ -508,6 +508,50 @@ export class DefineRoom {
 
   private brushSliderCaptureElement: HTMLElement | null = null;
 
+  private updateBrushSliderPosition = (): void => {
+    if (!this.brushSliderContainer || !this.brushSliderContainer.isConnected) {
+      return;
+    }
+
+    if (!this.brushSliderContainer.classList.contains("visible")) {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+      return;
+    }
+
+    const parentElement = this.brushSliderContainer.parentElement;
+    if (!parentElement) {
+      return;
+    }
+
+    const viewportHeight =
+      typeof window !== "undefined"
+        ? window.innerHeight || document.documentElement?.clientHeight || 0
+        : 0;
+
+    if (viewportHeight === 0) {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+      return;
+    }
+
+    const parentRect = parentElement.getBoundingClientRect();
+    const sliderRect = this.brushSliderContainer.getBoundingClientRect();
+
+    if (parentRect.height === 0 || sliderRect.height === 0) {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
+      return;
+    }
+
+    const targetCenter = parentRect.top + parentRect.height / 2;
+    const sliderHalfHeight = sliderRect.height / 2;
+    const padding = 16;
+    const minCenter = padding + sliderHalfHeight;
+    const maxCenter = Math.max(minCenter, viewportHeight - padding - sliderHalfHeight);
+    const clampedCenter = clamp(targetCenter, minCenter, maxCenter);
+    const offset = clampedCenter - targetCenter;
+
+    this.brushSliderContainer.style.setProperty("--brush-slider-offset", `${offset}px`);
+  };
+
   private imageCanvas!: HTMLCanvasElement;
 
   private overlayCanvas!: HTMLCanvasElement;
@@ -756,6 +800,15 @@ export class DefineRoom {
     return this.root;
   }
 
+  public destroy(): void {
+    this.close();
+    document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", this.updateBrushSliderPosition);
+    }
+    this.root.remove();
+  }
+
   private initializeDomReferences(): void {
     this.toolbarPrimaryButton = this.root.querySelector(".toolbar-primary") as HTMLButtonElement;
     this.toolbarConfirmGroup = this.root.querySelector(".toolbar-confirm-group") as HTMLElement;
@@ -916,6 +969,10 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", this.updateBrushSliderPosition);
+    }
   }
 
   private initializeColorMenu(): void {
@@ -1238,6 +1295,8 @@ export class DefineRoom {
     this.brushSliderContainer.setAttribute("aria-valuemax", `${this.brushRadiusMax}`);
     this.brushSliderContainer.setAttribute("aria-valuenow", `${this.brushRadius}`);
     this.brushSliderContainer.setAttribute("aria-orientation", "vertical");
+
+    this.updateBrushSliderPosition();
   }
 
   private updateBrushSliderVisibility(): void {
@@ -1251,6 +1310,16 @@ export class DefineRoom {
 
     if (!isBrushTool && this.isAdjustingBrushSize) {
       this.stopBrushSliderInteraction();
+    }
+
+    if (isBrushTool) {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => this.updateBrushSliderPosition());
+      } else {
+        this.updateBrushSliderPosition();
+      }
+    } else {
+      this.brushSliderContainer.style.removeProperty("--brush-slider-offset");
     }
   }
 
