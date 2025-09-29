@@ -1267,13 +1267,10 @@ export class DefineRoom {
     this.selectionCanvas.width = width;
     this.selectionCanvas.height = height;
 
-    this.imageCanvas.style.width = "100%";
-    this.overlayCanvas.style.width = "100%";
-    this.selectionCanvas.style.width = "100%";
-
-    this.imageCanvas.style.height = "auto";
-    this.overlayCanvas.style.height = "auto";
-    this.selectionCanvas.style.height = "auto";
+    [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
+      canvas.style.width = "auto";
+      canvas.style.height = "auto";
+    });
 
     this.resetMagnifyTransform(true);
 
