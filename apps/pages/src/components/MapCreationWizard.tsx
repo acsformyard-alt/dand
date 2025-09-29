@@ -754,7 +754,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
           {step === 1 && (
             <div className="flex flex-1 items-stretch justify-center">
-              <div className="flex h-full w-full max-w-5xl flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+              <div className="flex h-full w-[90vw] max-w-[90vw] flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
                 <div className="grid flex-1 min-h-0 gap-6 md:grid-cols-[minmax(0,1fr)_260px]">
                   <div className="flex flex-col gap-5">
                     <div>
@@ -837,8 +837,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           {step === 2 && (
-            <div className="flex h-full min-h-0 flex-1">
-              <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+            <div className="flex h-full min-h-0 flex-1 justify-center">
+              <div className="flex h-full min-h-0 w-[90vw] max-w-[90vw] rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
                   ref={defineRoomContainerRef}
                   className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
