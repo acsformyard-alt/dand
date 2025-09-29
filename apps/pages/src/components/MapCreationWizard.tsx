@@ -833,7 +833,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         onChange={(event) => setNotes(event.target.value)}
                         rows={3}
                         className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
-                        placeholder="DM-only reminders or encounter tips"
+                        placeholder="Torchbearer-only reminders or encounter tips"
                       />
                     </div>
                     <div>
@@ -866,7 +866,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Tips</p>
                       <ul className="mt-2 space-y-2 text-xs text-slate-400">
                         <li>Keep names short but descriptive for quick reference during sessions.</li>
-                        <li>Use notes to capture secrets, traps, or DM-only reminders.</li>
+                        <li>Use notes to capture secrets, traps, or torchbearer-only reminders.</li>
                         <li>Tags help you filter maps later in the campaign dashboard.</li>
                       </ul>
                     </div>

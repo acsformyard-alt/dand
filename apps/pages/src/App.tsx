@@ -552,7 +552,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-100 p-6 dark:bg-slate-900">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-primary">D&D Map Reveal</h1>
+            <h1 className="text-2xl font-bold text-primary">TableTorch</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">Logged in as {user.displayName}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -620,7 +620,7 @@ const App: React.FC = () => {
             </button>
           </nav>
           <div className="mt-auto space-y-2 text-xs text-slate-500">
-            <p>Need a room code? Ask your DM to share their campaign key.</p>
+            <p>Need a room code? Ask your torchbearer to share their campaign key.</p>
             <p>Switch tabs to manage, create, or join adventures.</p>
           </div>
         </aside>
@@ -628,7 +628,7 @@ const App: React.FC = () => {
           <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-800/70 bg-slate-950/70 px-6 py-4 shadow-xl">
             <div>
               <p className="text-xs uppercase tracking-[0.5em] text-teal-300">Campaign Control</p>
-              <h1 className="text-3xl font-black uppercase tracking-wide text-white">D&D Map Reveal</h1>
+              <h1 className="text-3xl font-black uppercase tracking-wide text-white">TableTorch</h1>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -968,7 +968,7 @@ const App: React.FC = () => {
                                 className="mt-3 w-full rounded-xl border border-teal-400/60 bg-teal-500/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
                                 onClick={() => handleJoinSession(session)}
                               >
-                                Join as {session.hostId === user.id ? 'DM' : 'Player'}
+                                Join as {session.hostId === user.id ? 'Torchbearer' : 'Player'}
                               </button>
                             </li>
                           ))}
