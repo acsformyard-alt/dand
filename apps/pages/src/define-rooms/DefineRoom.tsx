@@ -616,6 +616,12 @@ export class DefineRoom {
 
   private isAdjustingBrushSize = false;
 
+  private baseScale = 1;
+
+  private resizeObserver: ResizeObserver | null = null;
+
+  private resizeAnimationFrame: number | null = null;
+
   private width = 0;
 
   private height = 0;
@@ -778,6 +784,7 @@ export class DefineRoom {
     if (shouldReset) {
       this.prepareImage(image);
     } else {
+      this.recalculateBaseScale();
       this.resetMagnifyTransform(true);
     }
   }
@@ -808,6 +815,17 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    if (typeof window !== 'undefined' && this.resizeAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.resizeAnimationFrame);
+      this.resizeAnimationFrame = null;
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.handleCanvasWrapperResize);
+    }
     this.root.remove();
   }
 
@@ -837,6 +855,18 @@ export class DefineRoom {
     this.closeButton = this.root.querySelector(
       ".define-room-close",
     ) as HTMLButtonElement | null;
+
+    if (typeof ResizeObserver !== 'undefined') {
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+      }
+      this.resizeObserver = new ResizeObserver(() => this.handleCanvasWrapperResize());
+      if (this.canvasWrapper) {
+        this.resizeObserver.observe(this.canvasWrapper);
+      }
+    }
+
+    this.handleCanvasWrapperResize();
 
     this.initializeColorMenu();
 
@@ -970,6 +1000,10 @@ export class DefineRoom {
         this.close();
       }
     });
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.handleCanvasWrapperResize);
+    }
 
     this.overlayCanvas.addEventListener("pointerdown", (event) => this.handlePointerDown(event));
     this.overlayCanvas.addEventListener("pointermove", (event) => this.handlePointerMove(event));
@@ -1338,6 +1372,7 @@ export class DefineRoom {
     this.overlayCanvas.style.height = "auto";
     this.selectionCanvas.style.height = "auto";
 
+    this.recalculateBaseScale();
     this.resetMagnifyTransform(true);
 
     this.imageContext.clearRect(0, 0, width, height);
@@ -2173,7 +2208,8 @@ export class DefineRoom {
   }
 
   private updateCanvasTransform(scale: number, origin: string, withTransition = true): void {
-    const transformValue = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${scale})`;
+    const effectiveScale = scale * this.baseScale;
+    const transformValue = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${effectiveScale})`;
     [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
       canvas.style.transition = withTransition ? this.magnifyTransition : "none";
       canvas.style.transformOrigin = origin;
@@ -2181,12 +2217,95 @@ export class DefineRoom {
     });
   }
 
+  private recalculateBaseScale(): boolean {
+    if (this.width === 0 || this.height === 0) {
+      const wasDifferent = this.baseScale !== 1;
+      this.baseScale = 1;
+      return wasDifferent;
+    }
+
+    if (!this.canvasWrapper) {
+      return false;
+    }
+
+    const rect = this.canvasWrapper.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return false;
+    }
+
+    const scaleX = rect.width / this.width;
+    const scaleY = rect.height / this.height;
+    const nextScale = Math.min(scaleX, scaleY, 1);
+    if (!Number.isFinite(nextScale) || nextScale <= 0) {
+      return false;
+    }
+
+    if (Math.abs(this.baseScale - nextScale) < 0.0001) {
+      return false;
+    }
+
+    this.baseScale = nextScale;
+    return true;
+  }
+
+  private computeCenteredPanOffset(): { x: number; y: number } {
+    if (!this.canvasWrapper || this.width === 0 || this.height === 0) {
+      return { x: 0, y: 0 };
+    }
+
+    const rect = this.canvasWrapper.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return { x: 0, y: 0 };
+    }
+
+    const baseScale = this.baseScale;
+    if (!Number.isFinite(baseScale) || baseScale <= 0) {
+      return { x: 0, y: 0 };
+    }
+
+    const displayWidth = this.width * baseScale;
+    const displayHeight = this.height * baseScale;
+    const desiredOffsetX = (rect.width - displayWidth) / 2;
+    const desiredOffsetY = (rect.height - displayHeight) / 2;
+
+    return {
+      x: desiredOffsetX / baseScale,
+      y: desiredOffsetY / baseScale,
+    };
+  }
+
+  private handleCanvasWrapperResize = (): void => {
+    if (typeof window !== 'undefined' && this.resizeAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.resizeAnimationFrame);
+      this.resizeAnimationFrame = null;
+    }
+
+    const applyResize = () => {
+      this.resizeAnimationFrame = null;
+      const scaleChanged = this.recalculateBaseScale();
+      const shouldResetPan = this.magnifyIndex === 0;
+      if (shouldResetPan) {
+        this.panOffset = this.computeCenteredPanOffset();
+      }
+      if (scaleChanged || shouldResetPan) {
+        this.updateCanvasTransform(this.magnifyScales[this.magnifyIndex], this.magnifyOrigin, false);
+      }
+    };
+
+    if (typeof window === 'undefined') {
+      applyResize();
+      return;
+    }
+
+    this.resizeAnimationFrame = window.requestAnimationFrame(applyResize);
+  };
+
   private resetMagnifyTransform(useDefaultOrigin = false): void {
     this.magnifyIndex = 0;
     if (useDefaultOrigin) {
       this.magnifyOrigin = "50% 50%";
     }
-    this.panOffset = { x: 0, y: 0 };
+    this.panOffset = this.computeCenteredPanOffset();
     this.isPanning = false;
     this.panStartClient = null;
     this.panStartOffset = null;
