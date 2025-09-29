@@ -508,6 +508,8 @@ export class DefineRoom {
 
   private brushSliderCaptureElement: HTMLElement | null = null;
 
+  private brushSliderPositionFrame: number | null = null;
+
   private imageCanvas!: HTMLCanvasElement;
 
   private overlayCanvas!: HTMLCanvasElement;
@@ -916,6 +918,7 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+    window.addEventListener("resize", this.updateBrushSliderPosition);
   }
 
   private initializeColorMenu(): void {
@@ -1114,6 +1117,66 @@ export class DefineRoom {
     this.brushSliderThumb.addEventListener("pointerdown", pointerDownHandler);
   }
 
+  private updateBrushSliderPosition = (): void => {
+    if (this.brushSliderPositionFrame !== null) {
+      cancelAnimationFrame(this.brushSliderPositionFrame);
+    }
+
+    this.brushSliderPositionFrame = requestAnimationFrame(() => {
+      this.brushSliderPositionFrame = null;
+      if (!this.brushSliderContainer) {
+        return;
+      }
+
+      if (!this.brushSliderContainer.classList.contains("visible")) {
+        this.brushSliderContainer.style.removeProperty("--brush-slider-horizontal-offset");
+        this.brushSliderContainer.style.removeProperty("--brush-slider-vertical-offset");
+        return;
+      }
+
+      const rect = this.brushSliderContainer.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        return;
+      }
+
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || rect.width;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || rect.height;
+      const padding = 16;
+
+      let horizontalOffset = 0;
+      if (rect.left < padding) {
+        horizontalOffset = padding - rect.left;
+      } else if (rect.right > viewportWidth - padding) {
+        horizontalOffset = viewportWidth - padding - rect.right;
+      }
+
+      if (horizontalOffset !== 0) {
+        this.brushSliderContainer.style.setProperty(
+          "--brush-slider-horizontal-offset",
+          `${horizontalOffset}px`,
+        );
+      } else {
+        this.brushSliderContainer.style.removeProperty("--brush-slider-horizontal-offset");
+      }
+
+      let verticalOffset = 0;
+      if (rect.top < padding) {
+        verticalOffset = padding - rect.top;
+      } else if (rect.bottom > viewportHeight - padding) {
+        verticalOffset = viewportHeight - padding - rect.bottom;
+      }
+
+      if (verticalOffset !== 0) {
+        this.brushSliderContainer.style.setProperty(
+          "--brush-slider-vertical-offset",
+          `${verticalOffset}px`,
+        );
+      } else {
+        this.brushSliderContainer.style.removeProperty("--brush-slider-vertical-offset");
+      }
+    });
+  };
+
   private startBrushSliderInteraction(event: PointerEvent): void {
     if (!this.brushSliderTrack || !this.brushSliderContainer) {
       return;
@@ -1248,6 +1311,8 @@ export class DefineRoom {
     const isBrushTool = this.currentTool === "brush" || this.currentTool === "eraser";
     this.brushSliderContainer.classList.toggle("visible", isBrushTool);
     this.brushSliderContainer.setAttribute("aria-hidden", isBrushTool ? "false" : "true");
+
+    this.updateBrushSliderPosition();
 
     if (!isBrushTool && this.isAdjustingBrushSize) {
       this.stopBrushSliderInteraction();
