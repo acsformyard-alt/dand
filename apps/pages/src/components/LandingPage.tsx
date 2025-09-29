@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import type { AuthResponse } from '../types';
 import AuthPanel from './AuthPanel';
 
@@ -10,26 +10,53 @@ interface LandingPageProps {
 
 const features = [
   {
-    title: 'Reveal maps live',
-    description: 'Fade in fog-of-war with precision tools built for dramatic reveals and on-the-fly adjustments.',
-    icon: '🗺️',
+    title: 'Ignite every reveal',
+    description: 'Sweep warm light across your battlemaps with precision tools that let you script every gasp around the table.',
+    icon: '🔥',
   },
   {
-    title: 'Campaign control',
-    description: 'Organise every battlemap, note and marker by campaign so your prep is ready when players arrive.',
-    icon: '🎯',
+    title: 'Campaign vault',
+    description: 'File battlemaps, lore, and initiative notes by campaign so your prep is ready the moment the torch is lit.',
+    icon: '📜',
   },
   {
-    title: 'Share instantly',
-    description: 'Invite players with short join codes and let them explore revealed regions from any device.',
-    icon: '⚡',
+    title: 'Share the spark',
+    description: 'Invite players with join codes and let them watch your reveals unfold from any device in real time.',
+    icon: '📡',
   },
   {
-    title: 'Save your progress',
-    description: 'Archive live sessions and pick up where you left off without losing the dramatic tension.',
-    icon: '🛡️',
+    title: 'Preserve the embers',
+    description: 'Archive every session and resume right where the light last fell without losing the mood you built.',
+    icon: '💾',
   },
 ];
+
+const TorchIcon: React.FC = () => {
+  const flameId = useId();
+  return (
+    <svg viewBox="0 0 64 64" role="img" aria-hidden className="h-9 w-9">
+      <title>TableTorch placeholder logo</title>
+      <defs>
+        <linearGradient id={`${flameId}-flame`} x1="32" y1="6" x2="32" y2="42" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#fde68a" />
+          <stop offset="45%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#b45309" />
+        </linearGradient>
+        <linearGradient id={`${flameId}-handle`} x1="32" y1="40" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#78350f" />
+          <stop offset="100%" stopColor="#451a03" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M32 6c-7.8 4.8-12.5 13.2-7.6 20.9 3.2 5 9.4 5.4 12.4 0.5 2.5-4.1 0.4-9.5-3.2-12.8 2.3 4.8 0.7 7.9-1.2 9.9-3-2.2-3.2-6.3 1.2-11.7C32.9 11.4 30 9 32 6Z"
+        fill={`url(#${flameId}-flame)`}
+      />
+      <path d="M27 33c0-2.8 2.2-5 5-5s5 2.2 5 5c0 6-4 11-5 11s-5-5-5-11Z" fill="#ea580c" opacity="0.65" />
+      <path d="M27 40h10v14a5 5 0 0 1-5 5 5 5 0 0 1-5-5V40Z" fill={`url(#${flameId}-handle)`} />
+      <rect x="24" y="38" width="16" height="4" rx="1.5" fill="#7c2d12" />
+    </svg>
+  );
+};
 
 const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthenticate }) => {
   const themeLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
@@ -41,24 +68,30 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
   return (
     <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
       <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
-      <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-sky-400/30 blur-3xl dark:bg-sky-500/20 animate-float-slow" />
-      <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-teal-400/20 blur-[120px] dark:bg-teal-500/20 animate-float-slow" />
+      <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/30 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
+      <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-200/25 blur-[120px] dark:bg-amber-500/20 animate-float-slow" />
       <div className="relative isolate">
         <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-8 sm:py-10">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900/90 text-2xl font-black text-teal-300 shadow-2xl shadow-teal-500/20 ring-4 ring-white/50 backdrop-blur dark:bg-white/10 dark:text-teal-200 dark:ring-teal-500/30">
-              DM
+            <div className="relative">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-4 rounded-[26px] bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.55),rgba(251,191,36,0))] opacity-0 transition-opacity duration-700 dark:opacity-100"
+              />
+              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/50 bg-amber-200/90 text-2xl font-black text-amber-900 shadow-xl shadow-amber-500/30 ring-2 ring-amber-100/70 backdrop-blur-sm dark:border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-500/30">
+                <TorchIcon />
+              </div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.45em] text-teal-600 dark:text-teal-300">D&D Map Reveal</p>
-              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Fog-of-war built for dramatic storytelling</p>
+              <p className="text-xs uppercase tracking-[0.45em] text-amber-700 dark:text-amber-300">TableTorch</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Lighting control for unforgettable tabletop moments</p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleThemeToggle}
             aria-pressed={theme === 'dark'}
-            className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 shadow-sm transition hover:border-teal-400/70 hover:text-teal-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-teal-400/60 dark:hover:text-teal-200"
+            className="inline-flex items-center gap-2 rounded-full border border-amber-500/60 bg-white/50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 shadow-sm transition hover:border-amber-500 hover:text-amber-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:border-amber-300 dark:hover:text-amber-100"
           >
             <span className="text-base" aria-hidden>
               {theme === 'dark' ? '🌙' : '🌞'}
@@ -69,25 +102,25 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
         <main className="mx-auto grid max-w-7xl gap-16 px-6 pb-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] lg:items-center">
           <section className="space-y-10">
             <div className="space-y-6">
-              <span className="inline-flex items-center rounded-full border border-teal-400/50 bg-teal-100/60 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-teal-700 shadow-sm dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200">
-                Your new DM co-pilot
+              <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-100/70 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-amber-700 shadow-sm dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
+                Your table's guiding light
               </span>
               <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-white">
-                Guide your party through unforgettable encounters with cinematic map reveals.
+                Guide your party through unforgettable encounters with cinematic light reveals.
               </h1>
               <p className="max-w-xl text-lg text-slate-600 dark:text-slate-300">
-                D&D Map Reveal keeps your battlemap prep organised and ready. Cue dramatic lighting, reveal regions in real time, and manage campaigns without breaking the table’s immersion.
+                TableTorch keeps your battlemap prep organised and ready. Cue dramatic lighting, reveal regions in real time, and manage campaigns without breaking the table’s immersion.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <a
                   href="#auth-panel"
-                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-teal-500 via-sky-500 to-blue-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.45em] text-white shadow-lg shadow-teal-500/30 transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400"
+                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.45em] text-white shadow-lg shadow-amber-500/30 transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
                 >
                   Launch the demo
                 </a>
                 <a
                   href="#features"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300/70 bg-white/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-slate-600 transition hover:border-teal-400/60 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-teal-400/60 dark:hover:text-teal-200"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-500/50 bg-white/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-amber-700 transition hover:border-amber-500 hover:text-amber-800 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:border-amber-300 dark:hover:text-amber-100"
                 >
                   Explore features
                   <span aria-hidden>→</span>
@@ -98,9 +131,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
               {features.map((feature) => (
                 <article
                   key={feature.title}
-                  className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/80 p-6 shadow-lg shadow-slate-200/40 transition hover:-translate-y-1 hover:shadow-2xl dark:border-slate-800/70 dark:bg-slate-900/70 dark:shadow-black/40"
+                  className="group relative overflow-hidden rounded-3xl border border-amber-500/30 bg-amber-50/80 p-6 shadow-lg shadow-amber-200/50 transition hover:-translate-y-1 hover:shadow-2xl dark:border-amber-400/30 dark:bg-slate-900/70 dark:shadow-black/40"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/20 to-sky-500/10 text-2xl">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 text-2xl">
                     <span aria-hidden>{feature.icon}</span>
                     <span className="sr-only">{feature.title} icon</span>
                   </div>
@@ -108,7 +141,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{feature.description}</p>
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-teal-500/10 to-transparent transition duration-500 group-hover:translate-y-0"
+                    className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-amber-500/10 to-transparent transition duration-500 group-hover:translate-y-0"
                   />
                 </article>
               ))}
@@ -116,17 +149,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
           </section>
           <aside className="relative">
             <div aria-hidden className="absolute inset-0 -translate-y-6 rounded-[2.75rem] bg-white/50 blur-3xl dark:bg-slate-900/50" />
-            <div className="relative rounded-[2.5rem] border border-white/40 bg-white/60 p-1 shadow-2xl shadow-teal-500/10 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/60">
-              <div className="absolute -top-16 right-10 h-24 w-24 rounded-full bg-gradient-to-br from-teal-400/40 to-sky-500/20 blur-3xl dark:from-teal-500/30 dark:to-sky-500/20 animate-gradient" aria-hidden />
-              <div className="absolute bottom-10 left-10 h-20 w-20 rounded-full bg-teal-400/20 blur-2xl dark:bg-teal-500/20 animate-float-slow" aria-hidden />
+            <div className="relative rounded-[2.5rem] border border-amber-500/30 bg-white/70 p-1 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-amber-400/40 dark:bg-slate-950/70">
+              <div className="absolute -top-16 right-10 h-24 w-24 rounded-full bg-gradient-to-br from-amber-300/50 to-orange-500/20 blur-3xl dark:from-amber-500/40 dark:to-orange-500/25 animate-gradient" aria-hidden />
+              <div className="absolute bottom-10 left-10 h-20 w-20 rounded-full bg-amber-300/25 blur-2xl dark:bg-amber-500/25 animate-float-slow" aria-hidden />
               <AuthPanel
                 variant="wide"
-                className="border-transparent bg-white/80 shadow-none ring-1 ring-white/60 dark:bg-slate-950/70 dark:ring-teal-500/20"
+                className="border-transparent bg-white/80 shadow-none ring-1 ring-amber-200/60 dark:bg-slate-950/70 dark:ring-amber-400/20"
                 onAuthenticate={onAuthenticate}
               />
             </div>
             <p id="auth-panel" className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              No spam, no credit card – just a guided tour of the DM mission control.
+              No spam, no credit card – just a guided tour of the TableTorch command deck.
             </p>
           </aside>
         </main>
