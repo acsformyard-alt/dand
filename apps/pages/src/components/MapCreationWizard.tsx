@@ -290,6 +290,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
   const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
+  const brushSliderHostRef = useRef<HTMLDivElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
@@ -345,6 +346,36 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       }
     };
   }, [defineRoomContainer]);
+
+  useEffect(() => {
+    if (!defineRoomReady || step !== 2) {
+      return undefined;
+    }
+
+    const editor = defineRoomRef.current;
+    const sliderHost = brushSliderHostRef.current;
+    if (!editor || !sliderHost) {
+      return undefined;
+    }
+
+    const slider = editor.element.querySelector('.brush-slider-container');
+    if (!(slider instanceof HTMLElement)) {
+      return undefined;
+    }
+
+    const originalParent = slider.parentElement;
+    if (!originalParent || sliderHost.contains(slider)) {
+      return undefined;
+    }
+
+    sliderHost.appendChild(slider);
+
+    return () => {
+      if (!originalParent.contains(slider)) {
+        originalParent.appendChild(slider);
+      }
+    };
+  }, [defineRoomReady, step]);
 
   useEffect(() => {
     if (!file) {
@@ -696,8 +727,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           })}
         </div>
       </header>
-      <main className="flex-1 overflow-hidden px-[10vw] py-4">
-        <div className="flex h-full flex-col overflow-hidden">
+      <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
+        <div className="flex h-full">
+          <div
+            ref={brushSliderHostRef}
+            className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
+          />
+          <div className="flex h-full flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
@@ -841,7 +877,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
                   ref={defineRoomContainerRef}
-                  className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
+                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
                     canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
                   }`}
                 >
@@ -1021,6 +1057,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
+          </div>
         </div>
       </main>
       <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
