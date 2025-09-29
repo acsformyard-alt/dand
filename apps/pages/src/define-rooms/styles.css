@@ -559,6 +559,10 @@
   z-index: 4;
 }
 
+.brush-slider-container--docked-left {
+  left: calc(100% + 24px);
+}
+
 .brush-slider-container.visible {
   transform: translateX(0) translateY(-50%);
   opacity: 1;

@@ -368,9 +368,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       return undefined;
     }
 
+    const dockedClass = 'brush-slider-container--docked-left';
+    slider.classList.add(dockedClass);
     sliderHost.appendChild(slider);
 
     return () => {
+      slider.classList.remove(dockedClass);
       if (!originalParent.contains(slider)) {
         originalParent.appendChild(slider);
       }
@@ -729,6 +732,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       </header>
       <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
         <div className="flex h-full">
+          <div
+            ref={brushSliderHostRef}
+            className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
+          />
           <div className="flex h-full flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
@@ -1054,10 +1061,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             </div>
           )}
           </div>
-          <div
-            ref={brushSliderHostRef}
-            className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
-          />
         </div>
       </main>
       <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
