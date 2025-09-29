@@ -560,7 +560,7 @@
 }
 
 .brush-slider-container--docked-left {
-  left: calc(100% + 34px);
+  left: calc(100% + 4.5vw);
 }
 
 .brush-slider-container.visible {
