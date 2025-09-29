@@ -50,8 +50,8 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     className
   );
 
-  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a DM profile';
-  const headingText = mode === 'login' ? 'Sign in to D&D Map Reveal' : 'Join the D&D Map Reveal beta';
+  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a TableTorch profile';
+  const headingText = mode === 'login' ? 'Sign in to TableTorch' : 'Join the TableTorch beta';
   const submitLabel = loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up';
   const toggleLabel = mode === 'login' ? 'Need an account?' : 'Already have an account?';
   const toggleHelper = mode === 'login' ? 'Create one instead' : 'Use your existing login';
@@ -60,11 +60,11 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     <section className={containerClasses} aria-labelledby={`${formId}-title`}>
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-28 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-teal-400/20 blur-3xl dark:bg-teal-500/10"
+        className="pointer-events-none absolute -top-28 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-amber-400/25 blur-3xl dark:bg-amber-500/15"
       />
       <div className="relative space-y-8">
         <header className="space-y-3">
-          <span className="inline-flex items-center rounded-full border border-teal-500/40 bg-teal-100/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-teal-700 shadow-sm dark:border-teal-400/50 dark:bg-teal-500/10 dark:text-teal-200">
+          <span className="inline-flex items-center rounded-full border border-amber-600/40 bg-amber-100/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-800 shadow-sm dark:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-200">
             {badgeText}
           </span>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -79,13 +79,13 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
             <button
               type="button"
               onClick={() => setMode((current) => (current === 'login' ? 'signup' : 'login'))}
-              className="inline-flex items-center rounded-full border border-slate-300/70 bg-white/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 transition hover:border-teal-400/60 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-teal-400/50 dark:hover:text-teal-200"
+              className="inline-flex items-center rounded-full border border-slate-300/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:border-amber-500/60 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-amber-400/50 dark:hover:text-amber-200"
               aria-pressed={mode === 'signup'}
             >
               {toggleLabel}
             </button>
           </div>
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400 dark:text-slate-500">{toggleHelper}</p>
+          <p className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">{toggleHelper}</p>
         </header>
         <form
           id={formId}
@@ -106,7 +106,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
-                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-amber-400"
                 required
               />
             </div>
@@ -120,7 +120,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                   autoComplete="name"
-                  className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                  className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-amber-400"
                   required
                 />
               </div>
@@ -135,7 +135,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-amber-400"
                 required
               />
             </div>
@@ -148,7 +148,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-teal-500 via-sky-500 to-blue-500 px-5 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white shadow-lg shadow-teal-500/30 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-500 disabled:cursor-wait disabled:opacity-80"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-5 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white shadow-lg shadow-orange-500/30 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-500 disabled:cursor-wait disabled:opacity-80"
           >
             {submitLabel}
           </button>

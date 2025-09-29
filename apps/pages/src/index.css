@@ -6,45 +6,77 @@
   color-scheme: light dark;
 }
 
+body {
+  background-image:
+    linear-gradient(rgba(250, 242, 223, 0.92), rgba(241, 224, 192, 0.92)),
+    url('/textures/parchment-bg.jpg');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-position: center;
+  color: #29180f;
+}
+
+body.dark {
+  background-image:
+    linear-gradient(rgba(14, 10, 8, 0.86), rgba(14, 10, 8, 0.92)),
+    url('/textures/parchment-bg.jpg');
+  background-color: #0f0906;
+  color: #f8f3e6;
+}
+
 a {
-  @apply text-primary hover:text-primary-light;
+  @apply text-amber-700 transition-colors hover:text-amber-500 dark:text-amber-300 dark:hover:text-amber-200;
 }
 
 button {
   @apply transition-colors;
 }
 
-body.dark {
-  @apply bg-slate-900 text-slate-100;
-}
-
 @layer utilities {
   .bg-landing {
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(56, 189, 248, 0.35), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(20, 184, 166, 0.25), transparent 40%),
-      radial-gradient(circle at 0% 80%, rgba(14, 165, 233, 0.2), transparent 45%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      radial-gradient(circle at top right, rgba(255, 200, 120, 0.22), transparent 55%),
+      radial-gradient(circle at bottom left, rgba(217, 119, 6, 0.18), transparent 45%),
+      linear-gradient(135deg, rgba(255, 245, 230, 0.9), rgba(250, 235, 204, 0.85));
+    backdrop-filter: blur(2px);
   }
 
   .dark .bg-landing {
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.2), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.18), transparent 45%),
-      radial-gradient(circle at 10% 85%, rgba(45, 212, 191, 0.18), transparent 45%),
-      linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.2), transparent 55%),
+      radial-gradient(circle at bottom left, rgba(194, 65, 12, 0.25), transparent 45%),
+      linear-gradient(135deg, rgba(33, 24, 19, 0.92), rgba(17, 12, 9, 0.94));
   }
 
   .bg-grid-mask {
-    --grid-color: rgba(15, 23, 42, 0.08);
+    --grid-color: rgba(120, 66, 18, 0.08);
     background-image:
       linear-gradient(var(--grid-color) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-    background-size: 48px 48px;
+    background-size: 42px 42px;
+    mix-blend-mode: multiply;
   }
 
   .dark .bg-grid-mask {
-    --grid-color: rgba(148, 163, 184, 0.1);
+    --grid-color: rgba(251, 191, 36, 0.08);
+    mix-blend-mode: screen;
+  }
+
+  .halo-glow::after {
+    content: '';
+    position: absolute;
+    inset: -35%;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(253, 186, 116, 0.4), transparent 70%);
+    opacity: 0;
+    transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+
+  .dark .halo-glow::after {
+    opacity: 1;
+    filter: blur(4px);
   }
 
   .animate-gradient {
