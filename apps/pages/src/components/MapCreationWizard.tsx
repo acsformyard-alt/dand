@@ -696,7 +696,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           })}
         </div>
       </header>
-      <main className="flex-1 overflow-hidden px-[10vw] py-4">
+      <main
+        className={`flex-1 overflow-y-auto py-4 ${
+          step === 2
+            ? 'overflow-visible px-0 sm:px-6 lg:px-12'
+            : 'overflow-x-visible px-[10vw]'
+        }`}
+      >
         <div className="flex h-full flex-col overflow-hidden">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
@@ -841,7 +847,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
                   ref={defineRoomContainerRef}
-                  className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
+                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
                     canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
                   }`}
                 >
