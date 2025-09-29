@@ -657,8 +657,8 @@ body {
 .brush-slider-container {
   position: absolute;
   top: 50%;
-  left: -94px;
-  transform: translateX(28px) translateY(-50%);
+  right: calc(100% + 16px);
+  transform: translateX(16px) translateY(-50%);
   width: 68px;
   padding: 18px 16px 22px;
   border-radius: 22px;
