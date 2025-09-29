@@ -87,7 +87,7 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
         <button
           type="button"
           onClick={onCreateMap}
-          className="rounded-xl border border-teal-400/60 bg-teal-500/80 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+          className="rounded-xl border border-amber-400/60 bg-amber-500/80 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-400/90"
         >
           New Map
         </button>
@@ -114,7 +114,7 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                     </div>
                     <span
                       className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/70 text-xs font-bold text-slate-300 transition ${
-                        expanded ? 'bg-teal-500/10 text-teal-200' : 'bg-slate-900'
+                        expanded ? 'bg-amber-500/10 text-amber-200' : 'bg-slate-900'
                       }`}
                       aria-hidden="true"
                     >
@@ -153,10 +153,10 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                               onSelect(map);
                             }
                           }}
-                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
                             selectedMapId === map.id
-                              ? 'border-teal-400 bg-teal-500/10 shadow-[0_0_0_1px_rgba(45,212,191,0.4)]'
-                              : 'border-slate-800/60 bg-slate-950/60 hover:border-teal-400/60 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
+                              ? 'border-amber-400 bg-amber-500/10 shadow-[0_0_0_1px_rgba(251,191,36,0.4)]'
+                              : 'border-slate-800/60 bg-slate-950/60 hover:border-amber-400/60 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.3)]'
                           }`}
                         >
                           <div className="absolute right-4 top-4 flex items-center gap-2">

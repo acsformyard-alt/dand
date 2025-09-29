@@ -31,6 +31,7 @@ export default defineConfig({
   resolve: {
     alias,
   },
+  publicDir: resolvePath('../../textures'),
   server: {
     port: 5173,
   },
