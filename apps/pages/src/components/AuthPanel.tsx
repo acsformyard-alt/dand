@@ -16,7 +16,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('demo@dandmaps.example');
   const [password, setPassword] = useState('demo-password');
-  const [displayName, setDisplayName] = useState('Demo DM');
+  const [displayName, setDisplayName] = useState('Torchbearer Demo');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,8 +50,8 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     className
   );
 
-  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a DM profile';
-  const headingText = mode === 'login' ? 'Sign in to D&D Map Reveal' : 'Join the D&D Map Reveal beta';
+  const badgeText = mode === 'login' ? 'Return to the torchlight' : 'Light a new profile';
+  const headingText = mode === 'login' ? 'Sign in to TableTorch' : 'Join the TableTorch beta';
   const submitLabel = loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up';
   const toggleLabel = mode === 'login' ? 'Need an account?' : 'Already have an account?';
   const toggleHelper = mode === 'login' ? 'Create one instead' : 'Use your existing login';
@@ -73,7 +73,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 {headingText}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use the pre-filled demo credentials or sign up with your own details to explore the DM console.
+                Use the pre-filled demo credentials or sign up with your own details to explore the TableTorch console.
               </p>
             </div>
             <button

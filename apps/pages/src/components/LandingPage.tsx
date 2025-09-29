@@ -10,26 +10,60 @@ interface LandingPageProps {
 
 const features = [
   {
-    title: 'Reveal maps live',
-    description: 'Fade in fog-of-war with precision tools built for dramatic reveals and on-the-fly adjustments.',
-    icon: '🗺️',
+    title: 'Ignite your reveals',
+    description:
+      'Sweep light across battlemaps with layered masks and brush tools that feel like guiding a real torch.',
+    icon: '🔥',
   },
   {
-    title: 'Campaign control',
-    description: 'Organise every battlemap, note and marker by campaign so your prep is ready when players arrive.',
-    icon: '🎯',
+    title: 'Curate every campaign',
+    description: 'Sort maps, notes and tokens by world so your stories stay organised between adventures.',
+    icon: '🗂️',
   },
   {
-    title: 'Share instantly',
-    description: 'Invite players with short join codes and let them explore revealed regions from any device.',
-    icon: '⚡',
+    title: 'Share the glow',
+    description: 'Send players a join code and let them follow the light from any device without extra installs.',
+    icon: '✨',
   },
   {
-    title: 'Save your progress',
-    description: 'Archive live sessions and pick up where you left off without losing the dramatic tension.',
-    icon: '🛡️',
+    title: 'Preserve the embers',
+    description: 'Save session states so you can rekindle encounters exactly where the party left off.',
+    icon: '🕯️',
   },
 ];
+
+const parchmentTexture = new URL('../../../../textures/parchment-bg.jpg', import.meta.url).href;
+
+const TorchLogo: React.FC = () => (
+  <div className="relative">
+    <div
+      aria-hidden
+      className="absolute -inset-5 rounded-full bg-amber-300/0 blur-2xl transition dark:bg-amber-200/20"
+    />
+    <div className="relative flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-200 via-amber-100 to-amber-300 shadow-lg shadow-amber-500/30 ring-2 ring-amber-900/10 dark:from-amber-500/20 dark:via-amber-500/10 dark:to-amber-400/20 dark:shadow-amber-500/40 dark:ring-amber-300/30">
+      <svg
+        aria-hidden
+        viewBox="0 0 64 64"
+        className="h-10 w-10 drop-shadow-[0_0_6px_rgba(251,191,36,0.45)] text-amber-700 dark:text-amber-200"
+      >
+        <path
+          d="M28 6c5 4 10 7 11 13 1 6-3 11-7 14h10c0 5-3 14-10 19-7-5-10-14-10-19h8c-5-5-7-13-2-22z"
+          fill="currentColor"
+        />
+        <path
+          d="M26 37h12l-2 16h-8z"
+          fill="url(#flame-handle)"
+        />
+        <defs>
+          <linearGradient id="flame-handle" x1="26" y1="37" x2="38" y2="53" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#78350f" />
+            <stop offset="1" stopColor="#451a03" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  </div>
+);
 
 const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthenticate }) => {
   const themeLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
@@ -38,27 +72,32 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  const backgroundStyle = {
+    ['--parchment-texture' as const]: `url(${parchmentTexture})`,
+  } as React.CSSProperties;
+
   return (
-    <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
-      <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
-      <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-sky-400/30 blur-3xl dark:bg-sky-500/20 animate-float-slow" />
-      <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-teal-400/20 blur-[120px] dark:bg-teal-500/20 animate-float-slow" />
+    <div
+      className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-amber-50"
+      style={backgroundStyle}
+    >
+      <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-multiply dark:mix-blend-normal dark:opacity-50" />
+      <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/40 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
+      <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-200/30 blur-[140px] dark:bg-orange-500/20 animate-float-slow" />
       <div className="relative isolate">
         <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-8 sm:py-10">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900/90 text-2xl font-black text-teal-300 shadow-2xl shadow-teal-500/20 ring-4 ring-white/50 backdrop-blur dark:bg-white/10 dark:text-teal-200 dark:ring-teal-500/30">
-              DM
-            </div>
+            <TorchLogo />
             <div>
-              <p className="text-xs uppercase tracking-[0.45em] text-teal-600 dark:text-teal-300">D&D Map Reveal</p>
-              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Fog-of-war built for dramatic storytelling</p>
+              <p className="text-xs uppercase tracking-[0.45em] text-amber-700 dark:text-amber-200">TableTorch</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-amber-50">Light every encounter with warm, cinematic reveals</p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleThemeToggle}
             aria-pressed={theme === 'dark'}
-            className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 shadow-sm transition hover:border-teal-400/70 hover:text-teal-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-teal-400/60 dark:hover:text-teal-200"
+            className="inline-flex items-center gap-2 rounded-full border border-amber-900/20 bg-amber-50/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow-sm transition hover:border-amber-500/60 hover:text-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:border-amber-300/40 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:border-amber-200/60 dark:hover:text-amber-200"
           >
             <span className="text-base" aria-hidden>
               {theme === 'dark' ? '🌙' : '🌞'}
@@ -69,25 +108,25 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
         <main className="mx-auto grid max-w-7xl gap-16 px-6 pb-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] lg:items-center">
           <section className="space-y-10">
             <div className="space-y-6">
-              <span className="inline-flex items-center rounded-full border border-teal-400/50 bg-teal-100/60 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-teal-700 shadow-sm dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200">
-                Your new DM co-pilot
+              <span className="inline-flex items-center rounded-full border border-amber-900/30 bg-amber-100/70 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-amber-800 shadow-sm dark:border-amber-200/40 dark:bg-amber-500/20 dark:text-amber-100">
+                Illuminate every session
               </span>
-              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-white">
-                Guide your party through unforgettable encounters with cinematic map reveals.
+              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-amber-50">
+                Guide your party with the glow of TableTorch.
               </h1>
-              <p className="max-w-xl text-lg text-slate-600 dark:text-slate-300">
-                D&D Map Reveal keeps your battlemap prep organised and ready. Cue dramatic lighting, reveal regions in real time, and manage campaigns without breaking the table’s immersion.
+              <p className="max-w-xl text-lg text-slate-700 dark:text-amber-200/80">
+                TableTorch keeps your battlemap prep organised and ready. Douse the table in warm light, reveal regions in real time, and keep the suspense alive without breaking immersion.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <a
                   href="#auth-panel"
-                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-teal-500 via-sky-500 to-blue-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.45em] text-white shadow-lg shadow-teal-500/30 transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400"
+                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.45em] text-white shadow-lg shadow-amber-500/30 transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
                 >
-                  Launch the demo
+                  Light the demo
                 </a>
                 <a
                   href="#features"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300/70 bg-white/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-slate-600 transition hover:border-teal-400/60 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-teal-400/60 dark:hover:text-teal-200"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-900/30 bg-amber-50/70 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-amber-800 transition hover:border-amber-500/60 hover:text-amber-600 dark:border-amber-200/40 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:border-amber-200/60 dark:hover:text-amber-200"
                 >
                   Explore features
                   <span aria-hidden>→</span>
@@ -98,35 +137,35 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
               {features.map((feature) => (
                 <article
                   key={feature.title}
-                  className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/80 p-6 shadow-lg shadow-slate-200/40 transition hover:-translate-y-1 hover:shadow-2xl dark:border-slate-800/70 dark:bg-slate-900/70 dark:shadow-black/40"
+                  className="group relative overflow-hidden rounded-3xl border border-amber-900/20 bg-amber-50/70 p-6 shadow-lg shadow-amber-900/10 transition hover:-translate-y-1 hover:shadow-2xl dark:border-amber-200/30 dark:bg-slate-950/60 dark:shadow-black/50"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/20 to-sky-500/10 text-2xl">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-500/20 text-2xl text-white shadow-inner shadow-amber-900/20">
                     <span aria-hidden>{feature.icon}</span>
                     <span className="sr-only">{feature.title} icon</span>
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">{feature.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{feature.description}</p>
+                  <h3 className="mt-4 text-lg font-semibold text-slate-900 dark:text-amber-50">{feature.title}</h3>
+                  <p className="mt-2 text-sm text-slate-700 dark:text-amber-200/80">{feature.description}</p>
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-teal-500/10 to-transparent transition duration-500 group-hover:translate-y-0"
+                    className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-amber-500/10 via-orange-500/5 to-transparent transition duration-500 group-hover:translate-y-0"
                   />
                 </article>
               ))}
             </section>
           </section>
           <aside className="relative">
-            <div aria-hidden className="absolute inset-0 -translate-y-6 rounded-[2.75rem] bg-white/50 blur-3xl dark:bg-slate-900/50" />
-            <div className="relative rounded-[2.5rem] border border-white/40 bg-white/60 p-1 shadow-2xl shadow-teal-500/10 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/60">
-              <div className="absolute -top-16 right-10 h-24 w-24 rounded-full bg-gradient-to-br from-teal-400/40 to-sky-500/20 blur-3xl dark:from-teal-500/30 dark:to-sky-500/20 animate-gradient" aria-hidden />
-              <div className="absolute bottom-10 left-10 h-20 w-20 rounded-full bg-teal-400/20 blur-2xl dark:bg-teal-500/20 animate-float-slow" aria-hidden />
+            <div aria-hidden className="absolute inset-0 -translate-y-6 rounded-[2.75rem] bg-amber-100/70 blur-3xl dark:bg-amber-900/40" />
+            <div className="relative rounded-[2.5rem] border border-amber-900/20 bg-amber-50/70 p-1 shadow-2xl shadow-amber-900/20 backdrop-blur-xl dark:border-amber-200/20 dark:bg-slate-950/60">
+              <div className="absolute -top-16 right-10 h-24 w-24 rounded-full bg-gradient-to-br from-amber-400/50 to-orange-500/20 blur-3xl dark:from-amber-500/30 dark:to-orange-500/20 animate-gradient" aria-hidden />
+              <div className="absolute bottom-10 left-10 h-20 w-20 rounded-full bg-orange-400/20 blur-2xl dark:bg-amber-500/20 animate-float-slow" aria-hidden />
               <AuthPanel
                 variant="wide"
-                className="border-transparent bg-white/80 shadow-none ring-1 ring-white/60 dark:bg-slate-950/70 dark:ring-teal-500/20"
+                className="border-transparent bg-amber-50/70 shadow-none ring-1 ring-amber-900/10 dark:bg-slate-950/70 dark:ring-amber-200/30"
                 onAuthenticate={onAuthenticate}
               />
             </div>
-            <p id="auth-panel" className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              No spam, no credit card – just a guided tour of the DM mission control.
+            <p id="auth-panel" className="mt-6 text-center text-xs text-slate-600 dark:text-amber-200/70">
+              No spam, no credit card – just a guided tour of the TableTorch command lantern.
             </p>
           </aside>
         </main>
