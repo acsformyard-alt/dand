@@ -518,6 +518,10 @@ export class DefineRoom {
 
   private brushSliderCaptureElement: HTMLElement | null = null;
 
+  private brushSliderOriginalParent: HTMLElement | null = null;
+
+  private brushSliderPortal: HTMLElement | null = null;
+
   private imageCanvas!: HTMLCanvasElement;
 
   private overlayCanvas!: HTMLCanvasElement;
@@ -806,6 +810,7 @@ export class DefineRoom {
   }
 
   public destroy(): void {
+    this.attachBrushSliderTo(null);
     this.close();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
     this.root.remove();
@@ -815,6 +820,44 @@ export class DefineRoom {
     return this.root;
   }
 
+  public attachBrushSliderTo(container: HTMLElement | null): void {
+    if (!this.brushSliderContainer) {
+      return;
+    }
+
+    if (!this.brushSliderOriginalParent) {
+      this.brushSliderOriginalParent = this.brushSliderContainer.parentElement;
+    }
+
+    if (container === this.brushSliderPortal) {
+      return;
+    }
+
+    if (container) {
+      if (this.brushSliderPortal?.contains(this.brushSliderContainer)) {
+        this.brushSliderPortal.removeChild(this.brushSliderContainer);
+      } else if (this.brushSliderOriginalParent?.contains(this.brushSliderContainer)) {
+        this.brushSliderOriginalParent.removeChild(this.brushSliderContainer);
+      }
+
+      container.appendChild(this.brushSliderContainer);
+      this.brushSliderContainer.classList.add("external-hosted");
+      this.brushSliderPortal = container;
+      return;
+    }
+
+    if (this.brushSliderPortal?.contains(this.brushSliderContainer)) {
+      this.brushSliderPortal.removeChild(this.brushSliderContainer);
+    }
+
+    if (this.brushSliderOriginalParent) {
+      this.brushSliderOriginalParent.appendChild(this.brushSliderContainer);
+    }
+
+    this.brushSliderContainer.classList.remove("external-hosted");
+    this.brushSliderPortal = null;
+  }
+
   private initializeDomReferences(): void {
     this.toolbarPrimaryButton = this.root.querySelector(".toolbar-primary") as HTMLButtonElement;
     this.toolbarConfirmGroup = this.root.querySelector(".toolbar-confirm-group") as HTMLElement;
@@ -822,6 +865,7 @@ export class DefineRoom {
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
+    this.brushSliderOriginalParent = this.brushSliderContainer?.parentElement ?? null;
     this.roomsList = this.roomsPanel.querySelector(".rooms-list") as HTMLElement;
     this.colorMenu = this.roomsPanel.querySelector(".room-color-menu") as HTMLElement;
     this.deleteBackdrop = this.root.querySelector(".room-delete-backdrop") as HTMLElement;

@@ -286,6 +286,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
   const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
+  const [brushSliderPortal, setBrushSliderPortal] = useState<HTMLDivElement | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
@@ -293,6 +294,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
+  }, []);
+  const brushSliderPortalRef = useCallback((node: HTMLDivElement | null) => {
+    setBrushSliderPortal(node);
   }, []);
 
   const syncRoomsFromEditor = useCallback(() => {
@@ -422,6 +426,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       editor.close();
     }
   }, [defineRoomReady, step]);
+
+  useEffect(() => {
+    const editor = defineRoomRef.current;
+    if (!editor) {
+      return;
+    }
+    if (!defineRoomReady) {
+      editor.attachBrushSliderTo(null);
+      return;
+    }
+    editor.attachBrushSliderTo(step === 2 ? brushSliderPortal : null);
+  }, [brushSliderPortal, defineRoomReady, step]);
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
@@ -696,8 +712,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           })}
         </div>
       </header>
-      <main className="flex-1 overflow-hidden px-[10vw] py-4">
-        <div className="flex h-full flex-col overflow-hidden">
+      <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
+        <div className="flex h-full">
+          <div className="flex h-full flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
@@ -841,7 +858,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
                   ref={defineRoomContainerRef}
-                  className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
+                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
                     canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
                   }`}
                 >
@@ -1021,6 +1038,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
+          </div>
+          <div
+            ref={brushSliderPortalRef}
+            className={`relative overflow-visible transition-[width] duration-200 ${
+              step === 2 ? 'ml-6 w-[120px] flex-shrink-0' : 'w-0 flex-shrink-0'
+            }`}
+            aria-hidden={step !== 2}
+          ></div>
         </div>
       </main>
       <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">

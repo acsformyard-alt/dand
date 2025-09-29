@@ -565,6 +565,15 @@
   pointer-events: auto;
 }
 
+.brush-slider-container.external-hosted {
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.brush-slider-container.external-hosted.visible {
+  transform: translateY(-50%);
+}
+
 .brush-slider-container.dragging {
   box-shadow: 0 24px 70px rgba(56, 189, 248, 0.35);
 }
