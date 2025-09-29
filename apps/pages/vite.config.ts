@@ -26,6 +26,8 @@ if (!hasModule('@testing-library/user-event')) {
   alias['@testing-library/user-event'] = resolvePath('./src/test-utils/testing-library-user-event.ts');
 }
 
+alias['@textures'] = resolvePath('../../textures');
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -33,6 +35,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    fs: {
+      allow: [resolvePath('../..'), resolvePath('../../textures')],
+    },
   },
   build: {
     outDir: 'dist',
