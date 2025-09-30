@@ -50,8 +50,8 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     className
   );
 
-  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a DM profile';
-  const headingText = mode === 'login' ? 'Sign in to D&D Map Reveal' : 'Join the D&D Map Reveal beta';
+  const badgeText = mode === 'login' ? 'Return to TableTorch' : 'Create your TableTorch profile';
+  const headingText = mode === 'login' ? 'Sign in to TableTorch' : 'Join the TableTorch beta';
   const submitLabel = loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up';
   const toggleLabel = mode === 'login' ? 'Need an account?' : 'Already have an account?';
   const toggleHelper = mode === 'login' ? 'Create one instead' : 'Use your existing login';
@@ -73,7 +73,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 {headingText}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use the pre-filled demo credentials or sign up with your own details to explore the DM console.
+                Use the pre-filled demo credentials or sign up with your own details to explore the TableTorch console.
               </p>
             </div>
             <button
@@ -154,7 +154,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
           </button>
         </form>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          We respect your table: credentials are only used to authenticate with the demo API and never stored by this client.
+          TableTorch respects your table: credentials are only used to authenticate with the demo API and never stored by this client.
         </p>
       </div>
     </section>

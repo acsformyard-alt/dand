@@ -6,6 +6,17 @@
   color-scheme: light dark;
 }
 
+body {
+  @apply text-slate-900;
+  background-color: #f5ecda;
+  background-image:
+    linear-gradient(rgba(255, 248, 235, 0.85), rgba(255, 248, 235, 0.9)),
+    url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
 a {
   @apply text-primary hover:text-primary-light;
 }
@@ -15,24 +26,33 @@ button {
 }
 
 body.dark {
-  @apply bg-slate-900 text-slate-100;
+  @apply text-slate-100;
+  background-color: #1b1510;
+  background-image:
+    linear-gradient(rgba(12, 10, 8, 0.82), rgba(8, 6, 4, 0.9)),
+    url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 @layer utilities {
   .bg-landing {
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(56, 189, 248, 0.35), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(20, 184, 166, 0.25), transparent 40%),
-      radial-gradient(circle at 0% 80%, rgba(14, 165, 233, 0.2), transparent 45%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      linear-gradient(rgba(255, 244, 223, 0.92), rgba(248, 232, 200, 0.9)),
+      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 
   .dark .bg-landing {
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.2), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.18), transparent 45%),
-      radial-gradient(circle at 10% 85%, rgba(45, 212, 191, 0.18), transparent 45%),
-      linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      linear-gradient(rgba(20, 16, 11, 0.86), rgba(10, 8, 6, 0.9)),
+      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 
   .bg-grid-mask {
@@ -55,6 +75,70 @@ body.dark {
   .animate-float-slow {
     animation: floatSlow 14s ease-in-out infinite;
   }
+}
+
+.torch-logo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 20%, rgba(255, 241, 214, 0.9), rgba(249, 115, 22, 0.75))
+      , rgba(120, 53, 15, 0.85);
+  border: 1px solid rgba(255, 237, 213, 0.6);
+  box-shadow:
+    inset 0 0 12px rgba(254, 215, 170, 0.4),
+    0 18px 28px rgba(15, 23, 42, 0.25);
+  color: #fff7ed;
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-shadow: 0 3px 12px rgba(120, 53, 15, 0.55);
+  transition: transform 250ms ease, box-shadow 250ms ease;
+}
+
+.torch-logo--small {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.6rem;
+}
+
+.torch-logo span[aria-hidden='true'] {
+  filter: drop-shadow(0 4px 10px rgba(124, 45, 18, 0.45));
+}
+
+.torch-logo::after {
+  content: '';
+  position: absolute;
+  inset: -22px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(253, 186, 116, 0.4), rgba(253, 186, 116, 0));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+  z-index: -1;
+}
+
+.dark .torch-logo {
+  background: radial-gradient(circle at 32% 18%, rgba(254, 215, 170, 0.8), rgba(194, 65, 12, 0.75))
+      , rgba(88, 28, 9, 0.85);
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow:
+    inset 0 0 18px rgba(250, 204, 21, 0.55),
+    0 25px 36px rgba(15, 23, 42, 0.45);
+}
+
+.dark .torch-logo::after {
+  opacity: 0.7;
+}
+
+.torch-logo:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    inset 0 0 16px rgba(254, 215, 170, 0.55),
+    0 22px 32px rgba(15, 23, 42, 0.35);
 }
 
 @keyframes gradientShift {
