@@ -38,12 +38,11 @@ body.dark {
     /* Single “torch” in the upper-left, brighter core + sharper cutoff */
     background-image:
       radial-gradient(
-        circle at 12% 8%,
-        rgba(253, 224, 71, 0.55) 0%,
-        rgba(253, 224, 71, 0.35) 14%,
-        rgba(249, 115, 22, 0.20) 26%,
-        rgba(249, 115, 22, 0.10) 33%,
-        rgba(249, 115, 22, 0.04) 37%,
+        circle at 28% 22%,
+        rgba(253, 156, 90, .55) 0%,
+        rgba(253, 224, 102, .5) 10%,
+        rgba(249, 115, 22, .20) 18%,
+        rgba(249, 115, 22, .1) 22%,
         transparent 41%
       ),
       linear-gradient(135deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.96)),
@@ -55,7 +54,6 @@ body.dark {
     background-repeat: no-repeat;
     background-position: center;
   }
-
 
   .bg-grid-mask {
     --grid-color: rgba(15, 23, 42, 0.08);
