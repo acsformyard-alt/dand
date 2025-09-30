@@ -38,7 +38,7 @@ body.dark {
     /* Single “torch” in the upper-left, brighter core + sharper cutoff */
     background-image:
       radial-gradient(
-        circle at 28% 22%,
+        circle at 30% 24%,
         rgba(253, 156, 90, .55) 0%,
         rgba(253, 224, 102, .5) 10%,
         rgba(249, 115, 22, .20) 18%,
