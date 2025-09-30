@@ -53,11 +53,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
             <div className="relative flex h-16 w-16 items-center justify-center">
               <div
                 aria-hidden
-                className="pointer-events-none absolute -inset-[34vw] rounded-full opacity-0 blur-[180px] transition-opacity duration-700 dark:opacity-100 dark:mix-blend-screen dark:bg-[radial-gradient(circle_260%_at_40%_45%,rgba(255,249,196,0.95),rgba(253,224,71,0.75),rgba(17,24,39,0))]"
+                className="pointer-events-none absolute -inset-[34vw] rounded-full opacity-0 blur-[220px] transition-opacity duration-700 dark:opacity-100 dark:mix-blend-screen dark:bg-[radial-gradient(circle_320%_at_38%_44%,rgba(255,252,210,0.98),rgba(253,224,71,0.85),rgba(252,211,77,0.55),rgba(17,24,39,0))]"
               />
               <div
                 aria-hidden
-                className="pointer-events-none absolute -inset-[22vw] rounded-full opacity-0 blur-[120px] transition-opacity duration-700 dark:opacity-90 dark:mix-blend-screen dark:bg-[radial-gradient(circle_220%_at_42%_46%,rgba(255,255,255,0.75),rgba(253,200,90,0.55),rgba(17,24,39,0))]"
+                className="pointer-events-none absolute -inset-[22vw] rounded-full opacity-0 blur-[160px] transition-opacity duration-700 dark:opacity-90 dark:mix-blend-screen dark:bg-[radial-gradient(circle_260%_at_42%_46%,rgba(255,255,255,0.85),rgba(253,212,113,0.7),rgba(253,186,116,0.45),rgba(17,24,39,0))]"
               />
               <div className="relative flex h-full w-full items-center justify-center rounded-3xl bg-gradient-to-br from-amber-200/90 via-amber-100/80 to-orange-200/70 shadow-xl shadow-orange-500/30 ring-4 ring-amber-50/70 backdrop-blur-sm dark:bg-slate-900/80 dark:from-amber-300/25 dark:via-orange-200/20 dark:to-amber-100/10 dark:ring-amber-200/20">
                 <svg
