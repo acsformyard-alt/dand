@@ -99,9 +99,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
         <main className="mx-auto grid max-w-7xl gap-16 px-6 pb-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] lg:items-center">
           <section className="space-y-10">
             <div className="space-y-6">
-              <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-100/70 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-amber-800 shadow-sm dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200">
-                Ignite your table prep
-              </span>
               <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-white">
                 Guide your party through unforgettable encounters with a torchlit control deck built for DMs.
               </h1>
