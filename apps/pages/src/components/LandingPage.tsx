@@ -109,21 +109,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
                 TableTorch keeps your battlemap prep organised and ready. Dial in dramatic lighting, reveal regions in real time,
                 and manage campaigns without breaking the table’s immersion.
               </p>
-              <div className="flex flex-wrap items-center gap-4">
-                <a
-                  href="#auth-panel"
-                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.45em] text-white shadow-lg shadow-orange-500/30 transition hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
-                >
-                  Launch the demo
-                </a>
-                <a
-                  href="#features"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300/70 bg-white/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-slate-600 transition hover:border-amber-500/60 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
-                >
-                  Explore features
-                  <span aria-hidden>→</span>
-                </a>
-              </div>
             </div>
             <section id="features" className="grid gap-6 sm:grid-cols-2">
               {features.map((feature) => (
