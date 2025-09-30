@@ -33,19 +33,23 @@ body.dark {
     background-position: center;
   }
 
-  .dark .bg-landing {
-    background-color: #111827;
-    background-image:
-      radial-gradient(circle at 18% -12%, rgba(249, 115, 22, 0.18), transparent 45%),
-      radial-gradient(circle at 88% 18%, rgba(248, 250, 252, 0.07), transparent 50%),
-      radial-gradient(circle at 12% 90%, rgba(253, 224, 71, 0.16), transparent 48%),
-      linear-gradient(135deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.96)),
-      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
-    background-blend-mode: screen, soft-light, soft-light, multiply, normal;
-    background-size: 200% 200%, 180% 180%, 160% 160%, cover, cover;
-    background-repeat: no-repeat;
-    background-position: center;
-  }
+  background-image:
+  radial-gradient(
+    circle at 28% 22%,
+    rgba(253, 224, 102, .65) 0%,
+    rgba(253, 224, 102, .55) 10%,
+    rgba(253, 156,  90, .24) 18%,
+    rgba(249, 115,  22, .12) 24%,
+    rgba(249, 115,  22, .06) 34%,
+    rgba(249, 115,  22, .03) 38%,
+    rgba(249, 115,  22, .015) 39%,
+    /* hard(ish) cutoff */
+    rgba(249, 115,  22, .012) 40%,
+    transparent 40.6%
+  ),
+  linear-gradient(135deg, rgba(17, 24, 39, .92), rgba(15, 23, 42, .96));
+
+
 
   .bg-grid-mask {
     --grid-color: rgba(15, 23, 42, 0.08);
