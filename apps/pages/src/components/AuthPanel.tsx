@@ -45,13 +45,13 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
   };
 
   const containerClasses = classNames(
-    'relative w-full overflow-hidden rounded-3xl border border-slate-200/80 bg-white/80 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-sm transition-colors dark:border-slate-800/60 dark:bg-slate-900/80 dark:shadow-black/40 sm:p-10',
+    'relative w-full overflow-hidden rounded-3xl border border-amber-800/20 bg-amber-50/80 p-8 shadow-xl shadow-amber-900/20 backdrop-blur-sm transition-colors dark:border-amber-300/20 dark:bg-amber-950/60 dark:shadow-amber-900/40 sm:p-10',
     variant === 'default' ? 'mx-auto max-w-md' : '',
     className
   );
 
-  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a DM profile';
-  const headingText = mode === 'login' ? 'Sign in to D&D Map Reveal' : 'Join the D&D Map Reveal beta';
+  const badgeText = mode === 'login' ? 'Return to the hearth' : 'Spark a DM profile';
+  const headingText = mode === 'login' ? 'Sign in to TableTorch' : 'Join the TableTorch beta';
   const submitLabel = loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up';
   const toggleLabel = mode === 'login' ? 'Need an account?' : 'Already have an account?';
   const toggleHelper = mode === 'login' ? 'Create one instead' : 'Use your existing login';
@@ -60,32 +60,32 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     <section className={containerClasses} aria-labelledby={`${formId}-title`}>
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-28 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-teal-400/20 blur-3xl dark:bg-teal-500/10"
+        className="pointer-events-none absolute -top-28 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-amber-300/30 blur-3xl dark:bg-amber-500/20"
       />
       <div className="relative space-y-8">
         <header className="space-y-3">
-          <span className="inline-flex items-center rounded-full border border-teal-500/40 bg-teal-100/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-teal-700 shadow-sm dark:border-teal-400/50 dark:bg-teal-500/10 dark:text-teal-200">
+          <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-100/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-800 shadow-sm dark:border-amber-400/50 dark:bg-amber-900/40 dark:text-amber-200">
             {badgeText}
           </span>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
-              <h2 id={`${formId}-title`} className="text-2xl font-semibold text-slate-900 dark:text-white">
+              <h2 id={`${formId}-title`} className="text-2xl font-semibold text-stone-900 dark:text-amber-100">
                 {headingText}
               </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use the pre-filled demo credentials or sign up with your own details to explore the DM console.
+              <p className="text-sm text-stone-700 dark:text-amber-200/80">
+                Use the pre-filled demo credentials or sign up with your own details to explore the TableTorch console.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setMode((current) => (current === 'login' ? 'signup' : 'login'))}
-              className="inline-flex items-center rounded-full border border-slate-300/70 bg-white/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 transition hover:border-teal-400/60 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-teal-400/50 dark:hover:text-teal-200"
+              className="inline-flex items-center rounded-full border border-amber-600/30 bg-amber-50/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 transition hover:border-amber-500/50 hover:text-amber-600 dark:border-amber-200/40 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:border-amber-100/50 dark:hover:text-amber-100"
               aria-pressed={mode === 'signup'}
             >
               {toggleLabel}
             </button>
           </div>
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400 dark:text-slate-500">{toggleHelper}</p>
+          <p className="text-xs uppercase tracking-[0.35em] text-stone-500 dark:text-amber-200/60">{toggleHelper}</p>
         </header>
         <form
           id={formId}
@@ -97,7 +97,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
         >
           <div className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor={emailId} className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label htmlFor={emailId} className="text-sm font-medium text-stone-700 dark:text-amber-100">
                 Email
               </label>
               <input
@@ -106,13 +106,13 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
-                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                className="w-full rounded-2xl border border-amber-700/30 bg-white px-4 py-3 text-sm font-medium text-stone-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-amber-300/30 dark:bg-amber-950/60 dark:text-amber-100 dark:focus:border-amber-300"
                 required
               />
             </div>
             {mode === 'signup' && (
               <div className="space-y-2">
-                <label htmlFor={displayNameId} className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label htmlFor={displayNameId} className="text-sm font-medium text-stone-700 dark:text-amber-100">
                   Display name
                 </label>
                 <input
@@ -120,13 +120,13 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                   autoComplete="name"
-                  className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                  className="w-full rounded-2xl border border-amber-700/30 bg-white px-4 py-3 text-sm font-medium text-stone-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-amber-300/30 dark:bg-amber-950/60 dark:text-amber-100 dark:focus:border-amber-300"
                   required
                 />
               </div>
             )}
             <div className="space-y-2">
-              <label htmlFor={passwordId} className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label htmlFor={passwordId} className="text-sm font-medium text-stone-700 dark:text-amber-100">
                 Password
               </label>
               <input
@@ -135,7 +135,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                className="w-full rounded-2xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-400/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-teal-400"
+                className="w-full rounded-2xl border border-amber-700/30 bg-white px-4 py-3 text-sm font-medium text-stone-900 shadow-sm transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-amber-300/30 dark:bg-amber-950/60 dark:text-amber-100 dark:focus:border-amber-300"
                 required
               />
             </div>
@@ -148,12 +148,12 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-teal-500 via-sky-500 to-blue-500 px-5 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white shadow-lg shadow-teal-500/30 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-500 disabled:cursor-wait disabled:opacity-80"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-5 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white shadow-lg shadow-amber-500/40 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-500 disabled:cursor-wait disabled:opacity-80"
           >
             {submitLabel}
           </button>
         </form>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-stone-600 dark:text-amber-200/70">
           We respect your table: credentials are only used to authenticate with the demo API and never stored by this client.
         </p>
       </div>

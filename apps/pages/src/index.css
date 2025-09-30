@@ -18,25 +18,58 @@ body.dark {
   @apply bg-slate-900 text-slate-100;
 }
 
+@layer components {
+  .torch-logo {
+    @apply relative flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100/80 text-2xl text-amber-700 shadow-xl shadow-amber-500/40 ring-2 ring-amber-200/70 backdrop-blur;
+  }
+
+  .dark .torch-logo {
+    background-color: rgba(88, 52, 13, 0.75);
+    color: rgb(253 230 138);
+    box-shadow: 0 25px 45px -15px rgba(251, 191, 36, 0.6), 0 0 0 4px rgba(252, 211, 77, 0.35);
+  }
+
+  .torch-logo::after {
+    content: '';
+    position: absolute;
+    inset: -18%;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.45) 0%, rgba(251, 191, 36, 0) 65%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+
+  .dark .torch-logo::after {
+    opacity: 1;
+    filter: blur(6px);
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.6) 0%, rgba(251, 191, 36, 0) 70%);
+  }
+}
+
 @layer utilities {
   .bg-landing {
+    background-color: #f5e6c8;
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(56, 189, 248, 0.35), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(20, 184, 166, 0.25), transparent 40%),
-      radial-gradient(circle at 0% 80%, rgba(14, 165, 233, 0.2), transparent 45%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      linear-gradient(120deg, rgba(251, 191, 36, 0.2), rgba(248, 250, 229, 0.1)),
+      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 
   .dark .bg-landing {
+    background-color: #1c1408;
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.2), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.18), transparent 45%),
-      radial-gradient(circle at 10% 85%, rgba(45, 212, 191, 0.18), transparent 45%),
-      linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      linear-gradient(140deg, rgba(17, 14, 5, 0.85), rgba(88, 52, 13, 0.75)),
+      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 
   .bg-grid-mask {
-    --grid-color: rgba(15, 23, 42, 0.08);
+    --grid-color: rgba(146, 64, 14, 0.1);
     background-image:
       linear-gradient(var(--grid-color) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
@@ -44,7 +77,7 @@ body.dark {
   }
 
   .dark .bg-grid-mask {
-    --grid-color: rgba(148, 163, 184, 0.1);
+    --grid-color: rgba(252, 211, 77, 0.12);
   }
 
   .animate-gradient {
