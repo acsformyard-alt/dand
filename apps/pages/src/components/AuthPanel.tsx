@@ -50,8 +50,8 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticate, className, varian
     className
   );
 
-  const badgeText = mode === 'login' ? 'Return to the table' : 'Create a DM profile';
-  const headingText = mode === 'login' ? 'Sign in to D&D Map Reveal' : 'Join the D&D Map Reveal beta';
+  const badgeText = mode === 'login' ? 'Return to the firelight' : 'Create your torchbearer profile';
+  const headingText = mode === 'login' ? 'Sign in to TableTorch' : 'Join the TableTorch beta';
   const submitLabel = loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up';
   const toggleLabel = mode === 'login' ? 'Need an account?' : 'Already have an account?';
   const toggleHelper = mode === 'login' ? 'Create one instead' : 'Use your existing login';

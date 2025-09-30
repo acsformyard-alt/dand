@@ -10,23 +10,23 @@ interface LandingPageProps {
 
 const features = [
   {
-    title: 'Reveal maps live',
-    description: 'Fade in fog-of-war with precision tools built for dramatic reveals and on-the-fly adjustments.',
-    icon: '🗺️',
+    title: 'Illuminate every scene',
+    description: 'Warm torchlight sweeps across your battlemaps with smooth reveals tuned for live storytelling.',
+    icon: '🕯️',
   },
   {
     title: 'Campaign control',
-    description: 'Organise every battlemap, note and marker by campaign so your prep is ready when players arrive.',
+    description: 'Keep every map, note, and marker organised by adventure so your table is ready the moment players gather.',
     icon: '🎯',
   },
   {
     title: 'Share instantly',
-    description: 'Invite players with short join codes and let them explore revealed regions from any device.',
+    description: 'Invite players with quick join codes and let them follow the glow from any device in the room.',
     icon: '⚡',
   },
   {
     title: 'Save your progress',
-    description: 'Archive live sessions and pick up where you left off without losing the dramatic tension.',
+    description: 'Bookmark every session to pick up right where the torchlight faded at the end of the night.',
     icon: '🛡️',
   },
 ];
@@ -46,12 +46,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
       <div className="relative isolate">
         <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-8 sm:py-10">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900/90 text-2xl font-black text-teal-300 shadow-2xl shadow-teal-500/20 ring-4 ring-white/50 backdrop-blur dark:bg-white/10 dark:text-teal-200 dark:ring-teal-500/30">
-              DM
+            <div className="torch-logo">
+              <span aria-hidden>🔥</span>
+              <span className="sr-only">TableTorch logo placeholder</span>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.45em] text-teal-600 dark:text-teal-300">D&D Map Reveal</p>
-              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Fog-of-war built for dramatic storytelling</p>
+              <p className="text-xs uppercase tracking-[0.45em] text-amber-700 dark:text-amber-300">TableTorch</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Torchlit encounters for unforgettable storytelling</p>
             </div>
           </div>
           <button
@@ -69,14 +70,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
         <main className="mx-auto grid max-w-7xl gap-16 px-6 pb-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] lg:items-center">
           <section className="space-y-10">
             <div className="space-y-6">
-              <span className="inline-flex items-center rounded-full border border-teal-400/50 bg-teal-100/60 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-teal-700 shadow-sm dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200">
-                Your new DM co-pilot
+              <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-100/70 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-amber-800 shadow-sm dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200">
+                Ignite your tabletop
               </span>
               <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-white">
-                Guide your party through unforgettable encounters with cinematic map reveals.
+                Guide your party through unforgettable encounters with cinematic torchlight reveals.
               </h1>
               <p className="max-w-xl text-lg text-slate-600 dark:text-slate-300">
-                D&D Map Reveal keeps your battlemap prep organised and ready. Cue dramatic lighting, reveal regions in real time, and manage campaigns without breaking the table’s immersion.
+                TableTorch keeps your battlemap prep organised and ready. Cue dramatic lighting, unveil new territory in real time, and manage campaigns without breaking the table’s immersion.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <a
@@ -126,7 +127,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
               />
             </div>
             <p id="auth-panel" className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              No spam, no credit card – just a guided tour of the DM mission control.
+              No spam, no credit card – just a guided tour of the TableTorch command deck.
             </p>
           </aside>
         </main>
