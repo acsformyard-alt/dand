@@ -33,23 +33,27 @@ body.dark {
     background-position: center;
   }
 
-  background-image:
-  radial-gradient(
-    circle at 28% 22%,
-    rgba(253, 224, 102, .65) 0%,
-    rgba(253, 224, 102, .55) 10%,
-    rgba(253, 156,  90, .24) 18%,
-    rgba(249, 115,  22, .12) 24%,
-    rgba(249, 115,  22, .06) 34%,
-    rgba(249, 115,  22, .03) 38%,
-    rgba(249, 115,  22, .015) 39%,
-    /* hard(ish) cutoff */
-    rgba(249, 115,  22, .012) 40%,
-    transparent 40.6%
-  ),
-  linear-gradient(135deg, rgba(17, 24, 39, .92), rgba(15, 23, 42, .96));
-
-
+    .dark .bg-landing {
+    background-color: #111827;
+    /* Single “torch” in the upper-left, brighter core + sharper cutoff */
+    background-image:
+      radial-gradient(
+        circle at 28% 22%,
+        rgba(253, 156, 90, .55) 0%,
+        rgba(253, 224, 102, .5) 10%,
+        rgba(249, 115, 22, .20) 18%,
+        rgba(249, 115, 22, .1) 22%,
+        transparent 41%
+      ),
+      linear-gradient(135deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.96)),
+      url('https://www.publicdomainpictures.net/pictures/490000/velka/pergament-papier-hintergrund-textur-1675507880w0G.jpg');
+    /* Blend list now matches 3 layers (radial, linear, image) */
+    background-blend-mode: screen, multiply, normal;
+    /* Size list now matches 3 layers */
+    background-size: 170% 170%, cover, cover;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
 
   .bg-grid-mask {
     --grid-color: rgba(15, 23, 42, 0.08);
