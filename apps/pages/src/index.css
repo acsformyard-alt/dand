@@ -20,23 +20,29 @@ body.dark {
 
 @layer utilities {
   .bg-landing {
+    background-color: #f7efd8;
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(56, 189, 248, 0.35), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(20, 184, 166, 0.25), transparent 40%),
-      radial-gradient(circle at 0% 80%, rgba(14, 165, 233, 0.2), transparent 45%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      linear-gradient(135deg, rgba(255, 247, 237, 0.86), rgba(248, 223, 178, 0.78)),
+      url('./textures/parchment-bg.jpg');
+    background-size: 100% 100%, cover;
+    background-position: center, center;
+    background-repeat: no-repeat, repeat;
+    background-attachment: fixed;
   }
 
   .dark .bg-landing {
+    background-color: #0b1120;
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.2), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.18), transparent 45%),
-      radial-gradient(circle at 10% 85%, rgba(45, 212, 191, 0.18), transparent 45%),
-      linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      linear-gradient(135deg, rgba(9, 14, 25, 0.9), rgba(30, 16, 6, 0.92)),
+      url('./textures/parchment-bg.jpg');
+    background-size: 100% 100%, cover;
+    background-position: center, center;
+    background-repeat: no-repeat, repeat;
+    background-attachment: fixed;
   }
 
   .bg-grid-mask {
-    --grid-color: rgba(15, 23, 42, 0.08);
+    --grid-color: rgba(120, 53, 15, 0.08);
     background-image:
       linear-gradient(var(--grid-color) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
@@ -44,7 +50,7 @@ body.dark {
   }
 
   .dark .bg-grid-mask {
-    --grid-color: rgba(148, 163, 184, 0.1);
+    --grid-color: rgba(253, 230, 138, 0.08);
   }
 
   .animate-gradient {

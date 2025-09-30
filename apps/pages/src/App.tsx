@@ -552,7 +552,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-100 p-6 dark:bg-slate-900">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-primary">D&D Map Reveal</h1>
+            <h1 className="text-2xl font-bold text-amber-500">TableTorch</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">Logged in as {user.displayName}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -627,8 +627,8 @@ const App: React.FC = () => {
         <section className="flex-1 space-y-6">
           <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-800/70 bg-slate-950/70 px-6 py-4 shadow-xl">
             <div>
-              <p className="text-xs uppercase tracking-[0.5em] text-teal-300">Campaign Control</p>
-              <h1 className="text-3xl font-black uppercase tracking-wide text-white">D&D Map Reveal</h1>
+              <p className="text-xs uppercase tracking-[0.5em] text-amber-300">Campaign Control</p>
+              <h1 className="text-3xl font-black uppercase tracking-wide text-white">TableTorch</h1>
             </div>
             <div className="flex items-center gap-3">
               <button
