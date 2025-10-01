@@ -13,7 +13,7 @@ const MarkerPanel: React.FC<MarkerPanelProps> = ({ markers, onRemove, onUpdate }
       {markers.map((marker) => (
         <div
           key={marker.id}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-white/70 bg-white/60 px-3 py-2 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -22,15 +22,15 @@ const MarkerPanel: React.FC<MarkerPanelProps> = ({ markers, onRemove, onUpdate }
                 style={{ backgroundColor: marker.color || '#facc15' }}
               />
               <div>
-                <p className="font-medium">{marker.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="font-semibold text-slate-900 dark:text-white">{marker.label}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   ({Math.round((marker.x ?? 0) * 100)}%, {Math.round((marker.y ?? 0) * 100)}%)
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
-                className="rounded-full border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="rounded-full border border-amber-400/70 bg-amber-200/60 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/80 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
                 onClick={() => onUpdate?.(marker)}
               >
                 Edit
@@ -43,10 +43,10 @@ const MarkerPanel: React.FC<MarkerPanelProps> = ({ markers, onRemove, onUpdate }
               </button>
             </div>
           </div>
-          {marker.description && <p className="mt-2 text-xs opacity-75">{marker.description}</p>}
+          {marker.description && <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">{marker.description}</p>}
         </div>
       ))}
-      {markers.length === 0 && <p className="text-sm text-slate-500">No markers placed.</p>}
+      {markers.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">No markers placed.</p>}
     </div>
   );
 };
