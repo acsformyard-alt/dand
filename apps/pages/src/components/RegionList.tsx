@@ -16,26 +16,26 @@ const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onT
         return (
           <div
             key={region.id}
-            className={`flex items-start justify-between rounded-lg border px-3 py-2 text-sm shadow-sm transition hover:border-primary/60 hover:shadow ${
+            className={`flex items-start justify-between rounded-xl border px-3 py-2 text-sm shadow-sm transition ${
               revealed
-                ? 'border-emerald-400/60 bg-emerald-100/20 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                ? 'border-amber-400/70 bg-amber-200/20 text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/15 dark:text-amber-100'
+                : 'border-white/70 bg-white/60 dark:border-slate-800 dark:bg-slate-950/70'
             }`}
           >
             <div>
               <button
-                className="font-medium hover:underline"
+                className="font-semibold text-slate-900 underline-offset-4 transition hover:text-amber-600 hover:underline dark:text-white dark:hover:text-amber-200"
                 onClick={() => onSelectRegion?.(region)}
               >
                 {region.name}
               </button>
-              {region.notes && <p className="mt-1 text-xs opacity-75">{region.notes}</p>}
+              {region.notes && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{region.notes}</p>}
             </div>
             <button
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                 revealed
-                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                  : 'bg-primary text-white hover:bg-primary-dark'
+                  ? 'border border-amber-500/70 bg-amber-500/20 text-amber-900 hover:bg-amber-500/30 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100'
+                  : 'border border-amber-400/70 bg-amber-300/80 text-slate-900 hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100'
               }`}
               onClick={() => onToggleRegion?.(region, !revealed)}
             >

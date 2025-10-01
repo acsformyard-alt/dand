@@ -690,48 +690,53 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
-      <header className="mb-0.5 border-b border-slate-800/70 px-5 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-teal-300">New Map Wizard</p>
-            <h2 className="text-2xl font-bold text-white">{steps[step].title}</h2>
-            <p className="text-sm text-slate-400">{steps[step].description}</p>
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-slate-950/95 text-slate-100 backdrop-blur-sm">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(249,115,22,0.16),transparent_40%)] opacity-80"
+      />
+      <div className="relative flex flex-1 flex-col">
+        <header className="mb-0.5 border-b border-slate-800/70 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.4em] text-amber-200">New Map Wizard</p>
+              <h2 className="text-2xl font-bold text-white">{steps[step].title}</h2>
+              <p className="text-sm text-slate-400">{steps[step].description}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-rose-400/60 hover:text-rose-200"
+            >
+              Exit Wizard
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-rose-400/60 hover:text-rose-200"
-          >
-            Exit Wizard
-          </button>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {steps.map((item, index) => {
-            const isActive = index === step;
-            const isComplete = index < step;
-            return (
-              <div
-                key={item.title}
-                className={`flex items-center gap-3 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                  isActive
-                    ? 'border-teal-400/70 bg-teal-500/20 text-teal-100'
-                    : isComplete
-                    ? 'border-slate-700/70 bg-slate-800/80 text-slate-200'
-                    : 'border-slate-800/70 bg-slate-900/80 text-slate-500'
-                }`}
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-current">
-                  {index + 1}
-                </span>
-                {item.title}
-              </div>
-            );
-          })}
-        </div>
-      </header>
-      <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
-        <div className="flex h-full">
+          <div className="mt-4 flex flex-wrap gap-2">
+            {steps.map((item, index) => {
+              const isActive = index === step;
+              const isComplete = index < step;
+              return (
+                <div
+                  key={item.title}
+                  className={`flex items-center gap-3 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    isActive
+                      ? 'border-amber-400/70 bg-amber-400/20 text-amber-100'
+                      : isComplete
+                      ? 'border-slate-700/70 bg-slate-800/80 text-slate-200'
+                      : 'border-slate-800/70 bg-slate-900/80 text-slate-500'
+                  }`}
+                >
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-current">
+                    {index + 1}
+                  </span>
+                  {item.title}
+                </div>
+              );
+            })}
+          </div>
+        </header>
+        <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
+          <div className="flex h-full">
           <div
             ref={brushSliderHostRef}
             className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
@@ -744,7 +749,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                   onDragEnter={(event) => event.preventDefault()}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={handleDrop}
-                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-8 transition hover:border-teal-400/60"
+                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-8 transition hover:border-amber-400/60"
                 >
                   <input
                     ref={fileInputRef}
@@ -766,14 +771,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                   <button
                     type="button"
                     onClick={handleBrowse}
-                    className="mt-5 rounded-full border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                    className="mt-5 rounded-full border border-amber-400/60 bg-amber-300/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
                   >
                     Browse Files
                   </button>
                 </div>
                 {previewUrl && (
                   <div className="mt-6">
-                    <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Preview</p>
+                    <p className="text-xs uppercase tracking-[0.4em] text-amber-200">Preview</p>
                     <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800/70">
                       <img
                         src={previewUrl}
@@ -802,7 +807,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         type="text"
                         value={name}
                         onChange={(event) => setName(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                         placeholder="Ancient Ruins"
                       />
                     </div>
@@ -812,7 +817,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
                         rows={3}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                         placeholder="Give a brief overview of the map."
                       />
                     </div>
@@ -822,7 +827,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         type="text"
                         value={grouping}
                         onChange={(event) => setGrouping(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                         placeholder="Dungeon Delves"
                       />
                     </div>
@@ -832,7 +837,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         value={notes}
                         onChange={(event) => setNotes(event.target.value)}
                         rows={3}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                         placeholder="DM-only reminders or encounter tips"
                       />
                     </div>
@@ -842,7 +847,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         type="text"
                         value={tagsInput}
                         onChange={(event) => setTagsInput(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                         placeholder="forest, ruins, night"
                       />
                       <p className="mt-2 text-xs text-slate-500">Separate tags with commas to help search and filtering.</p>
@@ -918,7 +923,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                             markerDisplayMetrics,
                           ),
                         )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
+                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
                       >
                         {marker.label || 'Marker'}
                       </button>
@@ -945,7 +950,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     <button
                       type="button"
                       onClick={handleAddMarker}
-                      className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                      className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
                     >
                       Add Marker
                     </button>
@@ -962,7 +967,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         key={marker.id}
                         className={`rounded-2xl border px-4 py-3 transition ${
                           isExpanded
-                            ? 'border-teal-400/60 bg-slate-950/80'
+                            ? 'border-amber-400/60 bg-slate-950/80'
                             : 'border-slate-800/70 bg-slate-950/70'
                         }`}
                       >
@@ -991,7 +996,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                           </div>
                           <span
                             className={`text-[10px] uppercase tracking-[0.35em] ${
-                              isExpanded ? 'text-teal-200' : 'text-slate-400'
+                              isExpanded ? 'text-amber-200' : 'text-slate-400'
                             }`}
                           >
                             {isExpanded ? 'Hide' : 'Edit'}
@@ -1007,7 +1012,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                 onChange={(event) =>
                                   handleMarkerChange(marker.id, 'label', event.target.value)
                                 }
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                                 placeholder="Secret Door"
                               />
                             </label>
@@ -1020,7 +1025,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                     handleMarkerChange(marker.id, 'notes', event.target.value)
                                   }
                                   rows={2}
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                                   placeholder="Trap trigger, treasure cache, etc."
                                 />
                               </label>
@@ -1032,7 +1037,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                   onChange={(event) =>
                                     handleMarkerChange(marker.id, 'color', event.target.value)
                                   }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                                   placeholder="#facc15"
                                 />
                               </label>
@@ -1063,12 +1068,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           </div>
         </div>
       </main>
-      <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
+        <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-full border border-slate-700/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+            className="rounded-full border border-slate-700/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-amber-400/60 hover:text-amber-200"
           >
             {step === 0 ? 'Cancel' : 'Back'}
           </button>
@@ -1081,7 +1086,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 onClick={handleContinue}
                 className={`rounded-full border px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   allowNext
-                    ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
+                    ? 'border-amber-400/60 bg-amber-300/80 text-slate-900 hover:bg-amber-300/90'
                     : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
                 }`}
               >
@@ -1095,7 +1100,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 className={`rounded-full border px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   creating
                     ? 'cursor-wait border-slate-800/70 bg-slate-900/70 text-slate-500'
-                    : 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
+                    : 'border-amber-400/60 bg-amber-300/80 text-slate-900 hover:bg-amber-300/90'
                 }`}
               >
                 {creating ? 'Creating…' : 'Create Map'}
@@ -1103,7 +1108,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             )}
           </div>
         </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 };

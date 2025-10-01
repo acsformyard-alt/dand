@@ -112,7 +112,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       const polygon = polygonById.get(hoverRegion);
       if (polygon && polygon.length) {
         context.beginPath();
-        context.fillStyle = 'rgba(99, 102, 241, 0.25)';
+        context.fillStyle = 'rgba(251, 191, 36, 0.2)';
         polygon.forEach((point, index) => {
           const x = point.x * maskWidth;
           const y = point.y * maskHeight;
@@ -155,7 +155,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   const displayHeight = imageSize?.height || height || 768;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900/60 shadow-inner dark:border-slate-700">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-white/70 bg-white/60 shadow-inner dark:border-slate-800/70 dark:bg-slate-950/60">
       {imageUrl ? (
         <img
           src={imageUrl}
@@ -164,7 +164,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
           style={{ maxHeight: '70vh', objectFit: 'contain' }}
         />
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+        <div className="flex h-64 items-center justify-center text-sm text-slate-500 dark:text-slate-400">
           Upload a map to begin
         </div>
       )}
@@ -182,7 +182,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
         <button
           key={marker.id}
           onClick={() => onSelectMarker?.(marker.id)}
-          className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-white/50 bg-white/80 px-2 py-1 text-xs font-medium text-slate-900 shadow dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-100"
+          className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
           style={{
             left: `${(marker.x ?? 0) * 100}%`,
             top: `${(marker.y ?? 0) * 100}%`,
