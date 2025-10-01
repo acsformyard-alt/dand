@@ -164,27 +164,66 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
 
   const resolvedMarkers = useMemo(() => Object.values(state.markers || {}), [state.markers]);
 
+  const connectionBadgeClass = useMemo(() => {
+    const base =
+      'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+    switch (connectionState) {
+      case 'open':
+        return (
+          base +
+          ' border border-emerald-400/70 bg-emerald-300/60 text-emerald-900 focus-visible:outline-emerald-400 dark:border-emerald-400/50 dark:bg-emerald-400/15 dark:text-emerald-100'
+        );
+      case 'connecting':
+        return (
+          base +
+          ' border border-amber-400/70 bg-amber-300/80 text-slate-900 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/15 dark:text-amber-100'
+        );
+      case 'closed':
+        return (
+          base +
+          ' border border-rose-400/70 bg-rose-200/60 text-rose-700 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100'
+        );
+      default:
+        return (
+          base +
+          ' border border-white/60 bg-white/70 text-slate-700 focus-visible:outline-slate-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200'
+        );
+    }
+  }, [connectionState]);
+
+  const connectionLabel = useMemo(() => {
+    switch (connectionState) {
+      case 'open':
+        return 'Live';
+      case 'connecting':
+        return 'Connecting';
+      case 'closed':
+        return 'Disconnected';
+      default:
+        return 'Idle';
+    }
+  }, [connectionState]);
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2 space-y-4">
-        <div className="flex items-center justify-between">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
+      <section className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/60 bg-white/70 px-5 py-4 shadow-lg shadow-amber-500/20 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
           <div>
-            <h2 className="text-lg font-semibold">{session.name}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Connection: <span className="font-medium text-primary">{connectionState}</span>
-            </p>
+            <p className="text-xs uppercase tracking-[0.5em] text-amber-600 dark:text-amber-200">Live Session</p>
+            <h2 className="text-2xl font-black uppercase tracking-wide text-slate-900 dark:text-white">{session.name}</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={connectionBadgeClass}>{connectionLabel}</span>
             {mode === 'dm' && (
               <>
                 <button
-                  className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+                  className="inline-flex items-center gap-2 rounded-full border border-teal-400/70 bg-teal-300/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-teal-900 transition hover:bg-teal-300/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400 dark:border-teal-400/50 dark:bg-teal-400/15 dark:text-teal-100 dark:hover:bg-teal-400/25"
                   onClick={onSaveSession}
                 >
                   Save Snapshot
                 </button>
                 <button
-                  className="rounded-full border border-rose-500 px-3 py-1 text-xs font-medium text-rose-500 hover:bg-rose-500/10"
+                  className="inline-flex items-center gap-2 rounded-full border border-rose-400/70 bg-rose-200/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
                   onClick={onEndSession}
                 >
                   End Session
@@ -192,10 +231,10 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
               </>
             )}
             <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+              className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/60 hover:text-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/50 dark:hover:text-amber-200"
               onClick={onLeave}
             >
-              Leave
+              Leave Session
             </button>
           </div>
         </div>
@@ -210,33 +249,48 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
           onToggleRegion={handleToggleRegion}
           onPlaceMarker={mode === 'dm' ? handlePlaceMarker : undefined}
         />
-      </div>
-      <div className="space-y-6">
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Players</h3>
-          <ul className="space-y-1 text-sm">
+      </section>
+      <aside className="space-y-5">
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/20 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Players</h3>
+          <ul className="mt-3 space-y-2 text-sm">
             {state.players.map((player) => (
-              <li key={player.id} className="rounded border border-slate-200 px-3 py-1 dark:border-slate-700">
-                <span className="font-medium">{player.name}</span>
-                <span className="ml-2 text-xs uppercase text-slate-500">{player.role}</span>
+              <li
+                key={player.id}
+                className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-2 text-sm text-slate-800 shadow-sm shadow-amber-500/10 dark:border-slate-800/70 dark:bg-slate-950/70 dark:text-slate-100"
+              >
+                <span className="font-semibold">{player.name}</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">{player.role}</span>
               </li>
             ))}
-            {state.players.length === 0 && <li className="text-xs text-slate-500">Waiting for players…</li>}
+            {state.players.length === 0 && (
+              <li className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-3 text-xs text-slate-500 dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-400">
+                Waiting for players…
+              </li>
+            )}
           </ul>
         </section>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Regions</h3>
-          <RegionList
-            regions={regions}
-            revealedRegionIds={state.revealedRegions}
-            onToggleRegion={mode === 'dm' ? handleToggleRegion : undefined}
-          />
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/20 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Regions</h3>
+          <div className="mt-3">
+            <RegionList
+              regions={regions}
+              revealedRegionIds={state.revealedRegions}
+              onToggleRegion={mode === 'dm' ? handleToggleRegion : undefined}
+            />
+          </div>
         </section>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Markers</h3>
-          <MarkerPanel markers={resolvedMarkers} onRemove={mode === 'dm' ? handleRemoveMarker : undefined} onUpdate={mode === 'dm' ? handleUpdateMarker : undefined} />
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/20 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Markers</h3>
+          <div className="mt-3">
+            <MarkerPanel
+              markers={resolvedMarkers}
+              onRemove={mode === 'dm' ? handleRemoveMarker : undefined}
+              onUpdate={mode === 'dm' ? handleUpdateMarker : undefined}
+            />
+          </div>
         </section>
-      </div>
+      </aside>
     </div>
   );
 };
