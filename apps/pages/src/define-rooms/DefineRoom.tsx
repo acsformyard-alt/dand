@@ -1,18 +1,18 @@
 /** @jsxImportSource ./lib */
 
 const ROOM_COLORS = [
-  "#ff6b6b",
-  "#4ecdc4",
-  "#ffd166",
-  "#9b5de5",
-  "#48cae4",
-  "#f72585",
-  "#06d6a0",
-  "#f8961e",
-  "#577590",
-  "#ff7f50",
-  "#2ec4b6",
-  "#c77dff"
+  "#f97316",
+  "#facc15",
+  "#fb7185",
+  "#f59e0b",
+  "#f472b6",
+  "#f43f5e",
+  "#fde68a",
+  "#fbbf24",
+  "#ea580c",
+  "#fda4af",
+  "#fdba74",
+  "#fcd34d"
 ];
 
 type ToolType = "brush" | "eraser" | "lasso" | "magnetic" | "wand" | "magnify" | "move";

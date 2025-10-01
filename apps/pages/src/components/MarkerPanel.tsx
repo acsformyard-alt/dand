@@ -13,7 +13,7 @@ const MarkerPanel: React.FC<MarkerPanelProps> = ({ markers, onRemove, onUpdate }
       {markers.map((marker) => (
         <div
           key={marker.id}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-sm shadow-sm shadow-amber-500/10 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -30,18 +30,18 @@ const MarkerPanel: React.FC<MarkerPanelProps> = ({ markers, onRemove, onUpdate }
             </div>
             <div className="flex items-center gap-2">
               <button
-                className="rounded-full border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="rounded-full border border-amber-400/60 px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 transition hover:bg-amber-100/80 dark:border-amber-400/40 dark:text-amber-200 dark:hover:bg-amber-400/20"
                 onClick={() => onUpdate?.(marker)}
               >
                 Edit
               </button>
               <button
-                className="rounded-full bg-rose-500 px-2 py-1 text-xs text-white hover:bg-rose-600"
+                className="rounded-full border border-rose-400/60 bg-rose-500/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-rose-500"
                 onClick={() => onRemove?.(marker.id)}
               >
                 Remove
               </button>
-            </div>
+          </div>
           </div>
           {marker.description && <p className="mt-2 text-xs opacity-75">{marker.description}</p>}
         </div>

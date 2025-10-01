@@ -88,7 +88,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     canvas.width = maskWidth;
     canvas.height = maskHeight;
     context.clearRect(0, 0, maskWidth, maskHeight);
-    context.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    context.fillStyle = 'rgba(15, 23, 42, 0.82)';
     context.fillRect(0, 0, maskWidth, maskHeight);
     context.globalCompositeOperation = 'destination-out';
     revealedRegionIds.forEach((regionId) => {
@@ -112,7 +112,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       const polygon = polygonById.get(hoverRegion);
       if (polygon && polygon.length) {
         context.beginPath();
-        context.fillStyle = 'rgba(99, 102, 241, 0.25)';
+        context.fillStyle = 'rgba(251, 191, 36, 0.28)';
         polygon.forEach((point, index) => {
           const x = point.x * maskWidth;
           const y = point.y * maskHeight;
@@ -155,7 +155,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   const displayHeight = imageSize?.height || height || 768;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900/60 shadow-inner dark:border-slate-700">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-amber-400/20 bg-slate-900/60 shadow-inner shadow-amber-500/10 dark:border-slate-800/70">
       {imageUrl ? (
         <img
           src={imageUrl}
@@ -182,7 +182,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
         <button
           key={marker.id}
           onClick={() => onSelectMarker?.(marker.id)}
-          className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-white/50 bg-white/80 px-2 py-1 text-xs font-medium text-slate-900 shadow dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-100"
+          className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/50 bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow shadow-amber-500/20 transition hover:shadow-amber-500/40 dark:border-amber-400/30 dark:bg-slate-950/90 dark:text-amber-100"
           style={{
             left: `${(marker.x ?? 0) * 100}%`,
             top: `${(marker.y ?? 0) * 100}%`,

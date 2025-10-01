@@ -690,18 +690,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
-      <header className="mb-0.5 border-b border-slate-800/70 px-5 py-3">
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-slate-950/95 backdrop-blur-xl relative">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_-10%,rgba(251,191,36,0.25),transparent_45%),radial-gradient(circle_at_82%_10%,rgba(248,113,113,0.18),transparent_40%),radial-gradient(circle_at_12%_92%,rgba(244,114,182,0.12),transparent_50%)]"
+      />
+      <header className="relative z-10 mb-0.5 border-b border-amber-400/20 bg-slate-950/60 px-5 py-4 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-teal-300">New Map Wizard</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-amber-200/80">New Map Wizard</p>
             <h2 className="text-2xl font-bold text-white">{steps[step].title}</h2>
-            <p className="text-sm text-slate-400">{steps[step].description}</p>
+            <p className="text-sm text-slate-300">{steps[step].description}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-rose-400/60 hover:text-rose-200"
+            className="rounded-full border border-slate-700/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition hover:border-rose-400/60 hover:text-rose-200"
           >
             Exit Wizard
           </button>
@@ -715,10 +719,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 key={item.title}
                 className={`flex items-center gap-3 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
                   isActive
-                    ? 'border-teal-400/70 bg-teal-500/20 text-teal-100'
+                    ? 'border-amber-400/80 bg-amber-300/20 text-amber-100'
                     : isComplete
-                    ? 'border-slate-700/70 bg-slate-800/80 text-slate-200'
-                    : 'border-slate-800/70 bg-slate-900/80 text-slate-500'
+                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+                    : 'border-slate-700/70 bg-slate-900/80 text-slate-400'
                 }`}
               >
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-current">
@@ -730,7 +734,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           })}
         </div>
       </header>
-      <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
+      <main className="relative z-10 flex-1 overflow-x-visible overflow-y-auto py-4">
         <div className="flex h-full">
           <div
             ref={brushSliderHostRef}
@@ -739,12 +743,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           <div className="flex h-full flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
-              <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
+              <div className="w-full max-w-4xl rounded-3xl border border-amber-400/20 bg-slate-900/60 p-8 text-center shadow-2xl shadow-amber-500/10">
                 <div
                   onDragEnter={(event) => event.preventDefault()}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={handleDrop}
-                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-8 transition hover:border-teal-400/60"
+                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-amber-400/30 bg-slate-950/70 px-6 py-8 transition hover:border-amber-400/60"
                 >
                   <input
                     ref={fileInputRef}
@@ -758,23 +762,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       }
                     }}
                   />
-                  <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Drag &amp; Drop</p>
+                  <p className="text-sm uppercase tracking-[0.4em] text-amber-200/70">Drag &amp; Drop</p>
                   <h3 className="mt-3 text-2xl font-semibold text-white">Drop your map image here</h3>
-                  <p className="mt-2 max-w-xl text-sm text-slate-400">
+                  <p className="mt-2 max-w-xl text-sm text-slate-300">
                     We accept PNG, JPG, WEBP, and other common image formats. Drop the file or browse your computer to get started.
                   </p>
                   <button
                     type="button"
                     onClick={handleBrowse}
-                    className="mt-5 rounded-full border border-teal-400/60 bg-teal-500/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                    className="mt-5 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-orange-500/30 transition hover:shadow-amber-500/40"
                   >
                     Browse Files
                   </button>
                 </div>
                 {previewUrl && (
                   <div className="mt-6">
-                    <p className="text-xs uppercase tracking-[0.4em] text-teal-300">Preview</p>
-                    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800/70">
+                    <p className="text-xs uppercase tracking-[0.4em] text-amber-200/80">Preview</p>
+                    <div className="mt-3 overflow-hidden rounded-2xl border border-amber-400/20">
                       <img
                         src={previewUrl}
                         alt="Uploaded map preview"
@@ -782,7 +786,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       />
                     </div>
                     {imageDimensions && (
-                      <p className="mt-2 text-xs uppercase tracking-[0.4em] text-slate-500">
+                      <p className="mt-2 text-xs uppercase tracking-[0.4em] text-slate-400">
                         {imageDimensions.width} × {imageDimensions.height} pixels
                       </p>
                     )}
@@ -793,63 +797,63 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
           {step === 1 && (
             <div className="flex flex-1 items-stretch justify-center">
-              <div className="flex h-full w-full flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8">
+              <div className="flex h-full w-full flex-col rounded-3xl border border-amber-400/20 bg-slate-900/60 p-8 shadow-2xl shadow-amber-500/10">
                 <div className="grid flex-1 min-h-0 gap-6 md:grid-cols-[minmax(0,1fr)_260px]">
                   <div className="flex flex-col gap-5">
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Map Name</label>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-amber-200/80">Map Name</label>
                       <input
                         type="text"
                         value={name}
                         onChange={(event) => setName(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         placeholder="Ancient Ruins"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Description</label>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-amber-200/80">Description</label>
                       <textarea
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
                         rows={3}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         placeholder="Give a brief overview of the map."
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Grouping</label>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-amber-200/80">Grouping</label>
                       <input
                         type="text"
                         value={grouping}
                         onChange={(event) => setGrouping(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         placeholder="Dungeon Delves"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Notes</label>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-amber-200/80">Notes</label>
                       <textarea
                         value={notes}
                         onChange={(event) => setNotes(event.target.value)}
                         rows={3}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         placeholder="DM-only reminders or encounter tips"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-400">Tags</label>
+                      <label className="block text-xs uppercase tracking-[0.4em] text-amber-200/80">Tags</label>
                       <input
                         type="text"
                         value={tagsInput}
                         onChange={(event) => setTagsInput(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         placeholder="forest, ruins, night"
                       />
-                      <p className="mt-2 text-xs text-slate-500">Separate tags with commas to help search and filtering.</p>
+                      <p className="mt-2 text-xs text-slate-400">Separate tags with commas to help search and filtering.</p>
                     </div>
                   </div>
                   <div className="flex h-full flex-col gap-4">
-                    <div className="flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70">
+                    <div className="flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-amber-400/20 bg-slate-950/70">
                       {previewUrl ? (
                         <img
                           src={previewUrl}
@@ -857,14 +861,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                           className="max-h-full w-full object-contain"
                         />
                       ) : (
-                        <p className="text-xs uppercase tracking-[0.4em] text-slate-500">
+                        <p className="text-xs uppercase tracking-[0.4em] text-slate-400">
                           Upload a map image to preview it here.
                         </p>
                       )}
                     </div>
-                    <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Tips</p>
-                      <ul className="mt-2 space-y-2 text-xs text-slate-400">
+                  <div className="rounded-2xl border border-amber-400/20 bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.4em] text-amber-200/80">Tips</p>
+                    <ul className="mt-2 space-y-2 text-xs text-slate-300">
                         <li>Keep names short but descriptive for quick reference during sessions.</li>
                         <li>Use notes to capture secrets, traps, or DM-only reminders.</li>
                         <li>Tags help you filter maps later in the campaign dashboard.</li>
@@ -877,11 +881,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           )}
           {step === 2 && (
             <div className="flex h-full min-h-0 flex-1 justify-center">
-              <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+              <div className="flex h-full min-h-0 w-full rounded-3xl border border-amber-400/20 bg-slate-900/60 p-4 shadow-2xl shadow-amber-500/10">
                 <div
                   ref={defineRoomContainerRef}
-                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
-                    canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
+                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-amber-400/30 bg-slate-950/80 ${
+                    canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-400'
                   }`}
                 >
                   {!canLaunchRoomsEditor && (
@@ -895,7 +899,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div
                 ref={mapAreaRef}
-                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
+                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-amber-400/20 bg-slate-900/60 shadow-2xl shadow-amber-500/10"
               >
                 {previewUrl ? (
                   <>
@@ -918,7 +922,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                             markerDisplayMetrics,
                           ),
                         )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-teal-300/80 hover:text-teal-100"
+                className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/80 hover:text-amber-100"
                       >
                         {marker.label || 'Marker'}
                       </button>
@@ -935,17 +939,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                   </div>
                 )}
               </div>
-              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-4">
+              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-amber-400/20 bg-slate-900/60 shadow-2xl shadow-amber-500/10">
+                <div className="border-b border-amber-400/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
+                      <p className="text-xs uppercase tracking-[0.4em] text-amber-200/80">Markers</p>
                       <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
                     </div>
                     <button
                       type="button"
                       onClick={handleAddMarker}
-                      className="rounded-full border border-teal-400/60 bg-teal-500/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+                      className="rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-orange-500/30 transition hover:shadow-amber-500/40"
                     >
                       Add Marker
                     </button>
@@ -962,8 +966,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         key={marker.id}
                         className={`rounded-2xl border px-4 py-3 transition ${
                           isExpanded
-                            ? 'border-teal-400/60 bg-slate-950/80'
-                            : 'border-slate-800/70 bg-slate-950/70'
+                            ? 'border-amber-400/70 bg-slate-950/70 shadow-[0_0_0_1px_rgba(251,191,36,0.35)]'
+                            : 'border-slate-700/70 bg-slate-950/70'
                         }`}
                       >
                         <button
@@ -991,7 +995,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                           </div>
                           <span
                             className={`text-[10px] uppercase tracking-[0.35em] ${
-                              isExpanded ? 'text-teal-200' : 'text-slate-400'
+                              isExpanded ? 'text-amber-200' : 'text-slate-400'
                             }`}
                           >
                             {isExpanded ? 'Hide' : 'Edit'}
@@ -999,7 +1003,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         </button>
                         {isExpanded && (
                           <div className="mt-3 space-y-3">
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                            <label className="block text-[10px] uppercase tracking-[0.4em] text-amber-200/80">
                               Label
                               <input
                                 type="text"
@@ -1007,12 +1011,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                 onChange={(event) =>
                                   handleMarkerChange(marker.id, 'label', event.target.value)
                                 }
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                                 placeholder="Secret Door"
                               />
                             </label>
                             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                              <label className="block text-[10px] uppercase tracking-[0.4em] text-amber-200/80">
                                 Notes
                                 <textarea
                                   value={marker.notes}
@@ -1020,11 +1024,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                     handleMarkerChange(marker.id, 'notes', event.target.value)
                                   }
                                   rows={2}
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                                   placeholder="Trap trigger, treasure cache, etc."
                                 />
                               </label>
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                              <label className="block text-[10px] uppercase tracking-[0.4em] text-amber-200/80">
                                 Color
                                 <input
                                   type="text"
@@ -1032,7 +1036,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                   onChange={(event) =>
                                     handleMarkerChange(marker.id, 'color', event.target.value)
                                   }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                                  className="mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                                   placeholder="#facc15"
                                 />
                               </label>
@@ -1052,7 +1056,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     );
                   })}
                   {markers.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-amber-400/30 px-4 py-8 text-center text-xs text-slate-400">
                       No markers yet. Add a marker to start placing points of interest.
                     </div>
                   )}
@@ -1063,12 +1067,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           </div>
         </div>
       </main>
-      <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
+      <footer className="mt-0.5 border-t border-amber-400/20 px-5 py-1.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-full border border-slate-700/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-teal-400/60 hover:text-teal-200"
+            className="rounded-full border border-slate-700/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-200 transition hover:border-amber-400/60 hover:text-amber-200"
           >
             {step === 0 ? 'Cancel' : 'Back'}
           </button>
@@ -1081,8 +1085,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 onClick={handleContinue}
                 className={`rounded-full border px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   allowNext
-                    ? 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
-                    : 'cursor-not-allowed border-slate-800/70 bg-slate-900/70 text-slate-500'
+                    ? 'border-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-lg shadow-orange-500/30 hover:shadow-amber-500/40'
+                    : 'cursor-not-allowed border-slate-700/70 bg-slate-900/70 text-slate-500'
                 }`}
               >
                 Next
@@ -1094,8 +1098,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 disabled={creating}
                 className={`rounded-full border px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] transition ${
                   creating
-                    ? 'cursor-wait border-slate-800/70 bg-slate-900/70 text-slate-500'
-                    : 'border-teal-400/60 bg-teal-500/80 text-slate-900 hover:bg-teal-400/90'
+                    ? 'cursor-wait border-slate-700/70 bg-slate-900/70 text-slate-500'
+                    : 'border-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-lg shadow-orange-500/30 hover:shadow-amber-500/40'
                 }`}
               >
                 {creating ? 'Creating…' : 'Create Map'}

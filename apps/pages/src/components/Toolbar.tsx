@@ -44,15 +44,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+    <div className="flex flex-col gap-4 rounded-2xl border border-white/60 bg-white/70 p-4 shadow-lg shadow-amber-500/10 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/30">
       <div className="flex items-center justify-between" role="group" aria-label="Selection tools">
         <div className="flex gap-2">
           <button
             type="button"
             className={`rounded-md px-3 py-2 text-sm font-medium transition ${
               activeTool === 'magneticLasso'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow shadow-orange-500/30'
+                : 'bg-white/80 text-slate-700 hover:bg-amber-100/70 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:bg-slate-800'
             }`}
             aria-pressed={activeTool === 'magneticLasso'}
             onClick={() => onToolChange('magneticLasso')}
@@ -63,8 +63,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
             type="button"
             className={`rounded-md px-3 py-2 text-sm font-medium transition ${
               activeTool === 'smartWand'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow shadow-orange-500/30'
+                : 'bg-white/80 text-slate-700 hover:bg-amber-100/70 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:bg-slate-800'
             }`}
             aria-pressed={activeTool === 'smartWand'}
             onClick={() => onToolChange('smartWand')}

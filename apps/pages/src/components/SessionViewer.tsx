@@ -169,22 +169,22 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
       <div className="lg:col-span-2 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">{session.name}</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{session.name}</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Connection: <span className="font-medium text-primary">{connectionState}</span>
+              Connection: <span className="font-semibold text-amber-500">{connectionState}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
             {mode === 'dm' && (
               <>
                 <button
-                  className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+                  className="rounded-full border border-amber-400/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 transition hover:bg-amber-100/80 dark:border-amber-400/40 dark:text-amber-200 dark:hover:bg-amber-400/20"
                   onClick={onSaveSession}
                 >
                   Save Snapshot
                 </button>
                 <button
-                  className="rounded-full border border-rose-500 px-3 py-1 text-xs font-medium text-rose-500 hover:bg-rose-500/10"
+                  className="rounded-full border border-rose-400/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-600 transition hover:bg-rose-200/60 dark:border-rose-400/40 dark:text-rose-200 dark:hover:bg-rose-500/20"
                   onClick={onEndSession}
                 >
                   End Session
@@ -192,7 +192,7 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
               </>
             )}
             <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+              className="rounded-full border border-slate-300/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:border-amber-400/60 hover:text-amber-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-amber-400/50 dark:hover:text-amber-200"
               onClick={onLeave}
             >
               Leave
@@ -213,19 +213,19 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
       </div>
       <div className="space-y-6">
         <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Players</h3>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-200">Players</h3>
           <ul className="space-y-1 text-sm">
             {state.players.map((player) => (
-              <li key={player.id} className="rounded border border-slate-200 px-3 py-1 dark:border-slate-700">
-                <span className="font-medium">{player.name}</span>
-                <span className="ml-2 text-xs uppercase text-slate-500">{player.role}</span>
+              <li key={player.id} className="rounded-xl border border-white/60 bg-white/70 px-3 py-1 shadow-sm shadow-amber-500/10 dark:border-slate-800/70 dark:bg-slate-950/70">
+                <span className="font-medium text-slate-900 dark:text-white">{player.name}</span>
+                <span className="ml-2 text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">{player.role}</span>
               </li>
             ))}
-            {state.players.length === 0 && <li className="text-xs text-slate-500">Waiting for players…</li>}
+            {state.players.length === 0 && <li className="text-xs text-slate-500 dark:text-slate-400">Waiting for players…</li>}
           </ul>
         </section>
         <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Regions</h3>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-200">Regions</h3>
           <RegionList
             regions={regions}
             revealedRegionIds={state.revealedRegions}
@@ -233,7 +233,7 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
           />
         </section>
         <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Markers</h3>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-200">Markers</h3>
           <MarkerPanel markers={resolvedMarkers} onRemove={mode === 'dm' ? handleRemoveMarker : undefined} onUpdate={mode === 'dm' ? handleUpdateMarker : undefined} />
         </section>
       </div>
