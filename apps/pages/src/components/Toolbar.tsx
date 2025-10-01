@@ -44,15 +44,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+    <div className="flex flex-col gap-5 rounded-2xl border border-white/60 bg-white/60 p-5 shadow-xl shadow-amber-500/10 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/60 dark:shadow-black/40">
       <div className="flex items-center justify-between" role="group" aria-label="Selection tools">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-xl border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
               activeTool === 'magneticLasso'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'border-amber-400/70 bg-amber-300/80 text-slate-900 shadow-lg shadow-amber-500/30'
+                : 'border-white/60 bg-white/50 text-slate-700 hover:border-amber-400/60 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/50 dark:hover:text-amber-200'
             }`}
             aria-pressed={activeTool === 'magneticLasso'}
             onClick={() => onToolChange('magneticLasso')}
@@ -61,10 +61,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             type="button"
-            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-xl border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
               activeTool === 'smartWand'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'border-amber-400/70 bg-amber-300/80 text-slate-900 shadow-lg shadow-amber-500/30'
+                : 'border-white/60 bg-white/50 text-slate-700 hover:border-amber-400/60 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/50 dark:hover:text-amber-200'
             }`}
             aria-pressed={activeTool === 'smartWand'}
             onClick={() => onToolChange('smartWand')}
@@ -73,7 +73,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-3" aria-label="Advanced selection settings">
+      <div className="grid grid-cols-1 gap-4" aria-label="Advanced selection settings">
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
           Edge contrast emphasis
           <input
@@ -82,6 +82,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             max={1}
             step={0.05}
             value={clamp(settings.edgeContrast, 0, 1)}
+            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-amber-500 dark:bg-slate-700"
             onChange={(event) => updateSetting('edgeContrast', parseFloat(event.currentTarget.value))}
             aria-label="Edge contrast emphasis"
           />
@@ -97,6 +98,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             max={1}
             step={0.05}
             value={clamp(settings.snapStrength, 0, 1)}
+            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-amber-500 dark:bg-slate-700"
             onChange={(event) => updateSetting('snapStrength', parseFloat(event.currentTarget.value))}
             aria-label="Snap strength"
           />
@@ -104,25 +106,28 @@ const Toolbar: React.FC<ToolbarProps> = ({
             Controls how aggressively polygons snap to the cost pyramid edges.
           </span>
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
+            className="h-4 w-4 rounded border-amber-400/60 text-amber-500 focus:ring-amber-400 dark:border-amber-400/40 dark:bg-slate-900"
             checked={settings.autoEntranceLock}
             onChange={(event) => updateSetting('autoEntranceLock', event.currentTarget.checked)}
           />
           Auto-lock detected entrances
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
+            className="h-4 w-4 rounded border-amber-400/60 text-amber-500 focus:ring-amber-400 dark:border-amber-400/40 dark:bg-slate-900"
             checked={settings.livePreview}
             onChange={(event) => updateSetting('livePreview', event.currentTarget.checked)}
           />
           Live preview updates
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
+            className="h-4 w-4 rounded border-amber-400/60 text-amber-500 focus:ring-amber-400 dark:border-amber-400/40 dark:bg-slate-900"
             checked={settings.showDebugOverlay}
             onChange={(event) => updateSetting('showDebugOverlay', event.currentTarget.checked)}
           />
