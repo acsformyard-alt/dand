@@ -609,7 +609,7 @@ const App: React.FC = () => {
       <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
       <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
       <div className="relative isolate min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 md:flex-row md:gap-8">
+        <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 md:flex-row md:items-start md:gap-8">
           <aside className="flex flex-col gap-6 rounded-3xl border border-white/60 bg-white/70 p-6 shadow-2xl shadow-amber-500/20 backdrop-blur-xl md:w-72 dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Mission Control</p>
