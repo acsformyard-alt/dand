@@ -166,37 +166,40 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">{session.name}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Connection: <span className="font-medium text-primary">{connectionState}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {mode === 'dm' && (
-              <>
-                <button
-                  className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
-                  onClick={onSaveSession}
-                >
-                  Save Snapshot
-                </button>
-                <button
-                  className="rounded-full border border-rose-500 px-3 py-1 text-xs font-medium text-rose-500 hover:bg-rose-500/10"
-                  onClick={onEndSession}
-                >
-                  End Session
-                </button>
-              </>
-            )}
-            <button
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
-              onClick={onLeave}
-            >
-              Leave
-            </button>
+      <div className="space-y-4 lg:col-span-2">
+        <div className="rounded-3xl border border-white/60 bg-white/70 px-5 py-4 shadow-lg shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">Live Session</p>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{session.name}</h2>
+              <p className="text-xs uppercase tracking-[0.35em] text-amber-600 dark:text-amber-200">
+                Connection: <span className="font-bold">{connectionState}</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {mode === 'dm' && (
+                <>
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-400/70 bg-amber-200/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+                    onClick={onSaveSession}
+                  >
+                    Save Snapshot
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/60 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
+                    onClick={onEndSession}
+                  >
+                    End Session
+                  </button>
+                </>
+              )}
+              <button
+                className="inline-flex items-center gap-1 rounded-full border border-slate-300/70 bg-white/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
+                onClick={onLeave}
+              >
+                Leave
+              </button>
+            </div>
           </div>
         </div>
         <MapMaskCanvas
@@ -212,29 +215,33 @@ const SessionViewer: React.FC<SessionViewerProps> = ({
         />
       </div>
       <div className="space-y-6">
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Players</h3>
-          <ul className="space-y-1 text-sm">
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Players</h3>
+          <ul className="space-y-2 text-sm">
             {state.players.map((player) => (
-              <li key={player.id} className="rounded border border-slate-200 px-3 py-1 dark:border-slate-700">
-                <span className="font-medium">{player.name}</span>
-                <span className="ml-2 text-xs uppercase text-slate-500">{player.role}</span>
+              <li key={player.id} className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60 dark:text-slate-200">
+                <span className="font-semibold text-slate-900 dark:text-white">{player.name}</span>
+                <span className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">{player.role}</span>
               </li>
             ))}
-            {state.players.length === 0 && <li className="text-xs text-slate-500">Waiting for players…</li>}
+            {state.players.length === 0 && <li className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700/70 dark:text-slate-400">Waiting for players…</li>}
           </ul>
         </section>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Regions</h3>
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Regions</h3>
           <RegionList
             regions={regions}
             revealedRegionIds={state.revealedRegions}
             onToggleRegion={mode === 'dm' ? handleToggleRegion : undefined}
           />
         </section>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Markers</h3>
-          <MarkerPanel markers={resolvedMarkers} onRemove={mode === 'dm' ? handleRemoveMarker : undefined} onUpdate={mode === 'dm' ? handleUpdateMarker : undefined} />
+        <section className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-lg shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Markers</h3>
+          <MarkerPanel
+            markers={resolvedMarkers}
+            onRemove={mode === 'dm' ? handleRemoveMarker : undefined}
+            onUpdate={mode === 'dm' ? handleUpdateMarker : undefined}
+          />
         </section>
       </div>
     </div>
