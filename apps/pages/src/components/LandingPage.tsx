@@ -10,13 +10,13 @@ interface LandingPageProps {
 
 const features = [
   {
-    title: 'Torchlit reveals',
+    title: 'Fog of Mystery',
     description:
-      'Sweep a beam of light across your battlemap and control every reveal with buttery-smooth precision tools.',
+      'Keep your players immersed in the moment and guessing what comes. Control every reveal with the click of a button.',
     icon: '🔥',
   },
   {
-    title: 'Campaign vault',
+    title: 'Campaign Vault',
     description:
       'Keep encounters, notes, and handouts tucked away by campaign so the right prep is always within reach.',
     icon: '📜',
@@ -81,7 +81,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.45em] text-amber-700 dark:text-amber-200">TableTorch</p>
-              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Illuminating tabletop worlds in living color</p>
+              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Illuminate endless worlds, one room at a time</p>
             </div>
           </div>
           <button
@@ -100,11 +100,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, setTheme, onAuthentica
           <section className="space-y-10">
             <div className="space-y-6">
               <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl dark:text-white">
-                Guide your party through unforgettable encounters with a torchlit control deck built for DMs.
+                Guide your party through unforgettable adventures with exploration-based map reveals.
               </h1>
               <p className="max-w-xl text-lg text-slate-600 dark:text-slate-300">
-                TableTorch keeps your battlemap prep organised and ready. Dial in dramatic lighting, reveal regions in real time,
-                and manage campaigns without breaking the table’s immersion.
+                TableTorch keeps your campaign map prep organised and ready. Share maps cleanly without spoiling the mystery, reveal regions in real-time,
+                and manage campaigns seamlessly for maximum immersion.
               </p>
             </div>
             <section id="features" className="grid gap-6 sm:grid-cols-2">
