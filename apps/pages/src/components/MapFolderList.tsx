@@ -77,17 +77,17 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5">
+    <div className="rounded-2xl border border-amber-500/20 bg-slate-950/70 p-5 shadow-xl shadow-amber-500/10">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Maps</p>
+          <p className="text-xs uppercase tracking-[0.4em] text-amber-300">Maps</p>
           <h3 className="text-2xl font-bold text-white">Campaign Atlas</h3>
-          <p className="text-sm text-slate-400">Organize maps into folders to keep your encounters tidy.</p>
+          <p className="text-sm text-amber-200/70">Organize maps into folders to keep your encounters tidy.</p>
         </div>
         <button
           type="button"
           onClick={onCreateMap}
-          className="rounded-xl border border-teal-400/60 bg-teal-500/80 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-teal-400/90"
+          className="rounded-xl border border-amber-400/60 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:via-orange-400 hover:to-rose-400"
         >
           New Map
         </button>
@@ -101,7 +101,7 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
           {grouped.map((group) => {
             const expanded = expandedGroups[group.name];
             return (
-              <div key={group.name} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 shadow-lg">
+              <div key={group.name} className="rounded-2xl border border-amber-500/20 bg-slate-950/80 shadow-lg shadow-amber-500/10">
                 <div className="flex items-start justify-between gap-3 px-5 py-4 sm:items-center">
                   <button
                     type="button"
@@ -110,11 +110,11 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                   >
                     <div>
                       <p className="text-lg font-semibold text-white">{group.name}</p>
-                      <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">{group.maps.length} Maps</p>
+                      <p className="text-[10px] uppercase tracking-[0.4em] text-amber-300/80">{group.maps.length} Maps</p>
                     </div>
                     <span
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/70 text-xs font-bold text-slate-300 transition ${
-                        expanded ? 'bg-teal-500/10 text-teal-200' : 'bg-slate-900'
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-400/30 text-xs font-bold text-amber-100 transition ${
+                        expanded ? 'bg-amber-500/10 text-amber-200' : 'bg-slate-900'
                       }`}
                       aria-hidden="true"
                     >
@@ -135,7 +135,7 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                   </button>
                 </div>
                 {expanded && (
-                  <div className="grid gap-4 border-t border-slate-800/60 px-5 py-5 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-4 border-t border-amber-500/20 px-5 py-5 sm:grid-cols-2 xl:grid-cols-3">
                     {group.maps.map((map) => {
                       const description = getMetadataString(map.metadata, 'description');
                       const notes = getMetadataString(map.metadata, 'notes');
@@ -153,10 +153,10 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                               onSelect(map);
                             }
                           }}
-                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                          className={`group relative overflow-hidden rounded-2xl border px-5 py-6 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
                             selectedMapId === map.id
-                              ? 'border-teal-400 bg-teal-500/10 shadow-[0_0_0_1px_rgba(45,212,191,0.4)]'
-                              : 'border-slate-800/60 bg-slate-950/60 hover:border-teal-400/60 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.3)]'
+                              ? 'border-amber-400 bg-amber-500/10 shadow-[0_0_0_1px_rgba(245,158,11,0.4)]'
+                              : 'border-amber-500/10 bg-slate-950/60 hover:border-amber-400/60 hover:shadow-[0_0_0_1px_rgba(245,158,11,0.3)]'
                           }`}
                         >
                           <div className="absolute right-4 top-4 flex items-center gap-2">
@@ -174,21 +174,21 @@ const MapFolderList: React.FC<MapFolderListProps> = ({
                               ✕
                             </button>
                           </div>
-                          <div className="mb-4 flex items-center justify-between text-xs uppercase tracking-[0.4em] text-slate-500">
+                          <div className="mb-4 flex items-center justify-between text-xs uppercase tracking-[0.4em] text-amber-200/80">
                             <span>Map</span>
                             <span>
                               {map.width ?? '—'} × {map.height ?? '—'}
                             </span>
                           </div>
                           <h4 className="text-lg font-semibold text-white">{map.name}</h4>
-                          {description && <p className="mt-2 text-sm text-slate-300">{description}</p>}
-                          {notes && !description && <p className="mt-2 text-sm text-slate-400">{notes}</p>}
+                          {description && <p className="mt-2 text-sm text-amber-100/80">{description}</p>}
+                          {notes && !description && <p className="mt-2 text-sm text-amber-100/60">{notes}</p>}
                           {tags.length > 0 && (
                             <div className="mt-4 flex flex-wrap gap-2">
                               {tags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300"
+                                  className="inline-flex items-center rounded-full border border-amber-400/30 bg-slate-900/70 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-amber-200"
                                 >
                                   {tag}
                                 </span>

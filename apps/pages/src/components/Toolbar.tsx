@@ -44,15 +44,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+    <div className="flex flex-col gap-4 rounded-2xl border border-amber-200/60 bg-white/80 p-4 shadow-lg shadow-amber-500/10 transition-colors dark:border-amber-500/30 dark:bg-slate-950/70">
       <div className="flex items-center justify-between" role="group" aria-label="Selection tools">
         <div className="flex gap-2">
           <button
             type="button"
-            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition ${
               activeTool === 'magneticLasso'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'border-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-lg shadow-amber-500/30'
+                : 'border-amber-200/60 bg-white/80 text-amber-700 hover:border-amber-300/70 hover:bg-amber-50/70 dark:border-amber-500/30 dark:bg-slate-900/60 dark:text-amber-200 dark:hover:bg-amber-500/10'
             }`}
             aria-pressed={activeTool === 'magneticLasso'}
             onClick={() => onToolChange('magneticLasso')}
@@ -61,10 +61,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             type="button"
-            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold uppercase tracking-[0.2em] transition ${
               activeTool === 'smartWand'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                ? 'border-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-lg shadow-amber-500/30'
+                : 'border-amber-200/60 bg-white/80 text-amber-700 hover:border-amber-300/70 hover:bg-amber-50/70 dark:border-amber-500/30 dark:bg-slate-900/60 dark:text-amber-200 dark:hover:bg-amber-500/10'
             }`}
             aria-pressed={activeTool === 'smartWand'}
             onClick={() => onToolChange('smartWand')}
@@ -74,7 +74,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3" aria-label="Advanced selection settings">
-        <label className="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 dark:text-amber-100">
           Edge contrast emphasis
           <input
             type="range"
@@ -85,11 +85,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
             onChange={(event) => updateSetting('edgeContrast', parseFloat(event.currentTarget.value))}
             aria-label="Edge contrast emphasis"
           />
-          <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+          <span className="text-xs font-normal text-slate-500 dark:text-amber-200/70">
             Higher values increase the CLAHE contrast boost for the worker pipeline.
           </span>
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 dark:text-amber-100">
           Snap strength
           <input
             type="range"
@@ -100,11 +100,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
             onChange={(event) => updateSetting('snapStrength', parseFloat(event.currentTarget.value))}
             aria-label="Snap strength"
           />
-          <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+          <span className="text-xs font-normal text-slate-500 dark:text-amber-200/70">
             Controls how aggressively polygons snap to the cost pyramid edges.
           </span>
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-amber-100">
           <input
             type="checkbox"
             checked={settings.autoEntranceLock}
@@ -112,7 +112,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           />
           Auto-lock detected entrances
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-amber-100">
           <input
             type="checkbox"
             checked={settings.livePreview}
@@ -120,7 +120,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           />
           Live preview updates
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-amber-100">
           <input
             type="checkbox"
             checked={settings.showDebugOverlay}

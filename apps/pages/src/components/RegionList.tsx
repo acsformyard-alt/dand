@@ -16,15 +16,15 @@ const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onT
         return (
           <div
             key={region.id}
-            className={`flex items-start justify-between rounded-lg border px-3 py-2 text-sm shadow-sm transition hover:border-primary/60 hover:shadow ${
+            className={`flex items-start justify-between rounded-xl border px-3 py-2 text-sm shadow-sm shadow-amber-500/10 transition hover:border-primary/60 hover:shadow-lg ${
               revealed
-                ? 'border-emerald-400/60 bg-emerald-100/20 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                ? 'border-amber-400/70 bg-amber-100/20 text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100'
+                : 'border-amber-200/40 bg-white/80 dark:border-amber-500/20 dark:bg-slate-950/60'
             }`}
           >
             <div>
               <button
-                className="font-medium hover:underline"
+                className="font-semibold text-slate-800 hover:text-amber-700 hover:underline dark:text-amber-50 dark:hover:text-amber-200"
                 onClick={() => onSelectRegion?.(region)}
               >
                 {region.name}
@@ -34,8 +34,8 @@ const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onT
             <button
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 revealed
-                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                  : 'bg-primary text-white hover:bg-primary-dark'
+                  ? 'bg-rose-500 text-white hover:bg-rose-600'
+                  : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow shadow-amber-500/20 hover:from-amber-400 hover:via-orange-400 hover:to-rose-400'
               }`}
               onClick={() => onToggleRegion?.(region, !revealed)}
             >
