@@ -695,8 +695,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(249,115,22,0.16),transparent_40%)] opacity-80"
       />
-      <div className="relative flex flex-1 flex-col">
-        <header className="mb-0.5 border-b border-slate-800/70 px-5 py-3">
+      <div className="relative flex min-h-dvh flex-col overflow-hidden">
+        <header className="mb-0.5 border-b border-slate-800/70 px-5 py-3 shrink-0">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-amber-200">New Map Wizard</p>
@@ -735,21 +735,21 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             })}
           </div>
         </header>
-        <main className="flex-1 overflow-x-visible overflow-y-auto py-4">
-          <div className="flex h-full">
+        <main className="flex-1 min-h-0 overflow-x-auto overflow-y-auto py-4">
+          <div className="flex h-full min-h-0">
           <div
             ref={brushSliderHostRef}
             className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
           />
-          <div className="flex h-full flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
-              <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-8 text-center">
+              <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4 text-center">
                 <div
                   onDragEnter={(event) => event.preventDefault()}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={handleDrop}
-                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-8 transition hover:border-amber-400/60"
+                  className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700/70 bg-slate-950/70 px-6 py-4 transition hover:border-amber-400/60"
                 >
                   <input
                     ref={fileInputRef}
@@ -1068,7 +1068,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           </div>
         </div>
       </main>
-        <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5">
+        <footer className="mt-0.5 border-t border-slate-800/70 px-5 py-1.5 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
