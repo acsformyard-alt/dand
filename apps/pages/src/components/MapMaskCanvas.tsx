@@ -88,7 +88,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     canvas.width = maskWidth;
     canvas.height = maskHeight;
     context.clearRect(0, 0, maskWidth, maskHeight);
-    context.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    context.fillStyle = 'rgba(15, 23, 42, 0.82)';
     context.fillRect(0, 0, maskWidth, maskHeight);
     context.globalCompositeOperation = 'destination-out';
     revealedRegionIds.forEach((regionId) => {
@@ -112,7 +112,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       const polygon = polygonById.get(hoverRegion);
       if (polygon && polygon.length) {
         context.beginPath();
-        context.fillStyle = 'rgba(99, 102, 241, 0.25)';
+        context.fillStyle = 'rgba(251, 191, 36, 0.28)';
         polygon.forEach((point, index) => {
           const x = point.x * maskWidth;
           const y = point.y * maskHeight;
@@ -155,7 +155,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   const displayHeight = imageSize?.height || height || 768;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900/60 shadow-inner dark:border-slate-700">
+    <div className="relative w-full overflow-hidden rounded-3xl border border-white/60 bg-white/70 shadow-inner shadow-amber-500/10 transition dark:border-slate-800/70 dark:bg-slate-950/70">
       {imageUrl ? (
         <img
           src={imageUrl}
@@ -164,7 +164,7 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
           style={{ maxHeight: '70vh', objectFit: 'contain' }}
         />
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+        <div className="flex h-64 items-center justify-center text-sm text-slate-500 dark:text-slate-400">
           Upload a map to begin
         </div>
       )}
