@@ -10,21 +10,21 @@ interface RegionListProps {
 
 const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onToggleRegion, onSelectRegion }) => {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {regions.map((region) => {
         const revealed = revealedRegionIds.includes(region.id);
         return (
           <div
             key={region.id}
-            className={`flex items-start justify-between rounded-lg border px-3 py-2 text-sm shadow-sm transition hover:border-primary/60 hover:shadow ${
+            className={`flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-sm shadow transition ${
               revealed
-                ? 'border-emerald-400/60 bg-emerald-100/20 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                ? 'border-amber-300/80 bg-amber-100/70 text-slate-900 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100'
+                : 'border-white/60 bg-white/70 text-slate-900 hover:border-amber-400/70 hover:shadow-lg dark:border-slate-800/70 dark:bg-slate-950/70 dark:text-slate-100 dark:hover:border-amber-400/50'
             }`}
           >
             <div>
               <button
-                className="font-medium hover:underline"
+                className="font-semibold text-slate-900 hover:underline dark:text-white"
                 onClick={() => onSelectRegion?.(region)}
               >
                 {region.name}
@@ -32,10 +32,10 @@ const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onT
               {region.notes && <p className="mt-1 text-xs opacity-75">{region.notes}</p>}
             </div>
             <button
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
                 revealed
-                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                  : 'bg-primary text-white hover:bg-primary-dark'
+                  ? 'border border-rose-400/70 bg-rose-200/70 text-rose-700 hover:bg-rose-200/80 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30'
+                  : 'border border-amber-400/70 bg-amber-300/80 text-slate-900 hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30'
               }`}
               onClick={() => onToggleRegion?.(region, !revealed)}
             >
