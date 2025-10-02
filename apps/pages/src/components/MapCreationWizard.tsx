@@ -185,6 +185,86 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+const parseHexColor = (value: string) => {
+  let hex = value.trim();
+  if (!hex.startsWith('#')) {
+    return null;
+  }
+  hex = hex.slice(1);
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map((char) => char + char)
+      .join('');
+  }
+  if (hex.length !== 6) {
+    return null;
+  }
+  const parsed = Number.parseInt(hex, 16);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return {
+    r: (parsed >> 16) & 255,
+    g: (parsed >> 8) & 255,
+    b: parsed & 255,
+  };
+};
+
+const createRoomMaskOverlayUrl = (
+  rooms: DraftRoom[],
+  dimensions: { width: number; height: number } | null,
+) => {
+  if (typeof document === 'undefined' || !dimensions) {
+    return null;
+  }
+  const { width, height } = dimensions;
+  if (width === 0 || height === 0) {
+    return null;
+  }
+
+  const hasMask = rooms.some((room) => room.mask);
+  if (!hasMask) {
+    return null;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  rooms.forEach((room) => {
+    const mask = room.mask;
+    if (!mask) {
+      return;
+    }
+    const color = parseHexColor(room.color || '#facc15');
+    if (!color) {
+      return;
+    }
+    const { data, width: maskWidth, height: maskHeight, bounds } = mask;
+    const imageData = context.createImageData(maskWidth, maskHeight);
+    for (let index = 0; index < data.length; index += 1) {
+      if (!data[index]) {
+        continue;
+      }
+      const offset = index * 4;
+      imageData.data[offset] = color.r;
+      imageData.data[offset + 1] = color.g;
+      imageData.data[offset + 2] = color.b;
+      imageData.data[offset + 3] = 96;
+    }
+    const destinationX = Math.round(bounds.minX * width);
+    const destinationY = Math.round(bounds.minY * height);
+    context.putImageData(imageData, destinationX, destinationY);
+  });
+
+  return canvas.toDataURL('image/png');
+};
+
 const createRoomMaskFromBinary = (
   mask: Uint8Array,
   width: number,
@@ -295,6 +375,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
   }, []);
+  const roomMaskOverlayUrl = useMemo(
+    () => createRoomMaskOverlayUrl(definedRooms, imageDimensions),
+    [definedRooms, imageDimensions],
+  );
 
   const syncRoomsFromEditor = useCallback(() => {
     const instance = defineRoomRef.current;
@@ -571,6 +655,189 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setMarkers((current) => [...current, newMarker]);
     setExpandedMarkerId(newMarker.id);
   };
+
+  const renderAddMarkersStep = () => (
+    <div className="flex h-full min-h-0 flex-1 justify-center">
+      <div className="grid h-full min-h-0 w-full gap-5 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex h-full min-h-0 rounded-2xl border border-slate-800/70 bg-slate-950/80">
+          <div className="flex h-full min-h-0 w-full flex-col">
+            <div className="border-b border-slate-800/70 px-4 py-3">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-300">Add Markers</h3>
+              <p className="mt-2 text-xs text-slate-500">
+                Drop markers onto the map while previewing the rooms you defined in the previous step.
+              </p>
+            </div>
+            <div className="flex-1 min-h-0 px-4 py-4">
+              <div
+                ref={mapAreaRef}
+                className="relative flex h-full min-h-[320px] w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-900/60"
+              >
+                {previewUrl ? (
+                  <>
+                    <img src={previewUrl} alt="Interactive map preview" className="h-full w-full object-contain" />
+                    {roomMaskOverlayUrl && (
+                      <img
+                        src={roomMaskOverlayUrl}
+                        alt="Room mask overlay"
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-70 mix-blend-screen"
+                      />
+                    )}
+                    {definedRooms.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-400">
+                        Define at least one room in the previous step to see the highlighted areas here.
+                      </div>
+                    )}
+                    {markers.map((marker) => (
+                      <button
+                        key={marker.id}
+                        type="button"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          setDraggingId(marker.id);
+                        }}
+                        style={containerPointToStyle(
+                          normalisedToContainerPoint(
+                            { x: marker.x, y: marker.y },
+                            markerDisplayMetrics,
+                          ),
+                        )}
+                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
+                      >
+                        {marker.label || 'Marker'}
+                      </button>
+                    ))}
+                    {markers.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+                        Add markers from the panel to start placing points of interest.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center px-6 text-center text-sm text-slate-400">
+                    Upload a map image to place markers.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-800/70 bg-slate-950/80">
+          <div className="border-b border-slate-800/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
+                <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddMarker}
+                className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
+              >
+                Add Marker
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Create markers and drag them directly onto the map. Use notes to capture quick reminders.
+            </p>
+          </div>
+          <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
+            {markers.map((marker) => {
+              const isExpanded = expandedMarkerId === marker.id;
+              return (
+                <div
+                  key={marker.id}
+                  className={`rounded-2xl border px-4 py-3 transition ${
+                    isExpanded ? 'border-amber-400/60 bg-slate-950/80' : 'border-slate-800/70 bg-slate-950/70'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMarkerId(isExpanded ? null : marker.id)}
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                    aria-expanded={isExpanded}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                        <span>
+                          Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-3 w-3 rounded-full border border-slate-700/70"
+                            style={{ backgroundColor: marker.color || '#facc15' }}
+                          />
+                          <span>{marker.color}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[10px] uppercase tracking-[0.35em] ${
+                        isExpanded ? 'text-amber-200' : 'text-slate-400'
+                      }`}
+                    >
+                      {isExpanded ? 'Hide' : 'Edit'}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-3 space-y-3">
+                      <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                        Label
+                        <input
+                          type="text"
+                          value={marker.label}
+                          onChange={(event) => handleMarkerChange(marker.id, 'label', event.target.value)}
+                          className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                          placeholder="Secret Door"
+                        />
+                      </label>
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                        <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                          Notes
+                          <textarea
+                            value={marker.notes}
+                            onChange={(event) => handleMarkerChange(marker.id, 'notes', event.target.value)}
+                            rows={2}
+                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                            placeholder="Trap trigger, treasure cache, etc."
+                          />
+                        </label>
+                        <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                          Color
+                          <input
+                            type="text"
+                            value={marker.color}
+                            onChange={(event) => handleMarkerChange(marker.id, 'color', event.target.value)}
+                            className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                            placeholder="#facc15"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMarker(marker.id)}
+                          className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {markers.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
+                No markers yet. Add a marker to start placing points of interest.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const handleContinue = () => {
     if (step === 2) {
@@ -896,175 +1163,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-{step === 3 && (
-            <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div
-                ref={mapAreaRef}
-                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-              >
-                {previewUrl ? (
-                  <>
-                    <img
-                      src={previewUrl}
-                      alt="Interactive map preview"
-                      className="w-full max-h-full object-contain"
-                    />
-                    {markers.map((marker) => (
-                      <button
-                        key={marker.id}
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          setDraggingId(marker.id);
-                        }}
-                        style={containerPointToStyle(
-                          normalisedToContainerPoint(
-                            { x: marker.x, y: marker.y },
-                            markerDisplayMetrics,
-                          ),
-                        )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
-                      >
-                        {marker.label || 'Marker'}
-                      </button>
-                    ))}
-                    {markers.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                        Add markers from the panel to start placing points of interest.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to place markers.
-                  </div>
-                )}
-              </div>
-              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
-                      <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMarker}
-                      className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
-                    >
-                      Add Marker
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
-                  </p>
-                </div>
-                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
-                  {markers.map((marker) => {
-                    const isExpanded = expandedMarkerId === marker.id;
-                    return (
-                      <div
-                        key={marker.id}
-                        className={`rounded-2xl border px-4 py-3 transition ${
-                          isExpanded
-                            ? 'border-amber-400/60 bg-slate-950/80'
-                            : 'border-slate-800/70 bg-slate-950/70'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedMarkerId(isExpanded ? null : marker.id)
-                          }
-                          className="flex w-full items-start justify-between gap-3 text-left"
-                          aria-expanded={isExpanded}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                              <span>
-                                Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
-                              </span>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className="h-3 w-3 rounded-full border border-slate-700/70"
-                                  style={{ backgroundColor: marker.color || '#facc15' }}
-                                />
-                                <span>{marker.color}</span>
-                              </span>
-                            </div>
-                          </div>
-                          <span
-                            className={`text-[10px] uppercase tracking-[0.35em] ${
-                              isExpanded ? 'text-amber-200' : 'text-slate-400'
-                            }`}
-                          >
-                            {isExpanded ? 'Hide' : 'Edit'}
-                          </span>
-                        </button>
-                        {isExpanded && (
-                          <div className="mt-3 space-y-3">
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                              Label
-                              <input
-                                type="text"
-                                value={marker.label}
-                                onChange={(event) =>
-                                  handleMarkerChange(marker.id, 'label', event.target.value)
-                                }
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                placeholder="Secret Door"
-                              />
-                            </label>
-                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Notes
-                                <textarea
-                                  value={marker.notes}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'notes', event.target.value)
-                                  }
-                                  rows={2}
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="Trap trigger, treasure cache, etc."
-                                />
-                              </label>
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Color
-                                <input
-                                  type="text"
-                                  value={marker.color}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'color', event.target.value)
-                                  }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="#facc15"
-                                />
-                              </label>
-                            </div>
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMarker(marker.id)}
-                                className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {markers.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
-                      No markers yet. Add a marker to start placing points of interest.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {step === 3 && renderAddMarkersStep()}
           </div>
         </div>
       </main>
