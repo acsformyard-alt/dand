@@ -12,7 +12,7 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import type { RoomMask } from '../utils/roomMask';
+import { encodeRoomMaskToDataUrl, type RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -459,6 +459,61 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
+  const roomOverlays = useMemo(
+    () =>
+      definedRooms
+        .map((room) => {
+          if (!room.mask) {
+            return null;
+          }
+          return {
+            id: room.id,
+            name: room.name.trim() || 'Room',
+            color: room.color || '#facc15',
+            bounds: room.mask.bounds,
+            dataUrl: encodeRoomMaskToDataUrl(room.mask),
+          };
+        })
+        .filter((overlay): overlay is NonNullable<typeof overlay> => overlay !== null),
+    [definedRooms],
+  );
+
+  const resolveOverlayStyle = useCallback(
+    (bounds: RoomMask['bounds']): React.CSSProperties => {
+      if (
+        !markerDisplayMetrics ||
+        markerDisplayMetrics.containerWidth === 0 ||
+        markerDisplayMetrics.containerHeight === 0
+      ) {
+        const width = Math.max(bounds.maxX - bounds.minX, 0);
+        const height = Math.max(bounds.maxY - bounds.minY, 0);
+        return {
+          left: `${bounds.minX * 100}%`,
+          top: `${bounds.minY * 100}%`,
+          width: `${width * 100}%`,
+          height: `${height * 100}%`,
+        };
+      }
+      const topLeft = normalisedToContainerPoint(
+        { x: bounds.minX, y: bounds.minY },
+        markerDisplayMetrics,
+      );
+      const bottomRight = normalisedToContainerPoint(
+        { x: bounds.maxX, y: bounds.maxY },
+        markerDisplayMetrics,
+      );
+      const width = Math.max(bottomRight.x - topLeft.x, 0);
+      const height = Math.max(bottomRight.y - topLeft.y, 0);
+      return {
+        left: `${topLeft.x * 100}%`,
+        top: `${topLeft.y * 100}%`,
+        width: `${width * 100}%`,
+        height: `${height * 100}%`,
+      };
+    },
+    [markerDisplayMetrics],
+  );
+
   useEffect(() => {
     if (!draggingId) return;
 
@@ -896,49 +951,91 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-{step === 3 && (
+          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div
-                ref={mapAreaRef}
-                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-              >
-                {previewUrl ? (
-                  <>
-                    <img
-                      src={previewUrl}
-                      alt="Interactive map preview"
-                      className="w-full max-h-full object-contain"
-                    />
-                    {markers.map((marker) => (
-                      <button
-                        key={marker.id}
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          setDraggingId(marker.id);
-                        }}
-                        style={containerPointToStyle(
-                          normalisedToContainerPoint(
-                            { x: marker.x, y: marker.y },
-                            markerDisplayMetrics,
-                          ),
-                        )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
-                      >
-                        {marker.label || 'Marker'}
-                      </button>
-                    ))}
-                    {markers.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                        Add markers from the panel to start placing points of interest.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to place markers.
-                  </div>
-                )}
+              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+                <div
+                  ref={mapAreaRef}
+                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70"
+                >
+                  {previewUrl ? (
+                    <>
+                      <img
+                        src={previewUrl}
+                        alt="Interactive map preview"
+                        className="w-full max-h-full object-contain"
+                      />
+                      {roomOverlays.length > 0 && (
+                        <div className="pointer-events-none absolute inset-0">
+                          {roomOverlays.map((overlay) => {
+                            const boundsStyle = resolveOverlayStyle(overlay.bounds);
+                            const maskStyle: React.CSSProperties = {
+                              backgroundColor: overlay.color,
+                              opacity: 0.3,
+                              mixBlendMode: 'screen',
+                              WebkitMaskImage: `url(${overlay.dataUrl})`,
+                              maskImage: `url(${overlay.dataUrl})`,
+                              WebkitMaskRepeat: 'no-repeat',
+                              maskRepeat: 'no-repeat',
+                              WebkitMaskSize: '100% 100%',
+                              maskSize: '100% 100%',
+                            };
+                            const outlineStyle: React.CSSProperties = {
+                              border: '1px solid rgba(15,23,42,0.55)',
+                              WebkitMaskImage: `url(${overlay.dataUrl})`,
+                              maskImage: `url(${overlay.dataUrl})`,
+                              WebkitMaskRepeat: 'no-repeat',
+                              maskRepeat: 'no-repeat',
+                              WebkitMaskSize: '100% 100%',
+                              maskSize: '100% 100%',
+                            };
+                            return (
+                              <div
+                                key={overlay.id}
+                                className="pointer-events-none absolute"
+                                style={boundsStyle}
+                              >
+                                <div className="pointer-events-none absolute inset-0" style={maskStyle} />
+                                <div className="pointer-events-none absolute inset-0" style={outlineStyle} />
+                                <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-slate-900/40 bg-slate-950/85 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-100 shadow-lg">
+                                  {overlay.name}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {markers.map((marker) => (
+                        <button
+                          key={marker.id}
+                          type="button"
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            setDraggingId(marker.id);
+                          }}
+                          style={containerPointToStyle(
+                            normalisedToContainerPoint(
+                              { x: marker.x, y: marker.y },
+                              markerDisplayMetrics,
+                            ),
+                          )}
+                          className="group absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
+                        >
+                          {marker.label || 'Marker'}
+                        </button>
+                      ))}
+                      {markers.length === 0 && (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+                          Add markers from the panel to start placing points of interest.
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
+                      Upload a map image to place markers.
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
                 <div className="border-b border-slate-800/70 p-4">
@@ -956,7 +1053,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
+                    Create markers and drag them directly onto the map. Room overlays from the previous
+                    step stay visible so you can reference defined areas while adding notes and colors.
                   </p>
                 </div>
                 <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
