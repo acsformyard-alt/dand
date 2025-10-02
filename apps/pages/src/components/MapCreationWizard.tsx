@@ -12,7 +12,7 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import type { RoomMask } from '../utils/roomMask';
+import { roomMaskToPolygon, type RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 
 type WizardStep = 0 | 1 | 2 | 3;
@@ -60,6 +60,18 @@ const steps: Array<{ title: string; description: string }> = [
     description: 'Drag markers onto the map to highlight points of interest for your players.',
   },
 ];
+
+const AddMarkerIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M12 5v14M5 12h14"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
@@ -458,6 +470,111 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   }, [defineRoomReady, step]);
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
+
+  const roomsWithMask = useMemo(
+    () => definedRooms.filter((room) => room.mask),
+    [definedRooms],
+  );
+
+  const markerRoomOverlays = useMemo(
+    () => {
+      if (!imageDimensions) {
+        return [] as Array<{
+          id: string;
+          name: string;
+          color: string;
+          path: string;
+          labelPosition: { x: number; y: number } | null;
+        }>;
+      }
+
+      return roomsWithMask
+        .map((room) => {
+          if (!room.mask) {
+            return null;
+          }
+          const polygon = roomMaskToPolygon(room.mask);
+          if (polygon.length < 3) {
+            return null;
+          }
+
+          const scaled = polygon.map((point) => ({
+            x: point.x * imageDimensions.width,
+            y: point.y * imageDimensions.height,
+          }));
+
+          const pathCommands = scaled
+            .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+            .join(' ');
+
+          const path = `${pathCommands} Z`;
+
+          let area = 0;
+          let centroidX = 0;
+          let centroidY = 0;
+
+          for (let index = 0; index < scaled.length; index += 1) {
+            const current = scaled[index];
+            const next = scaled[(index + 1) % scaled.length];
+            const cross = current.x * next.y - next.x * current.y;
+            area += cross;
+            centroidX += (current.x + next.x) * cross;
+            centroidY += (current.y + next.y) * cross;
+          }
+
+          area *= 0.5;
+          let labelPosition: { x: number; y: number } | null = null;
+
+          if (Math.abs(area) > 1e-5) {
+            labelPosition = {
+              x: centroidX / (6 * area),
+              y: centroidY / (6 * area),
+            };
+          } else {
+            const fallback = scaled.reduce(
+              (accumulator, point) => ({
+                x: accumulator.x + point.x,
+                y: accumulator.y + point.y,
+              }),
+              { x: 0, y: 0 },
+            );
+            labelPosition = {
+              x: fallback.x / scaled.length,
+              y: fallback.y / scaled.length,
+            };
+          }
+
+          return {
+            id: room.id,
+            name: room.name || 'Untitled Room',
+            color: room.color,
+            path,
+            labelPosition,
+          };
+        })
+        .filter((value): value is {
+          id: string;
+          name: string;
+          color: string;
+          path: string;
+          labelPosition: { x: number; y: number } | null;
+        } => value !== null);
+    },
+    [imageDimensions, roomsWithMask],
+  );
+
+  const markerOverlayStyle = useMemo<React.CSSProperties | undefined>(() => {
+    if (!markerDisplayMetrics || !imageDimensions) {
+      return undefined;
+    }
+
+    return {
+      left: markerDisplayMetrics.offsetX,
+      top: markerDisplayMetrics.offsetY,
+      width: markerDisplayMetrics.displayWidth,
+      height: markerDisplayMetrics.displayHeight,
+    };
+  }, [imageDimensions, markerDisplayMetrics]);
 
   useEffect(() => {
     if (!draggingId) return;
@@ -896,171 +1013,252 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-{step === 3 && (
-            <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div
-                ref={mapAreaRef}
-                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-              >
-                {previewUrl ? (
-                  <>
-                    <img
-                      src={previewUrl}
-                      alt="Interactive map preview"
-                      className="w-full max-h-full object-contain"
-                    />
-                    {markers.map((marker) => (
-                      <button
-                        key={marker.id}
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          setDraggingId(marker.id);
-                        }}
-                        style={containerPointToStyle(
-                          normalisedToContainerPoint(
-                            { x: marker.x, y: marker.y },
-                            markerDisplayMetrics,
-                          ),
-                        )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
-                      >
-                        {marker.label || 'Marker'}
-                      </button>
-                    ))}
-                    {markers.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                        Add markers from the panel to start placing points of interest.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to place markers.
-                  </div>
-                )}
-              </div>
-              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
-                      <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMarker}
-                      className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
-                    >
-                      Add Marker
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
-                  </p>
-                </div>
-                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
-                  {markers.map((marker) => {
-                    const isExpanded = expandedMarkerId === marker.id;
-                    return (
-                      <div
-                        key={marker.id}
-                        className={`rounded-2xl border px-4 py-3 transition ${
-                          isExpanded
-                            ? 'border-amber-400/60 bg-slate-950/80'
-                            : 'border-slate-800/70 bg-slate-950/70'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedMarkerId(isExpanded ? null : marker.id)
-                          }
-                          className="flex w-full items-start justify-between gap-3 text-left"
-                          aria-expanded={isExpanded}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                              <span>
-                                Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
+          {step === 3 && (
+            <div className="flex h-full min-h-0 flex-1 justify-center">
+              <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+                <div className="define-room-body marker-step">
+                  <section className="define-room-editor">
+                    <div className="toolbar-area">
+                      <div className="marker-toolbar-wrapper">
+                        <div className="marker-room-legend">
+                          <p className="marker-legend-title">Rooms</p>
+                          {roomsWithMask.length > 0 ? (
+                            <ul className="marker-room-legend-list">
+                              {roomsWithMask.map((room) => (
+                                <li key={room.id} className="marker-room-legend-item">
+                                  <span
+                                    className="marker-room-legend-swatch"
+                                    style={{ backgroundColor: room.color }}
+                                  />
+                                  <div className="marker-room-legend-details">
+                                    <span className="marker-room-legend-name">
+                                      {room.name || 'Untitled Room'}
+                                    </span>
+                                    <span className="marker-room-legend-meta">
+                                      Mask visible on map
+                                    </span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="marker-legend-empty">
+                              Rooms that you define in the previous step will appear here and be
+                              highlighted on the map to guide marker placement.
+                            </p>
+                          )}
+                        </div>
+                        <div className="toolbar marker-toolbar">
+                          <div className="toolbar-primary-group">
+                            <button
+                              type="button"
+                              onClick={handleAddMarker}
+                              className="toolbar-button toolbar-primary"
+                              disabled={!previewUrl}
+                            >
+                              <span className="toolbar-button-icon" aria-hidden="true">
+                                <AddMarkerIcon />
                               </span>
-                              <span className="flex items-center gap-2">
+                              <span className="toolbar-button-label" aria-hidden="true">
+                                Add Marker
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="canvas-wrapper marker-canvas-wrapper">
+                      <div ref={mapAreaRef} className="marker-stage">
+                        {previewUrl ? (
+                          <>
+                            <img
+                              src={previewUrl}
+                              alt="Interactive map preview"
+                              className="marker-stage-image"
+                            />
+                            {imageDimensions && markerRoomOverlays.length > 0 && markerOverlayStyle && (
+                              <svg
+                                className="marker-mask-overlay"
+                                viewBox={`0 0 ${imageDimensions.width} ${imageDimensions.height}`}
+                                preserveAspectRatio="none"
+                                style={markerOverlayStyle}
+                              >
+                                {markerRoomOverlays.map((room) => (
+                                  <g key={room.id} className="marker-mask-room">
+                                    <path d={room.path} fill={room.color} stroke={room.color} />
+                                    {room.labelPosition && (
+                                      <text
+                                        x={room.labelPosition.x}
+                                        y={room.labelPosition.y}
+                                        className="marker-mask-label"
+                                      >
+                                        {room.name}
+                                      </text>
+                                    )}
+                                  </g>
+                                ))}
+                              </svg>
+                            )}
+                            {markers.map((marker) => (
+                              <button
+                                key={marker.id}
+                                type="button"
+                                onPointerDown={(event) => {
+                                  event.preventDefault();
+                                  setDraggingId(marker.id);
+                                }}
+                                style={containerPointToStyle(
+                                  normalisedToContainerPoint(
+                                    { x: marker.x, y: marker.y },
+                                    markerDisplayMetrics,
+                                  ),
+                                )}
+                                className="marker-pin"
+                              >
                                 <span
-                                  className="h-3 w-3 rounded-full border border-slate-700/70"
+                                  className="marker-pin-color"
                                   style={{ backgroundColor: marker.color || '#facc15' }}
                                 />
-                                <span>{marker.color}</span>
-                              </span>
-                            </div>
-                          </div>
-                          <span
-                            className={`text-[10px] uppercase tracking-[0.35em] ${
-                              isExpanded ? 'text-amber-200' : 'text-slate-400'
-                            }`}
-                          >
-                            {isExpanded ? 'Hide' : 'Edit'}
-                          </span>
-                        </button>
-                        {isExpanded && (
-                          <div className="mt-3 space-y-3">
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                              Label
-                              <input
-                                type="text"
-                                value={marker.label}
-                                onChange={(event) =>
-                                  handleMarkerChange(marker.id, 'label', event.target.value)
-                                }
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                placeholder="Secret Door"
-                              />
-                            </label>
-                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Notes
-                                <textarea
-                                  value={marker.notes}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'notes', event.target.value)
-                                  }
-                                  rows={2}
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="Trap trigger, treasure cache, etc."
-                                />
-                              </label>
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Color
-                                <input
-                                  type="text"
-                                  value={marker.color}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'color', event.target.value)
-                                  }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="#facc15"
-                                />
-                              </label>
-                            </div>
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMarker(marker.id)}
-                                className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
-                              >
-                                Remove
+                                <span className="marker-pin-label">
+                                  {marker.label || 'Marker'}
+                                </span>
                               </button>
-                            </div>
+                            ))}
+                            {markers.length === 0 && (
+                              <div className="marker-stage-placeholder">
+                                Add markers from the panel to start placing points of interest.
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="marker-stage-placeholder">
+                            Upload a map image to place markers.
                           </div>
                         )}
                       </div>
-                    );
-                  })}
-                  {markers.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
-                      No markers yet. Add a marker to start placing points of interest.
                     </div>
-                  )}
+                  </section>
+                  <aside className="define-room-sidebar marker-sidebar">
+                    <div className="rooms-header">
+                      <h2>Markers</h2>
+                      <button
+                        type="button"
+                        onClick={handleAddMarker}
+                        className="new-room"
+                        disabled={!previewUrl}
+                      >
+                        Add Marker
+                      </button>
+                    </div>
+                    <p className="rooms-empty marker-empty">
+                      Create markers and drag them directly onto the map. Use notes to capture quick
+                      reminders.
+                    </p>
+                    <div className="rooms-list marker-list">
+                      {markers.map((marker) => {
+                        const isExpanded = expandedMarkerId === marker.id;
+                        return (
+                          <div
+                            key={marker.id}
+                            className={`room-card marker-card ${isExpanded ? 'expanded' : ''}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedMarkerId(isExpanded ? null : marker.id)
+                              }
+                              className="room-row marker-row"
+                              aria-expanded={isExpanded}
+                            >
+                              <span
+                                className="room-color"
+                                style={{ backgroundColor: marker.color || '#facc15' }}
+                              />
+                              <div className="marker-row-details">
+                                <span className="marker-row-name">{marker.label || 'Marker'}</span>
+                                <span className="marker-row-meta">
+                                  Position: {Math.round(marker.x * 100)}% ×{' '}
+                                  {Math.round(marker.y * 100)}%
+                                </span>
+                              </div>
+                              <span className="marker-row-toggle">
+                                {isExpanded ? 'Hide' : 'Edit'}
+                              </span>
+                            </button>
+                            {isExpanded && (
+                              <div className="room-card-body marker-card-body">
+                                <div className="room-field">
+                                  <label className="room-field-label" htmlFor={`${marker.id}-label`}>
+                                    Label
+                                  </label>
+                                  <input
+                                    id={`${marker.id}-label`}
+                                    type="text"
+                                    value={marker.label}
+                                    onChange={(event) =>
+                                      handleMarkerChange(marker.id, 'label', event.target.value)
+                                    }
+                                    className="marker-field-input"
+                                    placeholder="Secret Door"
+                                  />
+                                </div>
+                                <div className="room-field">
+                                  <label
+                                    className="room-field-label"
+                                    htmlFor={`${marker.id}-notes`}
+                                  >
+                                    Notes
+                                  </label>
+                                  <textarea
+                                    id={`${marker.id}-notes`}
+                                    value={marker.notes}
+                                    onChange={(event) =>
+                                      handleMarkerChange(marker.id, 'notes', event.target.value)
+                                    }
+                                    rows={3}
+                                    className="marker-field-textarea"
+                                    placeholder="Trap trigger, treasure cache, etc."
+                                  />
+                                </div>
+                                <div className="room-field">
+                                  <label
+                                    className="room-field-label"
+                                    htmlFor={`${marker.id}-color`}
+                                  >
+                                    Color
+                                  </label>
+                                  <input
+                                    id={`${marker.id}-color`}
+                                    type="text"
+                                    value={marker.color}
+                                    onChange={(event) =>
+                                      handleMarkerChange(marker.id, 'color', event.target.value)
+                                    }
+                                    className="marker-field-input"
+                                    placeholder="#facc15"
+                                  />
+                                </div>
+                                <div className="room-card-footer marker-card-footer">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveMarker(marker.id)}
+                                    className="marker-remove-button"
+                                  >
+                                    Remove Marker
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {markers.length === 0 && (
+                        <div className="marker-list-empty">
+                          No markers yet. Add a marker to start placing points of interest.
+                        </div>
+                      )}
+                    </div>
+                  </aside>
                 </div>
               </div>
             </div>
