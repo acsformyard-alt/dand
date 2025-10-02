@@ -556,6 +556,12 @@ export class DefineRoom {
 
   private imageData: ImageData | null = null;
 
+  private overlayImageData: ImageData | null = null;
+
+  private overlayColorSums: Float32Array | null = null;
+
+  private overlayContributionCounts: Uint16Array | null = null;
+
   private grayscale: Float32Array | null = null;
 
   private gradient: Float32Array | null = null;
@@ -1257,6 +1263,7 @@ export class DefineRoom {
   private prepareImage(image: HTMLImageElement): void {
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
+    const dimensionsChanged = width !== this.width || height !== this.height;
     this.width = width;
     this.height = height;
 
@@ -1276,6 +1283,21 @@ export class DefineRoom {
     this.selectionCanvas.style.height = "auto";
 
     this.resetMagnifyTransform(true);
+
+    if (
+      dimensionsChanged ||
+      !this.overlayImageData ||
+      this.overlayImageData.width !== width ||
+      this.overlayImageData.height !== height ||
+      !this.overlayColorSums ||
+      this.overlayColorSums.length !== width * height * 3 ||
+      !this.overlayContributionCounts ||
+      this.overlayContributionCounts.length !== width * height
+    ) {
+      this.overlayImageData = this.overlayContext.createImageData(width, height);
+      this.overlayColorSums = new Float32Array(width * height * 3);
+      this.overlayContributionCounts = new Uint16Array(width * height);
+    }
 
     this.imageContext.clearRect(0, 0, width, height);
     this.imageContext.drawImage(image, 0, 0, width, height);
@@ -2413,38 +2435,56 @@ export class DefineRoom {
   }
 
   private renderOverlay(): void {
-    if (!this.imageData) {
+    if (
+      !this.imageData ||
+      !this.overlayImageData ||
+      !this.overlayColorSums ||
+      !this.overlayContributionCounts
+    ) {
       return;
     }
     const width = this.imageData.width;
     const height = this.imageData.height;
-    const imageData = this.overlayContext.createImageData(width, height);
-    const data = imageData.data;
+    const pixelCount = width * height;
+    const colorSums = this.overlayColorSums;
+    const contributionCounts = this.overlayContributionCounts;
+    colorSums.fill(0);
+    contributionCounts.fill(0);
 
-    for (let i = 0; i < width * height; i += 1) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      let contributions = 0;
-      this.rooms.forEach((room) => {
-        if (room.mask[i]) {
-          r += room.colorVector[0];
-          g += room.colorVector[1];
-          b += room.colorVector[2];
-          a += 140;
-          contributions += 1;
+    for (const room of this.rooms) {
+      const mask = room.mask;
+      const limit = Math.min(mask.length, pixelCount);
+      const [r, g, b] = room.colorVector;
+      for (let i = 0; i < limit; i += 1) {
+        if (!mask[i]) {
+          continue;
         }
-      });
-      if (contributions > 0) {
-        const index = i * 4;
-        data[index] = Math.min(255, Math.round(r / contributions));
-        data[index + 1] = Math.min(255, Math.round(g / contributions));
-        data[index + 2] = Math.min(255, Math.round(b / contributions));
-        data[index + 3] = clamp(a, 80, 200);
+        const baseIndex = i * 3;
+        colorSums[baseIndex] += r;
+        colorSums[baseIndex + 1] += g;
+        colorSums[baseIndex + 2] += b;
+        contributionCounts[i] += 1;
       }
     }
 
-    this.overlayContext.putImageData(imageData, 0, 0);
+    const data = this.overlayImageData.data;
+    for (let i = 0; i < pixelCount; i += 1) {
+      const contributions = contributionCounts[i];
+      const index = i * 4;
+      if (contributions > 0) {
+        const baseIndex = i * 3;
+        data[index] = Math.min(255, Math.round(colorSums[baseIndex] / contributions));
+        data[index + 1] = Math.min(255, Math.round(colorSums[baseIndex + 1] / contributions));
+        data[index + 2] = Math.min(255, Math.round(colorSums[baseIndex + 2] / contributions));
+        data[index + 3] = clamp(contributions * 140, 80, 200);
+      } else {
+        data[index] = 0;
+        data[index + 1] = 0;
+        data[index + 2] = 0;
+        data[index + 3] = 0;
+      }
+    }
+
+    this.overlayContext.putImageData(this.overlayImageData, 0, 0);
   }
 }
