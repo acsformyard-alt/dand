@@ -290,11 +290,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
   const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
+  const stepRef = useRef(step);
   const brushSliderHostRef = useRef<HTMLDivElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
   }, []);
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const syncRoomsFromEditor = useCallback(() => {
     const instance = defineRoomRef.current;
@@ -429,7 +434,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       defineRoomImageRef.current = image;
       defineRoomRef.current?.loadImage(image);
       setDefinedRooms([]);
-      if (step === 2) {
+      const currentStep = stepRef.current;
+      if (currentStep === 2 || currentStep === 3) {
+        defineRoomRef.current?.setMarkerPlacementMode(currentStep === 3);
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
         defineRoomRef.current?.close();
@@ -440,7 +447,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [defineRoomReady, previewUrl, step]);
+  }, [defineRoomReady, previewUrl]);
 
   useEffect(() => {
     if (!defineRoomReady) {
@@ -451,11 +458,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       return;
     }
     if (step === 2 && defineRoomImageRef.current) {
+      editor.setMarkerPlacementMode(false);
+      editor.open(defineRoomImageRef.current, { resetExisting: false });
+    } else if (step === 3 && defineRoomImageRef.current) {
+      editor.setMarkerPlacementMode(true);
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else {
+      editor.setMarkerPlacementMode(false);
       editor.close();
     }
   }, [defineRoomReady, step]);
+
+  useEffect(() => {
+    if (step === 3) {
+      syncRoomsFromEditor();
+    }
+  }, [step, syncRoomsFromEditor]);
 
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
@@ -896,43 +914,43 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-{step === 3 && (
+          {step === 3 && (
             <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div
-                ref={mapAreaRef}
-                className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70"
-              >
+              <div className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70">
                 {previewUrl ? (
                   <>
-                    <img
-                      src={previewUrl}
-                      alt="Interactive map preview"
-                      className="w-full max-h-full object-contain"
+                    <div
+                      ref={defineRoomContainerRef}
+                      className="absolute inset-0"
                     />
-                    {markers.map((marker) => (
-                      <button
-                        key={marker.id}
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          setDraggingId(marker.id);
-                        }}
-                        style={containerPointToStyle(
-                          normalisedToContainerPoint(
-                            { x: marker.x, y: marker.y },
-                            markerDisplayMetrics,
-                          ),
+                    <div className="absolute inset-0 z-10">
+                      <div ref={mapAreaRef} className="relative h-full w-full">
+                        {markers.map((marker) => (
+                          <button
+                            key={marker.id}
+                            type="button"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              setDraggingId(marker.id);
+                            }}
+                            style={containerPointToStyle(
+                              normalisedToContainerPoint(
+                                { x: marker.x, y: marker.y },
+                                markerDisplayMetrics,
+                              ),
+                            )}
+                            className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
+                          >
+                            {marker.label || 'Marker'}
+                          </button>
+                        ))}
+                        {markers.length === 0 && (
+                          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
+                            Add markers from the panel to start placing points of interest.
+                          </div>
                         )}
-                        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
-                      >
-                        {marker.label || 'Marker'}
-                      </button>
-                    ))}
-                    {markers.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                        Add markers from the panel to start placing points of interest.
                       </div>
-                    )}
+                    </div>
                   </>
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">

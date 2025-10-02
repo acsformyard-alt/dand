@@ -33,7 +33,9 @@ type Room = {
 
 export type DefineRoomData = Room;
 
-type DefineRoomMode = 'overlay' | 'embedded';
+type DefineRoomMode = "overlay" | "embedded";
+
+type DefineRoomInteractionMode = "editing" | "marker-placement";
 
 interface DefineRoomOptions {
   mode?: DefineRoomMode;
@@ -624,6 +626,8 @@ export class DefineRoom {
 
   private mode: DefineRoomMode;
 
+  private interactionMode: DefineRoomInteractionMode = "editing";
+
   constructor(options: DefineRoomOptions = {}) {
     this.mode = options.mode ?? 'overlay';
     const header =
@@ -813,6 +817,20 @@ export class DefineRoom {
 
   public get element(): HTMLElement {
     return this.root;
+  }
+
+  public setMarkerPlacementMode(enabled: boolean): void {
+    const nextMode: DefineRoomInteractionMode = enabled ? "marker-placement" : "editing";
+    if (this.interactionMode === nextMode) {
+      return;
+    }
+    this.interactionMode = nextMode;
+    this.root.classList.toggle("define-room-marker-placement", enabled);
+    if (enabled && this.currentTool !== "move") {
+      this.setTool("move");
+    }
+    this.updateToolAvailability();
+    this.updateCanvasCursor();
   }
 
   private initializeDomReferences(): void {
@@ -1565,15 +1583,23 @@ export class DefineRoom {
 
   private updateToolAvailability(): void {
     const isEditing = this.isConfirmingRoom && Boolean(this.pendingRoomId);
-    if (!isEditing && this.currentTool !== "move" && this.currentTool !== "magnify") {
+    if (
+      this.interactionMode === "editing" &&
+      !isEditing &&
+      this.currentTool !== "move" &&
+      this.currentTool !== "magnify"
+    ) {
       this.setTool("move");
     }
     this.toolButtons.forEach((button, tool) => {
-      const allowTool = isEditing || tool === "move" || tool === "magnify";
+      const allowTool =
+        this.interactionMode === "editing" && (isEditing || tool === "move" || tool === "magnify");
       button.disabled = !allowTool;
       button.classList.toggle("disabled", !allowTool);
     });
-    const allowPointer = isEditing || this.currentTool === "move" || this.currentTool === "magnify";
+    const allowPointer =
+      this.interactionMode === "editing" &&
+      (isEditing || this.currentTool === "move" || this.currentTool === "magnify");
     this.overlayCanvas.style.pointerEvents = allowPointer ? "auto" : "none";
   }
 
@@ -1797,6 +1823,9 @@ export class DefineRoom {
   }
 
   private handlePointerDown(event: PointerEvent): void {
+    if (this.interactionMode === "marker-placement") {
+      return;
+    }
     event.preventDefault();
     if (event.button === 1 || event.button === 2) {
       return;
@@ -1878,6 +1907,9 @@ export class DefineRoom {
   }
 
   private handlePointerMove(event: PointerEvent): void {
+    if (this.interactionMode === "marker-placement") {
+      return;
+    }
     if (this.currentTool === "move") {
       if (this.isPanning && this.panPointerId !== null && event.pointerId === this.panPointerId) {
         event.preventDefault();
@@ -1952,6 +1984,9 @@ export class DefineRoom {
   }
 
   private handlePointerUp(event: PointerEvent): void {
+    if (this.interactionMode === "marker-placement") {
+      return;
+    }
     const isBrushTool = this.currentTool === "brush" || this.currentTool === "eraser";
     if (isBrushTool) {
       if (event.type === "pointerleave") {

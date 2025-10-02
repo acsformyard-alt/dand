@@ -43,6 +43,36 @@
   display: none;
 }
 
+.define-room-marker-placement .define-room-window {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.define-room-marker-placement .define-room-body {
+  padding: 0;
+}
+
+.define-room-marker-placement .define-room-editor {
+  padding: 0;
+}
+
+.define-room-marker-placement .toolbar-area,
+.define-room-marker-placement .define-room-sidebar,
+.define-room-marker-placement .brush-slider-container {
+  display: none !important;
+}
+
+.define-room-marker-placement .canvas-wrapper {
+  background: transparent;
+  border: none;
+  border-radius: inherit;
+}
+
+.define-room-marker-placement .room-hover-label {
+  display: none;
+}
+
 .define-room-window {
   width: min(1200px, 92vw);
   height: min(760px, 88vh);
