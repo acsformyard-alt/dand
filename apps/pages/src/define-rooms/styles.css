@@ -862,6 +862,19 @@
   image-rendering: pixelated;
 }
 
+.canvas-wrapper .marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.canvas-wrapper .marker-layer .room-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
 .canvas-wrapper .image-layer {
   position: relative;
 }
@@ -887,6 +900,16 @@
 
 .room-hover-label.visible {
   opacity: 1;
+}
+
+.define-room-overlay.define-room-marker-mode .toolbar-area,
+.define-room-overlay.define-room-marker-mode .define-room-sidebar,
+.define-room-overlay.define-room-marker-mode .brush-slider-container {
+  display: none;
+}
+
+.define-room-interactions-disabled {
+  cursor: default;
 }
 
 @media (max-width: 960px) {

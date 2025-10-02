@@ -35,6 +35,8 @@ export type DefineRoomData = Room;
 
 type DefineRoomMode = 'overlay' | 'embedded';
 
+type DefineRoomViewMode = 'rooms' | 'markers';
+
 interface DefineRoomOptions {
   mode?: DefineRoomMode;
 }
@@ -526,6 +528,8 @@ export class DefineRoom {
 
   private canvasWrapper!: HTMLElement;
 
+  private markerLayer!: HTMLElement;
+
   private hoverLabel!: HTMLElement;
 
   private closeButton: HTMLButtonElement | null = null;
@@ -624,6 +628,8 @@ export class DefineRoom {
 
   private mode: DefineRoomMode;
 
+  private viewMode: DefineRoomViewMode = 'rooms';
+
   constructor(options: DefineRoomOptions = {}) {
     this.mode = options.mode ?? 'overlay';
     const header =
@@ -717,6 +723,10 @@ export class DefineRoom {
                 <canvas class="image-layer"></canvas>
                 <canvas class="mask-layer"></canvas>
                 <canvas class="selection-layer"></canvas>
+                <div
+                  class="marker-layer"
+                  ref={(node: HTMLElement | null) => node && (this.markerLayer = node)}
+                ></div>
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
             </section>
@@ -803,6 +813,45 @@ export class DefineRoom {
 
   public getImageDimensions(): { width: number; height: number } {
     return { width: this.width, height: this.height };
+  }
+
+  public getMarkerLayer(): HTMLElement | null {
+    return this.markerLayer ?? null;
+  }
+
+  public clientPointToNormalized(clientX: number, clientY: number): { x: number; y: number } | null {
+    if (!this.overlayCanvas || this.width === 0 || this.height === 0) {
+      return null;
+    }
+
+    const point = this.clientToCanvasPoint(clientX, clientY);
+    if (!point) {
+      return null;
+    }
+
+    return {
+      x: clamp(point.x / this.width, 0, 1),
+      y: clamp(point.y / this.height, 0, 1),
+    };
+  }
+
+  public setInteractionEnabled(enabled: boolean): void {
+    if (!this.overlayCanvas || !this.selectionCanvas || !this.canvasWrapper) {
+      return;
+    }
+
+    this.overlayCanvas.style.pointerEvents = enabled ? '' : 'none';
+    this.selectionCanvas.style.pointerEvents = 'none';
+    this.canvasWrapper.classList.toggle('define-room-interactions-disabled', !enabled);
+  }
+
+  public setViewMode(mode: DefineRoomViewMode): void {
+    if (this.viewMode === mode) {
+      return;
+    }
+
+    this.viewMode = mode;
+    this.root.classList.toggle('define-room-marker-mode', mode === 'markers');
   }
 
   public destroy(): void {
@@ -2179,6 +2228,11 @@ export class DefineRoom {
       canvas.style.transformOrigin = origin;
       canvas.style.transform = transformValue;
     });
+    if (this.markerLayer) {
+      this.markerLayer.style.transition = withTransition ? this.magnifyTransition : "none";
+      this.markerLayer.style.transformOrigin = origin;
+      this.markerLayer.style.transform = transformValue;
+    }
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
