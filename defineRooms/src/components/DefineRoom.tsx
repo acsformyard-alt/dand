@@ -550,6 +550,9 @@ export class DefineRoom {
 
   private brushRadius = 12;
 
+  private brushCircleOffsetCache: Map<number, Array<{ dx: number; dy: number }>> =
+    new Map();
+
   private magicWandTolerance = 38;
 
   private magneticRadius = 14;
@@ -1211,11 +1214,40 @@ export class DefineRoom {
     const clamped = clamp(rounded, this.brushRadiusMin, this.brushRadiusMax);
     if (this.brushRadius !== clamped) {
       this.brushRadius = clamped;
+      this.refreshBrushCircleOffsets(clamped);
     }
     this.updateBrushSliderUi();
     if (this.isAdjustingBrushSize || this.brushPreviewPoint) {
       this.renderSelectionOverlay();
     }
+  }
+
+  private refreshBrushCircleOffsets(radius: number): void {
+    const key = Math.max(0, Math.round(radius));
+    this.brushCircleOffsetCache.set(key, this.buildBrushCircleOffsets(key));
+  }
+
+  private getBrushCircleOffsets(radius: number): Array<{ dx: number; dy: number }> {
+    const key = Math.max(0, Math.round(radius));
+    let offsets = this.brushCircleOffsetCache.get(key);
+    if (!offsets) {
+      offsets = this.buildBrushCircleOffsets(key);
+      this.brushCircleOffsetCache.set(key, offsets);
+    }
+    return offsets;
+  }
+
+  private buildBrushCircleOffsets(radius: number): Array<{ dx: number; dy: number }> {
+    const offsets: Array<{ dx: number; dy: number }> = [];
+    const radiusSquared = radius * radius;
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (dx * dx + dy * dy <= radiusSquared) {
+          offsets.push({ dx, dy });
+        }
+      }
+    }
+    return offsets;
   }
 
   private updateBrushSliderUi(): void {
@@ -2203,27 +2235,22 @@ export class DefineRoom {
     const width = this.imageData.width;
     const height = this.imageData.height;
     const mask = room.mask;
+    const offsets = this.getBrushCircleOffsets(radius);
 
     const stamp = (point: Point) => {
       const cx = clamp(Math.round(point.x), 0, width - 1);
       const cy = clamp(Math.round(point.y), 0, height - 1);
-      const minX = clamp(cx - radius, 0, width - 1);
-      const maxX = clamp(cx + radius, 0, width - 1);
-      const minY = clamp(cy - radius, 0, height - 1);
-      const maxY = clamp(cy + radius, 0, height - 1);
-      const radiusSquared = radius * radius;
-      for (let y = minY; y <= maxY; y += 1) {
-        for (let x = minX; x <= maxX; x += 1) {
-          const dx = x - cx;
-          const dy = y - cy;
-          if (dx * dx + dy * dy <= radiusSquared) {
-            const index = y * width + x;
-            if (value === 1 && !this.canAssignMask(room, index)) {
-              continue;
-            }
-            mask[index] = value;
-          }
+      for (const { dx, dy } of offsets) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x < 0 || x >= width || y < 0 || y >= height) {
+          continue;
         }
+        const index = y * width + x;
+        if (value === 1 && !this.canAssignMask(room, index)) {
+          continue;
+        }
+        mask[index] = value;
       }
     };
 
