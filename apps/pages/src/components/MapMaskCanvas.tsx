@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Marker, Region } from '../types';
 import { roomMaskToPolygon } from '../utils/roomMask';
+import { getMapMarkerIconDefinition } from './mapMarkerIcons';
 
 interface MapMaskCanvasProps {
   imageUrl?: string | null;
@@ -178,20 +179,31 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
         onMouseLeave={() => setHoverRegion(null)}
         onClick={handleClick}
       />
-      {resolvedMarkers.map((marker) => (
-        <button
-          key={marker.id}
-          onClick={() => onSelectMarker?.(marker.id)}
-          className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
-          style={{
-            left: `${(marker.x ?? 0) * 100}%`,
-            top: `${(marker.y ?? 0) * 100}%`,
-          }}
-        >
-          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: marker.color || '#facc15' }} />
-          {marker.label}
-        </button>
-      ))}
+      {resolvedMarkers.map((marker) => {
+        const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        return (
+          <button
+            key={marker.id}
+            onClick={() => onSelectMarker?.(marker.id)}
+            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow transition hover:border-amber-400/80 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
+            style={{
+              left: `${(marker.x ?? 0) * 100}%`,
+              top: `${(marker.y ?? 0) * 100}%`,
+            }}
+          >
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: marker.color || iconDefinition?.defaultColor || '#facc15' }}
+            />
+            {iconDefinition && (
+              <span className="flex h-4 w-4 items-center justify-center text-amber-800 dark:text-amber-100">
+                {iconDefinition.icon}
+              </span>
+            )}
+            {marker.label}
+          </button>
+        );
+      })}
     </div>
   );
 };
