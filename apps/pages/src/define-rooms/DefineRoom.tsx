@@ -581,6 +581,13 @@ export class DefineRoom {
   private lastPoint: Point | null = null;
 
   private lassoPath: Point[] = [];
+  private markerPolygonCapture:
+    | null
+    | {
+        resolve: (points: Array<{ x: number; y: number }> | null) => void;
+        previousTool: ToolType;
+        previousInteractionMode: DefineRoomInteractionMode;
+      } = null;
 
   private brushPreviewPoint: Point | null = null;
 
@@ -831,6 +838,61 @@ export class DefineRoom {
     }
     this.updateToolAvailability();
     this.updateCanvasCursor();
+  }
+
+  public capturePolygonForMarker(): Promise<Array<{ x: number; y: number }> | null> {
+    if (!this.imageData) {
+      return Promise.resolve(null);
+    }
+    if (this.markerPolygonCapture) {
+      this.finishMarkerPolygonCapture(null);
+    }
+    const previousTool = this.currentTool;
+    const previousInteractionMode = this.interactionMode;
+    this.setMarkerPlacementMode(false);
+    this.setTool("lasso");
+    this.lassoPath = [];
+    this.renderSelectionOverlay();
+    return new Promise((resolve) => {
+      this.markerPolygonCapture = {
+        resolve,
+        previousTool,
+        previousInteractionMode,
+      };
+    });
+  }
+
+  public cancelMarkerPolygonCapture(): void {
+    if (!this.markerPolygonCapture) {
+      return;
+    }
+    const capture = this.markerPolygonCapture;
+    this.markerPolygonCapture = null;
+    this.setMarkerPlacementMode(capture.previousInteractionMode === "marker-placement");
+    this.setTool(capture.previousTool);
+    this.lassoPath = [];
+    this.renderSelectionOverlay();
+    capture.resolve(null);
+  }
+
+  private finishMarkerPolygonCapture(points: Point[] | null): void {
+    if (!this.markerPolygonCapture) {
+      return;
+    }
+    const capture = this.markerPolygonCapture;
+    this.markerPolygonCapture = null;
+    let result: Array<{ x: number; y: number }> | null = null;
+    if (points && points.length >= 3 && this.width > 0 && this.height > 0) {
+      result = points.map((point) => ({
+        x: clamp(point.x / this.width, 0, 1),
+        y: clamp(point.y / this.height, 0, 1),
+      }));
+    }
+    this.setMarkerPlacementMode(capture.previousInteractionMode === "marker-placement");
+    this.setTool(capture.previousTool);
+    this.lassoPath = [];
+    this.renderSelectionOverlay();
+    capture.resolve(result && result.length >= 3 ? result : null);
   }
 
   private initializeDomReferences(): void {
@@ -1872,7 +1934,7 @@ export class DefineRoom {
       return;
     }
 
-    if (!this.getActiveRoom()) {
+    if (!this.getActiveRoom() && !this.markerPolygonCapture) {
       return;
     }
 
@@ -2048,12 +2110,17 @@ export class DefineRoom {
     event.preventDefault();
 
     if (this.currentTool === "lasso" || this.currentTool === "magnetic") {
-      if (this.lassoPath.length > 2) {
-        this.captureUndoState();
-        this.applyPolygon(this.lassoPath);
+      if (this.markerPolygonCapture) {
+        const polygon = this.lassoPath.length > 2 ? [...this.lassoPath] : null;
+        this.finishMarkerPolygonCapture(polygon);
+      } else {
+        if (this.lassoPath.length > 2) {
+          this.captureUndoState();
+          this.applyPolygon(this.lassoPath);
+        }
+        this.lassoPath = [];
+        this.renderSelectionOverlay();
       }
-      this.lassoPath = [];
-      this.renderSelectionOverlay();
     }
 
     try {

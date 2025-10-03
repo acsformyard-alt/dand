@@ -46,6 +46,26 @@ interface DraftMarker {
   areaPoints: Array<{ x: number; y: number }>;
 }
 
+type CircleCaptureState = {
+  type: 'circle';
+  markerId: string;
+  pointerId: number | null;
+  center: { x: number; y: number } | null;
+  original: {
+    center: DraftMarker['areaCenter'];
+    radius: DraftMarker['areaRadius'];
+    x: number;
+    y: number;
+  };
+};
+
+type LassoCaptureState = {
+  type: 'lasso';
+  markerId: string;
+};
+
+type AreaCaptureState = CircleCaptureState | LassoCaptureState;
+
 interface DraftRoom {
   id: string;
   name: string;
@@ -199,6 +219,75 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+const applyAlphaToColor = (color: string, alpha: number) => {
+  const trimmed = color.trim();
+  const hexMatch = trimmed.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hexMatch) {
+    return trimmed;
+  }
+  let hex = hexMatch[1];
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map((char) => char + char)
+      .join('');
+  }
+  const value = Number.parseInt(hex, 16);
+  const r = (value >> 16) & 0xff;
+  const g = (value >> 8) & 0xff;
+  const b = value & 0xff;
+  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+};
+
+const computeCircleRadius = (
+  center: { x: number; y: number },
+  edge: { x: number; y: number },
+  dimensions: { width: number; height: number } | null,
+) => {
+  if (!dimensions || dimensions.width === 0 || dimensions.height === 0) {
+    const dx = edge.x - center.x;
+    const dy = edge.y - center.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  const aspect = dimensions.height / dimensions.width;
+  const dx = edge.x - center.x;
+  const dy = (edge.y - center.y) * aspect;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+const computePolygonCentroid = (points: Array<{ x: number; y: number }>) => {
+  if (!points.length) {
+    return { x: 0.5, y: 0.5 };
+  }
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
+    const cross = current.x * next.y - next.x * current.y;
+    area += cross;
+    cx += (current.x + next.x) * cross;
+    cy += (current.y + next.y) * cross;
+  }
+  area *= 0.5;
+  if (Math.abs(area) < 1e-6) {
+    const sum = points.reduce(
+      (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+      { x: 0, y: 0 },
+    );
+    return { x: sum.x / points.length, y: sum.y / points.length };
+  }
+  const centroid = {
+    x: cx / (6 * area),
+    y: cy / (6 * area),
+  };
+  return {
+    x: clamp(centroid.x, 0, 1),
+    y: clamp(centroid.y, 0, 1),
+  };
+};
+
 type MarkerIconBadgeSize = 'sm' | 'md' | 'lg';
 
 const markerIconBadgeSizeClasses: Record<MarkerIconBadgeSize, string> = {
@@ -346,6 +435,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
   const [markerPaletteOpen, setMarkerPaletteOpen] = useState(false);
   const [activeIconPickerId, setActiveIconPickerId] = useState<string | null>(null);
+  const [areaCapture, setAreaCapture] = useState<AreaCaptureState | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
@@ -595,7 +685,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
   useEffect(() => {
-    if (!draggingId) return;
+    if (!draggingId || areaCapture) return;
 
     const handlePointerMove = (event: PointerEvent) => {
       const point = resolveNormalizedPointWithinImage(
@@ -638,7 +728,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [draggingId, imageDimensions, markerDisplayMetrics]);
+  }, [draggingId, imageDimensions, markerDisplayMetrics, areaCapture]);
 
   useEffect(() => {
     if (markers.length === 0) {
@@ -682,6 +772,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const canLaunchRoomsEditor = defineRoomReady && Boolean(defineRoomImageRef.current);
   const pointMarkers = useMemo(
     () => markers.filter((marker) => marker.kind === 'point'),
+    [markers],
+  );
+  const areaMarkers = useMemo(
+    () => markers.filter((marker) => marker.kind === 'area'),
     [markers],
   );
 
@@ -807,55 +901,346 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     );
   };
 
+  const beginCircleCapture = useCallback(
+    (marker: DraftMarker) => {
+      setAreaCapture({
+        type: 'circle',
+        markerId: marker.id,
+        pointerId: null,
+        center: null,
+        original: {
+          center: marker.areaCenter,
+          radius: marker.areaRadius,
+          x: marker.x,
+          y: marker.y,
+        },
+      });
+      setExpandedMarkerId(marker.id);
+    },
+    [setExpandedMarkerId],
+  );
+
+  const beginLassoCapture = useCallback(
+    async (marker: DraftMarker) => {
+      const editor = defineRoomRef.current;
+      if (!editor) {
+        return;
+      }
+      setExpandedMarkerId(marker.id);
+      setAreaCapture({ type: 'lasso', markerId: marker.id });
+      try {
+        const polygon = await editor.capturePolygonForMarker();
+        if (!polygon || polygon.length < 3) {
+          return;
+        }
+        const centroid = computePolygonCentroid(polygon);
+        setMarkers((current) =>
+          current.map((entry) =>
+            entry.id === marker.id
+              ? {
+                  ...entry,
+                  areaShape: 'lasso',
+                  areaPoints: polygon,
+                  areaRadius: null,
+                  areaCenter: centroid,
+                  x: centroid.x,
+                  y: centroid.y,
+                }
+              : entry,
+          ),
+        );
+      } finally {
+        setAreaCapture((current) =>
+          current && current.type === 'lasso' && current.markerId === marker.id
+            ? null
+            : current,
+        );
+      }
+    },
+    [setExpandedMarkerId, setMarkers],
+  );
+
+  const handleMapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const capture = areaCapture;
+    if (!capture || capture.type !== 'circle' || capture.pointerId !== null) {
+      return;
+    }
+    const point = resolveNormalizedPointWithinImage(
+      event.nativeEvent,
+      mapAreaRef.current,
+      imageDimensions,
+      markerDisplayMetrics,
+    );
+    if (!point) {
+      return;
+    }
+    event.preventDefault();
+    setAreaCapture((current) => {
+      if (!current || current.type !== 'circle' || current.markerId !== capture.markerId) {
+        return current;
+      }
+      return { ...current, pointerId: event.pointerId, center: point };
+    });
+    setMarkers((current) =>
+      current.map((marker) =>
+        marker.id === capture.markerId
+          ? {
+              ...marker,
+              areaCenter: point,
+              areaRadius: 0,
+              x: point.x,
+              y: point.y,
+            }
+          : marker,
+      ),
+    );
+  };
+
+  useEffect(() => {
+    if (!areaCapture || areaCapture.type !== 'circle') {
+      return;
+    }
+    const { pointerId, center, markerId } = areaCapture;
+    if (pointerId === null || !center) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) {
+        return;
+      }
+      const point = resolveNormalizedPointWithinImage(
+        event,
+        mapAreaRef.current,
+        imageDimensions,
+        markerDisplayMetrics,
+      );
+      if (!point) {
+        return;
+      }
+      const radius = computeCircleRadius(center, point, imageDimensions);
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                areaCenter: center,
+                areaRadius: radius,
+                x: center.x,
+                y: center.y,
+              }
+            : marker,
+        ),
+      );
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) {
+        return;
+      }
+      const point = resolveNormalizedPointWithinImage(
+        event,
+        mapAreaRef.current,
+        imageDimensions,
+        markerDisplayMetrics,
+      );
+      let radius = 0;
+      if (point) {
+        radius = computeCircleRadius(center, point, imageDimensions);
+      }
+      const minimumRadius = 0.02;
+      const finalRadius = Number.isFinite(radius) && radius > minimumRadius ? radius : 0.08;
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                areaCenter: center,
+                areaRadius: finalRadius,
+                x: center.x,
+                y: center.y,
+              }
+            : marker,
+        ),
+      );
+      setAreaCapture((current) =>
+        current && current.type === 'circle' && current.markerId === markerId
+          ? null
+          : current,
+      );
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [areaCapture, imageDimensions, markerDisplayMetrics, setMarkers]);
+
+  useEffect(() => {
+    if (!areaCapture) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      event.preventDefault();
+      if (areaCapture.type === 'lasso') {
+        defineRoomRef.current?.cancelMarkerPolygonCapture();
+        setAreaCapture(null);
+        return;
+      }
+      if (areaCapture.type === 'circle') {
+        const { markerId, original } = areaCapture;
+        setMarkers((current) =>
+          current.map((marker) =>
+            marker.id === markerId
+              ? {
+                  ...marker,
+                  areaCenter: original.center,
+                  areaRadius: original.radius,
+                  x: original.x,
+                  y: original.y,
+                }
+              : marker,
+          ),
+        );
+        setAreaCapture(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [areaCapture, setMarkers]);
+
+  useEffect(() => {
+    if (!areaCapture) {
+      return;
+    }
+    if (step === 3) {
+      return;
+    }
+    if (areaCapture.type === 'lasso') {
+      defineRoomRef.current?.cancelMarkerPolygonCapture();
+    }
+    if (areaCapture.type === 'circle') {
+      const { markerId, original } = areaCapture;
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                areaCenter: original.center,
+                areaRadius: original.radius,
+                x: original.x,
+                y: original.y,
+              }
+            : marker,
+        ),
+      );
+    }
+    setAreaCapture(null);
+  }, [areaCapture, setMarkers, step]);
+
+  useEffect(() => {
+    if (!areaCapture || previewUrl) {
+      return;
+    }
+    if (areaCapture.type === 'lasso') {
+      defineRoomRef.current?.cancelMarkerPolygonCapture();
+    }
+    if (areaCapture.type === 'circle') {
+      const { markerId, original } = areaCapture;
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                areaCenter: original.center,
+                areaRadius: original.radius,
+                x: original.x,
+                y: original.y,
+              }
+            : marker,
+        ),
+      );
+    }
+    setAreaCapture(null);
+  }, [areaCapture, previewUrl, setMarkers]);
+
+
+  const handleChangeBoundary = useCallback(
+    (marker: DraftMarker) => {
+      if (marker.kind !== 'area') {
+        return;
+      }
+      if (areaCapture) {
+        if (areaCapture.markerId === marker.id) {
+          return;
+        }
+        if (areaCapture.type === 'lasso') {
+          defineRoomRef.current?.cancelMarkerPolygonCapture();
+        }
+        if (areaCapture.type === 'circle') {
+          const { markerId: activeId, original } = areaCapture;
+          setMarkers((current) =>
+            current.map((entry) =>
+              entry.id === activeId
+                ? {
+                    ...entry,
+                    areaCenter: original.center,
+                    areaRadius: original.radius,
+                    x: original.x,
+                    y: original.y,
+                  }
+                : entry,
+            ),
+          );
+        }
+        setAreaCapture(null);
+      }
+      if (marker.areaShape === 'lasso') {
+        void beginLassoCapture(marker);
+        return;
+      }
+      beginCircleCapture(marker);
+    },
+    [areaCapture, beginCircleCapture, beginLassoCapture, setMarkers],
+  );
+
+
   const handleRemoveMarker = (markerId: string) => {
+    if (areaCapture && areaCapture.markerId === markerId) {
+      if (areaCapture.type === 'lasso') {
+        defineRoomRef.current?.cancelMarkerPolygonCapture();
+      }
+      setAreaCapture(null);
+    }
     setMarkers((current) => current.filter((marker) => marker.id !== markerId));
     setExpandedMarkerId((current) => (current === markerId ? null : current));
   };
 
-  const promptAreaMarkerDefaults = (): {
-    shape: DraftMarkerAreaShape;
-    radius: number | null;
-    points: DraftMarker['areaPoints'];
-  } => {
+  const promptAreaMarkerShape = (): DraftMarkerAreaShape => {
     if (typeof window === 'undefined') {
-      return {
-        shape: 'circle' as DraftMarkerAreaShape,
-        radius: 0.2,
-        points: [] as DraftMarker['areaPoints'],
-      };
+      return 'circle';
     }
     const useCircle = window.confirm(
       'Create a circular area marker? Click “Cancel” to start with a freeform (lasso) outline.',
     );
-    if (useCircle) {
-      return {
-        shape: 'circle' as DraftMarkerAreaShape,
-        radius: 0.2,
-        points: [] as DraftMarker['areaPoints'],
-      };
-    }
-    const lassoSize = 0.08;
-    return {
-      shape: 'lasso' as DraftMarkerAreaShape,
-      radius: null,
-      points: [
-        { x: 0.5 - lassoSize, y: 0.5 - lassoSize },
-        { x: 0.5 + lassoSize, y: 0.5 - lassoSize },
-        { x: 0.5 + lassoSize, y: 0.5 + lassoSize },
-        { x: 0.5 - lassoSize, y: 0.5 + lassoSize },
-      ],
-    };
+    return useCircle ? 'circle' : 'lasso';
   };
 
   const handleAddMarker = (definition: MapMarkerIconDefinition) => {
-    const areaDefaults =
-      definition.kind === 'area'
-        ? promptAreaMarkerDefaults()
-        : {
-            shape: null as DraftMarkerAreaShape,
-            radius: null as number | null,
-            points: [] as DraftMarker['areaPoints'],
-          };
+    const areaShape = definition.kind === 'area' ? promptAreaMarkerShape() : null;
     let createdMarker: DraftMarker | null = null;
     setMarkers((current) => {
       const nextIndex = current.length + 1;
@@ -871,19 +1256,32 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         y: 0.5,
         iconKey: definition.key,
         kind: definition.kind,
-        areaShape: areaDefaults.shape,
+        areaShape,
         areaCenter:
-          definition.kind === 'area' && areaDefaults.shape === 'circle'
+          definition.kind === 'area' && areaShape === 'circle'
             ? { x: 0.5, y: 0.5 }
             : null,
-        areaRadius: areaDefaults.radius,
-        areaPoints: areaDefaults.points,
+        areaRadius:
+          definition.kind === 'area' && areaShape === 'circle'
+            ? 0.2
+            : null,
+        areaPoints:
+          definition.kind === 'area' && areaShape === 'lasso'
+            ? []
+            : [],
       };
       createdMarker = marker;
       return [...current, marker];
     });
     if (createdMarker) {
       setExpandedMarkerId(createdMarker.id);
+      if (createdMarker.kind === 'area') {
+        if (createdMarker.areaShape === 'circle') {
+          beginCircleCapture(createdMarker);
+        } else if (createdMarker.areaShape === 'lasso') {
+          void beginLassoCapture(createdMarker);
+        }
+      }
     }
   };
 
@@ -1227,7 +1625,94 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       className="absolute inset-0"
                     />
                     <div className="absolute inset-0 z-10">
-                      <div ref={mapAreaRef} className="relative h-full w-full">
+                      <div
+                        ref={mapAreaRef}
+                        className="relative h-full w-full"
+                        onPointerDown={handleMapPointerDown}
+                      >
+                        {areaMarkers.map((marker) => {
+                          if (!markerDisplayMetrics) {
+                            return null;
+                          }
+                          const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                          const markerColor =
+                            marker.color.trim() || iconDefinition?.defaultColor || '#22c55e';
+                          if (marker.areaShape === 'circle') {
+                            const center = marker.areaCenter;
+                            const radius = marker.areaRadius;
+                            if (!center || radius === null || radius <= 0) {
+                              return null;
+                            }
+                            const centerX =
+                              markerDisplayMetrics.offsetX + center.x * markerDisplayMetrics.displayWidth;
+                            const centerY =
+                              markerDisplayMetrics.offsetY + center.y * markerDisplayMetrics.displayHeight;
+                            const radiusPx = radius * markerDisplayMetrics.displayWidth;
+                            if (!Number.isFinite(radiusPx) || radiusPx <= 0) {
+                              return null;
+                            }
+                            return (
+                              <div
+                                key={`${marker.id}-circle`}
+                                className="pointer-events-none absolute z-0 rounded-full border-2"
+                                style={{
+                                  left: `${centerX - radiusPx}px`,
+                                  top: `${centerY - radiusPx}px`,
+                                  width: `${radiusPx * 2}px`,
+                                  height: `${radiusPx * 2}px`,
+                                  borderColor: markerColor,
+                                  backgroundColor: applyAlphaToColor(markerColor, 0.2),
+                                }}
+                              />
+                            );
+                          }
+                          if (marker.areaShape === 'lasso' && marker.areaPoints.length >= 3) {
+                            const points = marker.areaPoints
+                              .map((point) => {
+                                const x =
+                                  markerDisplayMetrics.offsetX + point.x * markerDisplayMetrics.displayWidth;
+                                const y =
+                                  markerDisplayMetrics.offsetY + point.y * markerDisplayMetrics.displayHeight;
+                                return `${x},${y}`;
+                              })
+                              .join(' ');
+                            if (!points) {
+                              return null;
+                            }
+                            return (
+                              <svg
+                                key={`${marker.id}-lasso`}
+                                className="pointer-events-none absolute inset-0 z-0"
+                                width={markerDisplayMetrics.containerWidth}
+                                height={markerDisplayMetrics.containerHeight}
+                                viewBox={`0 0 ${markerDisplayMetrics.containerWidth} ${markerDisplayMetrics.containerHeight}`}
+                                fill="none"
+                              >
+                                <polygon
+                                  points={points}
+                                  fill={applyAlphaToColor(markerColor, 0.18)}
+                                  stroke={markerColor}
+                                  strokeWidth={2}
+                                />
+                              </svg>
+                            );
+                          }
+                          return null;
+                        })}
+                        {areaCapture?.type === 'circle' && (
+                          <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center">
+                            <span className="rounded-full bg-slate-950/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-200">
+                              Click and drag on the map to set the circle boundary.
+                            </span>
+                          </div>
+                        )}
+                        {areaCapture?.type === 'lasso' && (
+                          <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center">
+                            <span className="rounded-full bg-slate-950/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-200">
+                              Use the room editor tools to outline this area.
+                            </span>
+                          </div>
+                        )}
                         {pointMarkers.map((marker) => {
                           const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
                           const markerColor =
@@ -1239,6 +1724,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                               type="button"
                               onPointerDown={(event) => {
                                 event.preventDefault();
+                                if (areaCapture) {
+                                  return;
+                                }
                                 setDraggingId(marker.id);
                               }}
                               style={containerPointToStyle(
@@ -1247,7 +1735,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                   markerDisplayMetrics,
                                 ),
                               )}
-                              className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+                              className="group absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
                               aria-label={markerName}
                               title={markerName}
                             >
@@ -1262,7 +1750,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                             </button>
                           );
                         })}
-                        {pointMarkers.length === 0 && (
+                        {markers.length === 0 && (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
                             Add markers from the panel to start placing points of interest.
                           </div>
@@ -1345,21 +1833,26 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       if (marker.kind === 'point') {
                         return `Position: ${Math.round(marker.x * 100)}% × ${Math.round(marker.y * 100)}%`;
                       }
-                      if (marker.kind === 'area') {
-                        if (marker.areaShape === 'circle') {
-                          const center = marker.areaCenter ?? { x: marker.x, y: marker.y };
-                          const centerX = Math.round(center.x * 100);
-                          const centerY = Math.round(center.y * 100);
-                          const radiusPercent = Math.round((marker.areaRadius ?? 0) * 100);
-                          return `Circle: center ${centerX}% × ${centerY}% • radius ${radiusPercent}%`;
+                    if (marker.kind === 'area') {
+                      if (marker.areaShape === 'circle') {
+                        if (!marker.areaCenter || marker.areaRadius === null || marker.areaRadius <= 0) {
+                          return 'Circle boundary not set';
                         }
-                        if (marker.areaShape === 'lasso') {
-                          return `Lasso: ${marker.areaPoints.length} point${
-                            marker.areaPoints.length === 1 ? '' : 's'
-                          }`;
-                        }
-                        return 'Area marker';
+                        const centerX = Math.round(marker.areaCenter.x * 100);
+                        const centerY = Math.round(marker.areaCenter.y * 100);
+                        const radiusPercent = Math.round(marker.areaRadius * 100);
+                        return `Circle: center ${centerX}% × ${centerY}% • radius ${radiusPercent}%`;
                       }
+                      if (marker.areaShape === 'lasso') {
+                        if (marker.areaPoints.length < 3) {
+                          return 'Lasso boundary not set';
+                        }
+                        return `Lasso: ${marker.areaPoints.length} point${
+                          marker.areaPoints.length === 1 ? '' : 's'
+                        }`;
+                      }
+                      return 'Area marker';
+                    }
                       return null;
                     })();
                     const metadata: React.ReactNode[] = [];
@@ -1549,6 +2042,32 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                             })}
                                         </div>
                                       </div>
+                                    )}
+                                  </div>
+                                )}
+                                {marker.kind === 'area' && (
+                                  <div className="space-y-2">
+                                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Boundary</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleChangeBoundary(marker)}
+                                      disabled={Boolean(
+                                        areaCapture && areaCapture.markerId === marker.id,
+                                      )}
+                                      className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                                        areaCapture && areaCapture.markerId === marker.id
+                                          ? 'cursor-not-allowed border-slate-800/60 text-slate-500'
+                                          : 'border-amber-400/60 text-amber-100 hover:bg-amber-300/20'
+                                      }`}
+                                    >
+                                      Change boundary
+                                    </button>
+                                    {areaCapture && areaCapture.markerId === marker.id && (
+                                      <p className="text-[10px] uppercase tracking-[0.35em] text-amber-200">
+                                        {marker.areaShape === 'lasso'
+                                          ? 'Use the lasso tool overlay to redraw the area.'
+                                          : 'Click and drag on the map to resize the circle.'}
+                                      </p>
                                     )}
                                   </div>
                                 )}
