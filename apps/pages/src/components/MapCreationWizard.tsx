@@ -14,6 +14,11 @@ import {
 } from '../utils/imageProcessing';
 import type { RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
+import {
+  getMapMarkerIconDefinition,
+  mapMarkerIconDefinitions,
+  type MapMarkerIconDefinition,
+} from './mapMarkerIcons';
 
 type WizardStep = 0 | 1 | 2 | 3;
 
@@ -295,12 +300,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
   const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
+  const [markerPaletteOpen, setMarkerPaletteOpen] = useState(false);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
   const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
   const stepRef = useRef(step);
   const brushSliderHostRef = useRef<HTMLDivElement | null>(null);
+  const markerPaletteRef = useRef<HTMLDivElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
@@ -484,6 +491,31 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     }
   }, [step, syncRoomsFromEditor]);
 
+  useEffect(() => {
+    if (!markerPaletteOpen) {
+      return undefined;
+    }
+    const handleClickAway = (event: MouseEvent) => {
+      if (!markerPaletteRef.current) {
+        return;
+      }
+      if (!markerPaletteRef.current.contains(event.target as Node)) {
+        setMarkerPaletteOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMarkerPaletteOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClickAway);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleClickAway);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [markerPaletteOpen]);
+
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
   useEffect(() => {
@@ -657,24 +689,84 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setExpandedMarkerId((current) => (current === markerId ? null : current));
   };
 
-  const handleAddMarker = () => {
-    const nextIndex = markers.length + 1;
-    const newMarker: DraftMarker = {
-      id: `draft-${Date.now()}-${nextIndex}`,
-      label: `Marker ${nextIndex}`,
-      color: '#facc15',
-      notes: '',
-      x: 0.5,
-      y: 0.5,
-      iconKey: null,
-      kind: 'point',
-      areaShape: null,
-      areaCenter: null,
-      areaRadius: null,
-      areaPoints: [],
+  const promptAreaMarkerDefaults = (): {
+    shape: DraftMarkerAreaShape;
+    radius: number | null;
+    points: DraftMarker['areaPoints'];
+  } => {
+    if (typeof window === 'undefined') {
+      return {
+        shape: 'circle' as DraftMarkerAreaShape,
+        radius: 0.2,
+        points: [] as DraftMarker['areaPoints'],
+      };
+    }
+    const useCircle = window.confirm(
+      'Create a circular area marker? Click “Cancel” to start with a freeform (lasso) outline.',
+    );
+    if (useCircle) {
+      return {
+        shape: 'circle' as DraftMarkerAreaShape,
+        radius: 0.2,
+        points: [] as DraftMarker['areaPoints'],
+      };
+    }
+    const lassoSize = 0.08;
+    return {
+      shape: 'lasso' as DraftMarkerAreaShape,
+      radius: null,
+      points: [
+        { x: 0.5 - lassoSize, y: 0.5 - lassoSize },
+        { x: 0.5 + lassoSize, y: 0.5 - lassoSize },
+        { x: 0.5 + lassoSize, y: 0.5 + lassoSize },
+        { x: 0.5 - lassoSize, y: 0.5 + lassoSize },
+      ],
     };
-    setMarkers((current) => [...current, newMarker]);
-    setExpandedMarkerId(newMarker.id);
+  };
+
+  const handleAddMarker = (definition: MapMarkerIconDefinition) => {
+    const areaDefaults =
+      definition.kind === 'area'
+        ? promptAreaMarkerDefaults()
+        : {
+            shape: null as DraftMarkerAreaShape,
+            radius: null as number | null,
+            points: [] as DraftMarker['areaPoints'],
+          };
+    let createdMarker: DraftMarker | null = null;
+    setMarkers((current) => {
+      const nextIndex = current.length + 1;
+      const id = `draft-${Date.now()}-${nextIndex}`;
+      const labelBase = definition.label.replace(/ Marker$/, '');
+      const label = `${labelBase} ${nextIndex}`.trim();
+      const marker: DraftMarker = {
+        id,
+        label,
+        color: definition.defaultColor,
+        notes: '',
+        x: 0.5,
+        y: 0.5,
+        iconKey: definition.key,
+        kind: definition.kind,
+        areaShape: areaDefaults.shape,
+        areaCenter:
+          definition.kind === 'area' && areaDefaults.shape === 'circle'
+            ? { x: 0.5, y: 0.5 }
+            : null,
+        areaRadius: areaDefaults.radius,
+        areaPoints: areaDefaults.points,
+      };
+      createdMarker = marker;
+      return [...current, marker];
+    });
+    if (createdMarker) {
+      setExpandedMarkerId(createdMarker.id);
+    }
+  };
+
+  const handleSelectMarkerTemplate = (definition: MapMarkerIconDefinition) => {
+    handleAddMarker(definition);
+    setMarkerPaletteOpen(false);
   };
 
   const handleContinue = () => {
@@ -755,6 +847,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           color: marker.color.trim() || undefined,
           x: marker.x,
           y: marker.y,
+          iconKey: marker.iconKey ?? undefined,
         });
         createdMarkers.push(payload);
       }
@@ -1052,13 +1145,53 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
                       <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMarker}
-                      className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
-                    >
-                      Add Marker
-                    </button>
+                    <div className="relative" ref={markerPaletteRef}>
+                      <button
+                        type="button"
+                        onClick={() => setMarkerPaletteOpen((current) => !current)}
+                        className="flex items-center gap-2 rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
+                        aria-haspopup="true"
+                        aria-expanded={markerPaletteOpen}
+                      >
+                        Add Marker
+                        <svg
+                          viewBox="0 0 12 12"
+                          className={`h-2.5 w-2.5 transition ${markerPaletteOpen ? 'rotate-180' : ''}`}
+                          aria-hidden
+                        >
+                          <path
+                            d="M2.25 4.5 6 8.25 9.75 4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                          />
+                        </svg>
+                      </button>
+                      {markerPaletteOpen && (
+                        <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-3 shadow-xl">
+                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
+                            Marker Type
+                          </p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {mapMarkerIconDefinitions.map((definition) => (
+                              <button
+                                key={definition.key}
+                                type="button"
+                                onClick={() => handleSelectMarkerTemplate(definition)}
+                                className="group flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800/70 bg-slate-900/70 text-slate-200 transition hover:border-amber-400/60 hover:text-amber-100"
+                                aria-label={definition.label}
+                                title={definition.label}
+                              >
+                                <span className="sr-only">{definition.label}</span>
+                                <span className="pointer-events-none text-current">{definition.icon}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
                     Create markers and drag them directly onto the map. Use notes to capture quick reminders.
@@ -1106,7 +1239,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         <span>{displayColor}</span>
                       </span>,
                     );
-                    if (marker.iconKey) {
+                    const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                    if (iconDefinition) {
+                      metadata.push(
+                        <span key="icon" className="flex items-center gap-1">
+                          <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
+                            {iconDefinition.icon}
+                          </span>
+                          <span>{iconDefinition.label.replace(' Marker', '')}</span>
+                        </span>,
+                      );
+                    } else if (marker.iconKey) {
                       metadata.push(
                         <span key="icon">Icon: {marker.iconKey}</span>,
                       );
