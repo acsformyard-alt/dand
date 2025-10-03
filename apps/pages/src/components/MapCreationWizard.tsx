@@ -199,6 +199,50 @@ const parseTagsInput = (input: string) =>
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
+type MarkerIconBadgeSize = 'sm' | 'md' | 'lg';
+
+const markerIconBadgeSizeClasses: Record<MarkerIconBadgeSize, string> = {
+  sm: 'h-6 w-6 text-[10px]',
+  md: 'h-9 w-9 text-xs',
+  lg: 'h-12 w-12 text-sm',
+};
+
+const markerIconBadgeIconSizeClasses: Record<MarkerIconBadgeSize, string> = {
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-6 w-6',
+};
+
+const MarkerIconBadge: React.FC<{
+  definition?: MapMarkerIconDefinition;
+  color: string;
+  size?: MarkerIconBadgeSize;
+  className?: string;
+  fallbackLabel?: string;
+}> = ({ definition, color, size = 'md', className = '', fallbackLabel }) => {
+  const sizeClassName = markerIconBadgeSizeClasses[size];
+  const iconSizeClassName = markerIconBadgeIconSizeClasses[size];
+  const fallbackText =
+    (fallbackLabel?.trim().charAt(0)?.toUpperCase() ?? '') || '?';
+  const iconElement = definition
+    ? React.cloneElement(definition.icon, {
+        className: iconSizeClassName,
+      })
+    : (
+        <span className="font-semibold uppercase leading-none">{fallbackText}</span>
+      );
+
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-full border text-slate-950 ${sizeClassName} ${className}`}
+      style={{ backgroundColor: color }}
+      aria-hidden
+    >
+      <span className="pointer-events-none">{iconElement}</span>
+    </span>
+  );
+};
+
 const createRoomMaskFromBinary = (
   mask: Uint8Array,
   width: number,
@@ -301,6 +345,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
   const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
   const [markerPaletteOpen, setMarkerPaletteOpen] = useState(false);
+  const [activeIconPickerId, setActiveIconPickerId] = useState<string | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defineRoomRef = useRef<DefineRoom | null>(null);
@@ -308,6 +353,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const stepRef = useRef(step);
   const brushSliderHostRef = useRef<HTMLDivElement | null>(null);
   const markerPaletteRef = useRef<HTMLDivElement | null>(null);
+  const iconPickerDropdownRef = useRef<HTMLDivElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
@@ -516,6 +562,36 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     };
   }, [markerPaletteOpen]);
 
+  useEffect(() => {
+    if (!activeIconPickerId) {
+      iconPickerDropdownRef.current = null;
+      return undefined;
+    }
+
+    const handleClickAway = (event: MouseEvent) => {
+      if (!iconPickerDropdownRef.current) {
+        return;
+      }
+      if (!iconPickerDropdownRef.current.contains(event.target as Node)) {
+        setActiveIconPickerId(null);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveIconPickerId(null);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickAway);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('mousedown', handleClickAway);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeIconPickerId]);
+
   const markerDisplayMetrics = useImageDisplayMetrics(mapAreaRef, imageDimensions);
 
   useEffect(() => {
@@ -576,6 +652,20 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setExpandedMarkerId(markers[markers.length - 1].id);
     }
   }, [markers, expandedMarkerId]);
+
+  useEffect(() => {
+    if (!expandedMarkerId) {
+      setActiveIconPickerId(null);
+      return;
+    }
+    setActiveIconPickerId((current) => (current === expandedMarkerId ? current : null));
+  }, [expandedMarkerId]);
+
+  useEffect(() => {
+    if (activeIconPickerId && !markers.some((marker) => marker.id === activeIconPickerId)) {
+      setActiveIconPickerId(null);
+    }
+  }, [activeIconPickerId, markers]);
 
   const allowNext = useMemo(() => {
     if (step === 0) {
@@ -679,6 +769,39 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         }
 
         (nextMarker as Record<keyof DraftMarker, unknown>)[field] = value as DraftMarker[typeof field];
+        return nextMarker;
+      }),
+    );
+  };
+
+  const handleMarkerIconChange = (
+    markerId: string,
+    definition: MapMarkerIconDefinition,
+  ) => {
+    setMarkers((current) =>
+      current.map((marker) => {
+        if (marker.id !== markerId) {
+          return marker;
+        }
+
+        if (marker.kind !== definition.kind) {
+          return marker;
+        }
+
+        const previousDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const nextMarker: DraftMarker = { ...marker, iconKey: definition.key };
+
+        const currentColor = (marker.color || '').trim().toLowerCase();
+        const previousDefaultColor = (previousDefinition?.defaultColor || '')
+          .trim()
+          .toLowerCase();
+
+        if (!marker.color.trim()) {
+          nextMarker.color = definition.defaultColor;
+        } else if (previousDefaultColor && currentColor === previousDefaultColor) {
+          nextMarker.color = definition.defaultColor;
+        }
+
         return nextMarker;
       }),
     );
@@ -1105,25 +1228,40 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     />
                     <div className="absolute inset-0 z-10">
                       <div ref={mapAreaRef} className="relative h-full w-full">
-                        {pointMarkers.map((marker) => (
-                          <button
-                            key={marker.id}
-                            type="button"
-                            onPointerDown={(event) => {
-                              event.preventDefault();
-                              setDraggingId(marker.id);
-                            }}
-                            style={containerPointToStyle(
-                              normalisedToContainerPoint(
-                                { x: marker.x, y: marker.y },
-                                markerDisplayMetrics,
-                              ),
-                            )}
-                            className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-slate-950/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg transition hover:border-amber-300/70 hover:text-amber-100"
-                          >
-                            {marker.label || 'Marker'}
-                          </button>
-                        ))}
+                        {pointMarkers.map((marker) => {
+                          const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                          const markerColor =
+                            marker.color.trim() || iconDefinition?.defaultColor || '#facc15';
+                          const markerName = marker.label || 'Marker';
+                          return (
+                            <button
+                              key={marker.id}
+                              type="button"
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                setDraggingId(marker.id);
+                              }}
+                              style={containerPointToStyle(
+                                normalisedToContainerPoint(
+                                  { x: marker.x, y: marker.y },
+                                  markerDisplayMetrics,
+                                ),
+                              )}
+                              className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+                              aria-label={markerName}
+                              title={markerName}
+                            >
+                              <span className="sr-only">{markerName}</span>
+                              <MarkerIconBadge
+                                definition={iconDefinition}
+                                color={markerColor}
+                                size="lg"
+                                fallbackLabel={marker.label}
+                                className="border-white/60 shadow-lg transition-transform duration-150 group-hover:scale-105"
+                              />
+                            </button>
+                          );
+                        })}
                         {pointMarkers.length === 0 && (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
                             Add markers from the panel to start placing points of interest.
@@ -1200,7 +1338,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
                   {markers.map((marker) => {
                     const isExpanded = expandedMarkerId === marker.id;
-                    const displayColor = marker.color || '#facc15';
+                    const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                    const displayColor =
+                      marker.color.trim() || iconDefinition?.defaultColor || '#facc15';
                     const geometrySummary = (() => {
                       if (marker.kind === 'point') {
                         return `Position: ${Math.round(marker.x * 100)}% × ${Math.round(marker.y * 100)}%`;
@@ -1231,29 +1371,24 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                       );
                     }
                     metadata.push(
-                      <span key="color" className="flex items-center gap-2">
-                        <span
-                          className="h-3 w-3 rounded-full border border-slate-700/70"
-                          style={{ backgroundColor: displayColor }}
+                      <span key="appearance" className="flex items-center gap-2">
+                        <MarkerIconBadge
+                          definition={iconDefinition}
+                          color={displayColor}
+                          size="sm"
+                          fallbackLabel={marker.label}
+                          className="border-slate-700/70 shadow-none"
                         />
-                        <span>{displayColor}</span>
+                        <span>{
+                          iconDefinition
+                            ? iconDefinition.label.replace(' Marker', '')
+                            : marker.iconKey
+                            ? `Icon: ${marker.iconKey}`
+                            : 'Marker'
+                        }</span>
+                        <span className="text-slate-500">{displayColor}</span>
                       </span>,
                     );
-                    const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
-                    if (iconDefinition) {
-                      metadata.push(
-                        <span key="icon" className="flex items-center gap-1">
-                          <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
-                            {iconDefinition.icon}
-                          </span>
-                          <span>{iconDefinition.label.replace(' Marker', '')}</span>
-                        </span>,
-                      );
-                    } else if (marker.iconKey) {
-                      metadata.push(
-                        <span key="icon">Icon: {marker.iconKey}</span>,
-                      );
-                    }
                     return (
                       <div
                         key={marker.id}
@@ -1303,7 +1438,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                 placeholder="Secret Door"
                               />
                             </label>
-                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
                               <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
                                 Notes
                                 <textarea
@@ -1316,18 +1451,120 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                   placeholder="Trap trigger, treasure cache, etc."
                                 />
                               </label>
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Color
-                                <input
-                                  type="text"
-                                  value={marker.color}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'color', event.target.value)
-                                  }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="#facc15"
-                                />
-                              </label>
+                              <div className="space-y-3">
+                                {marker.kind === 'point' && (
+                                  <div className="relative">
+                                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Icon</p>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setActiveIconPickerId((current) =>
+                                          current === marker.id ? null : marker.id,
+                                        )
+                                      }
+                                      className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 transition hover:border-amber-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                                      aria-haspopup="true"
+                                      aria-expanded={activeIconPickerId === marker.id}
+                                    >
+                                      <span className="flex items-center gap-2">
+                                        <MarkerIconBadge
+                                          definition={iconDefinition}
+                                          color={displayColor}
+                                          size="sm"
+                                          fallbackLabel={marker.label}
+                                          className="border-slate-700/70 shadow-none"
+                                        />
+                                        <span className="font-semibold uppercase tracking-[0.25em] text-slate-200">
+                                          {iconDefinition
+                                            ? iconDefinition.label.replace(' Marker', '')
+                                            : 'Marker'}
+                                        </span>
+                                      </span>
+                                      <svg
+                                        viewBox="0 0 12 12"
+                                        className={`h-2.5 w-2.5 text-slate-400 transition ${
+                                          activeIconPickerId === marker.id ? 'rotate-180 text-amber-200' : ''
+                                        }`}
+                                        aria-hidden
+                                      >
+                                        <path
+                                          d="M2.25 4.5 6 8.25 9.75 4.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={1.5}
+                                        />
+                                      </svg>
+                                    </button>
+                                    {activeIconPickerId === marker.id && (
+                                      <div
+                                        ref={(node) => {
+                                          if (activeIconPickerId === marker.id) {
+                                            iconPickerDropdownRef.current = node;
+                                          }
+                                        }}
+                                        className="absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl border border-slate-800/70 bg-slate-950/95 p-3 shadow-xl"
+                                      >
+                                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
+                                          Select Icon
+                                        </p>
+                                        <div className="space-y-2">
+                                          {mapMarkerIconDefinitions
+                                            .filter((definition) => definition.kind === marker.kind)
+                                            .map((definition) => {
+                                              const isSelected = definition.key === marker.iconKey;
+                                              return (
+                                                <button
+                                                  key={definition.key}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleMarkerIconChange(marker.id, definition);
+                                                    setActiveIconPickerId(null);
+                                                  }}
+                                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-xs transition ${
+                                                    isSelected
+                                                      ? 'border-amber-400/60 bg-amber-300/10 text-amber-100'
+                                                      : 'border-slate-800/70 bg-slate-900/70 text-slate-200 hover:border-amber-400/60 hover:text-amber-100'
+                                                  }`}
+                                                  aria-label={definition.label}
+                                                >
+                                                  <MarkerIconBadge
+                                                    definition={definition}
+                                                    color={definition.defaultColor}
+                                                    size="sm"
+                                                    className="border-slate-700/70 shadow-none"
+                                                    fallbackLabel={definition.label}
+                                                  />
+                                                  <div className="flex-1">
+                                                    <p className="font-semibold uppercase tracking-[0.25em]">
+                                                      {definition.label.replace(' Marker', '')}
+                                                    </p>
+                                                    <p className="mt-1 text-[9px] uppercase tracking-[0.35em] text-slate-500">
+                                                      {definition.defaultColor}
+                                                    </p>
+                                                  </div>
+                                                </button>
+                                              );
+                                            })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                                  Color
+                                  <input
+                                    type="text"
+                                    value={marker.color}
+                                    onChange={(event) =>
+                                      handleMarkerChange(marker.id, 'color', event.target.value)
+                                    }
+                                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                                    placeholder="#facc15"
+                                  />
+                                </label>
+                              </div>
                             </div>
                             <div className="flex justify-end">
                               <button
