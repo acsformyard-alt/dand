@@ -1362,13 +1362,54 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
 
       const createdMarkers: Marker[] = [];
       for (const marker of markers) {
+        let geometry: {
+          kind: 'point' | 'area';
+          areaShape?: 'circle' | 'polygon';
+          circle?: { center: { x: number; y: number }; radius: number };
+          polygon?: Array<{ x: number; y: number }>;
+        } = { kind: marker.kind === 'area' ? 'area' : 'point' };
+
+        if (geometry.kind === 'area') {
+          if (marker.areaShape === 'circle' && marker.areaCenter) {
+            const radius =
+              typeof marker.areaRadius === 'number' ? clamp(marker.areaRadius, 0, 1) : 0;
+            if (radius > 0) {
+              geometry = {
+                kind: 'area',
+                areaShape: 'circle',
+                circle: {
+                  center: {
+                    x: clamp(marker.areaCenter.x, 0, 1),
+                    y: clamp(marker.areaCenter.y, 0, 1),
+                  },
+                  radius,
+                },
+              };
+            } else {
+              geometry = { kind: 'point' };
+            }
+          } else if (marker.areaShape === 'lasso' && marker.areaPoints.length >= 3) {
+            geometry = {
+              kind: 'area',
+              areaShape: 'polygon',
+              polygon: marker.areaPoints.map((point) => ({
+                x: clamp(point.x, 0, 1),
+                y: clamp(point.y, 0, 1),
+              })),
+            };
+          } else {
+            geometry = { kind: 'point' };
+          }
+        }
+
         const payload = await apiClient.createMarker(map.id, {
           label: marker.label.trim() || 'Marker',
           notes: marker.notes.trim() || undefined,
           color: marker.color.trim() || undefined,
-          x: marker.x,
-          y: marker.y,
+          x: clamp(marker.x, 0, 1),
+          y: clamp(marker.y, 0, 1),
           iconKey: marker.iconKey ?? undefined,
+          ...geometry,
         });
         createdMarkers.push(payload);
       }

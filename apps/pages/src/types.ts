@@ -48,6 +48,19 @@ export interface Region {
   revealOrder?: number | null;
 }
 
+export type MarkerPoint = { x: number; y: number };
+
+export type MarkerKind = 'point' | 'area';
+
+export type MarkerAreaShape = 'circle' | 'polygon';
+
+export interface MarkerCircleGeometry {
+  center: MarkerPoint;
+  radius: number;
+}
+
+export type MarkerPolygonGeometry = MarkerPoint[];
+
 export interface Marker {
   id: string;
   mapId?: string;
@@ -58,6 +71,10 @@ export interface Marker {
   y: number;
   color?: string | null;
   notes?: string | null;
+  kind?: MarkerKind | null;
+  areaShape?: MarkerAreaShape | null;
+  circle?: MarkerCircleGeometry | null;
+  polygon?: MarkerPolygonGeometry | null;
 }
 
 export interface SessionRecord {

@@ -4,6 +4,10 @@ import type {
   LobbySessionSummary,
   MapRecord,
   Marker,
+  MarkerAreaShape,
+  MarkerCircleGeometry,
+  MarkerKind,
+  MarkerPolygonGeometry,
   Region,
   RoomMaskManifestEntry,
   SessionRecord,
@@ -60,6 +64,10 @@ interface MarkerPayload {
   y: number;
   color?: string;
   notes?: string;
+  kind?: MarkerKind;
+  areaShape?: MarkerAreaShape | null;
+  circle?: MarkerCircleGeometry | null;
+  polygon?: MarkerPolygonGeometry | null;
 }
 
 interface SessionPayload {
@@ -84,6 +92,227 @@ const polygonPointsFromRaw = (rawPolygon: unknown) => {
     }
   }
   return points;
+};
+
+const clampNormalized = (value: unknown, fallback = 0) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  if (numeric <= 0) {
+    return 0;
+  }
+  if (numeric >= 1) {
+    return 1;
+  }
+  return numeric;
+};
+
+const markerPointFromRaw = (point: unknown) => {
+  if (!point) {
+    return null;
+  }
+  if (Array.isArray(point) && point.length >= 2) {
+    return { x: clampNormalized(point[0]), y: clampNormalized(point[1]) };
+  }
+  if (typeof point === 'object') {
+    const candidate = point as { x?: unknown; y?: unknown };
+    if (candidate.x !== undefined && candidate.y !== undefined) {
+      return {
+        x: clampNormalized(candidate.x),
+        y: clampNormalized(candidate.y),
+      };
+    }
+  }
+  return null;
+};
+
+const normalizeMarkerCircleGeometry = (circle: unknown): MarkerCircleGeometry | null => {
+  if (!circle || typeof circle !== 'object') {
+    return null;
+  }
+  const circleObject = circle as { center?: unknown; radius?: unknown };
+  const center = markerPointFromRaw(circleObject.center);
+  const radius = Number(circleObject.radius);
+  if (!center || !Number.isFinite(radius) || radius <= 0) {
+    return null;
+  }
+  return {
+    center: {
+      x: clampNormalized(center.x),
+      y: clampNormalized(center.y),
+    },
+    radius,
+  };
+};
+
+const normalizeMarkerPolygonGeometry = (polygon: unknown): MarkerPolygonGeometry | null => {
+  const points = polygonPointsFromRaw(polygon).map((point) => ({
+    x: clampNormalized(point.x),
+    y: clampNormalized(point.y),
+  }));
+  if (points.length < 3) {
+    return null;
+  }
+  return points;
+};
+
+const markerAreaShapeFromRaw = (shape: unknown): MarkerAreaShape | null => {
+  if (typeof shape !== 'string') {
+    return null;
+  }
+  if (shape === 'circle') {
+    return 'circle';
+  }
+  if (shape === 'polygon' || shape === 'lasso') {
+    return 'polygon';
+  }
+  return null;
+};
+
+const serializeMarkerPayload = (payload: Partial<MarkerPayload>) => {
+  const body: Record<string, unknown> = {};
+  if (payload.label !== undefined) {
+    body.label = payload.label;
+  }
+  if (payload.description !== undefined) {
+    body.description = payload.description;
+  }
+  if (payload.iconKey !== undefined) {
+    body.iconKey = payload.iconKey;
+  }
+  if (payload.color !== undefined) {
+    body.color = payload.color;
+  }
+  if (payload.notes !== undefined) {
+    body.notes = payload.notes;
+  }
+  if (payload.x !== undefined) {
+    body.x = clampNormalized(payload.x, 0.5);
+  }
+  if (payload.y !== undefined) {
+    body.y = clampNormalized(payload.y, 0.5);
+  }
+
+  let nextKind: MarkerKind | undefined;
+  if (payload.kind === 'point' || payload.kind === 'area') {
+    nextKind = payload.kind;
+  }
+
+  const circleProvided = payload.circle !== undefined;
+  const polygonProvided = payload.polygon !== undefined;
+  const normalizedCircle = circleProvided ? normalizeMarkerCircleGeometry(payload.circle) : null;
+  const normalizedPolygon = polygonProvided ? normalizeMarkerPolygonGeometry(payload.polygon) : null;
+
+  let nextShape: MarkerAreaShape | null | undefined;
+  if (payload.areaShape !== undefined) {
+    nextShape = markerAreaShapeFromRaw(payload.areaShape);
+    if (payload.areaShape === null) {
+      nextShape = null;
+    }
+  }
+
+  if (!nextKind) {
+    if (normalizedCircle || normalizedPolygon) {
+      nextKind = 'area';
+    }
+  }
+
+  if (nextKind === 'area') {
+    if (!nextShape) {
+      nextShape = normalizedCircle ? 'circle' : normalizedPolygon ? 'polygon' : null;
+    }
+    if (nextShape === 'circle' && !normalizedCircle) {
+      nextShape = null;
+    }
+    if (nextShape === 'polygon' && !normalizedPolygon) {
+      nextShape = null;
+    }
+    if (!nextShape) {
+      nextKind = 'point';
+    }
+  }
+
+  const data: Record<string, unknown> = {};
+  let hasData = false;
+
+  if (nextKind) {
+    data.kind = nextKind;
+    hasData = true;
+  }
+
+  if (nextKind === 'area') {
+    if (nextShape === 'circle' && normalizedCircle) {
+      data.areaShape = 'circle';
+      data.circle = normalizedCircle;
+      hasData = true;
+    } else if (nextShape === 'polygon' && normalizedPolygon) {
+      data.areaShape = 'polygon';
+      data.polygon = normalizedPolygon;
+      hasData = true;
+    }
+  } else if (payload.areaShape === null) {
+    data.areaShape = null;
+    hasData = true;
+  }
+
+  if (hasData) {
+    body.data = data;
+  }
+
+  return body;
+};
+
+const normalizeMarker = (raw: any): Marker => {
+  const base: Marker = {
+    id: String(raw?.id ?? ''),
+    mapId: raw?.mapId ? String(raw.mapId) : undefined,
+    label: typeof raw?.label === 'string' ? raw.label : 'Marker',
+    description: typeof raw?.description === 'string' ? raw.description : raw?.description ?? null,
+    iconKey: typeof raw?.iconKey === 'string' ? raw.iconKey : raw?.iconKey ?? null,
+    x: clampNormalized(raw?.x, 0.5),
+    y: clampNormalized(raw?.y, 0.5),
+    color: typeof raw?.color === 'string' ? raw.color : raw?.color ?? null,
+    notes: typeof raw?.notes === 'string' ? raw.notes : raw?.notes ?? null,
+    kind: 'point',
+    areaShape: null,
+    circle: null,
+    polygon: null,
+  };
+
+  const data = raw?.data && typeof raw.data === 'object' ? (raw.data as Record<string, unknown>) : {};
+  const kind = raw?.kind ?? data.kind;
+  if (kind === 'area') {
+    base.kind = 'area';
+  }
+
+  let shape = markerAreaShapeFromRaw(raw?.areaShape ?? data.areaShape);
+  if (shape && base.kind !== 'area') {
+    shape = null;
+  }
+
+  const circle = normalizeMarkerCircleGeometry(raw?.circle ?? data.circle);
+  const polygon = normalizeMarkerPolygonGeometry(raw?.polygon ?? data.polygon);
+
+  if (base.kind === 'area') {
+    if (shape === 'circle' && circle) {
+      base.areaShape = 'circle';
+      base.circle = circle;
+    } else if (shape === 'polygon' && polygon) {
+      base.areaShape = 'polygon';
+      base.polygon = polygon;
+    } else if (circle) {
+      base.areaShape = 'circle';
+      base.circle = circle;
+    } else if (polygon) {
+      base.areaShape = 'polygon';
+      base.polygon = polygon;
+    } else {
+      base.kind = 'point';
+    }
+  }
+
+  return base;
 };
 
 const ensureManifest = (
@@ -300,22 +529,27 @@ export class ApiClient {
   }
 
   async getMarkers(mapId: string): Promise<Marker[]> {
-    const { markers } = await this.request<{ markers: Marker[] }>(`/api/maps/${mapId}/markers`);
-    return markers;
+    const { markers } = await this.request<{ markers: unknown[] }>(`/api/maps/${mapId}/markers`);
+    if (!Array.isArray(markers)) {
+      return [];
+    }
+    return markers.map((marker) => normalizeMarker(marker));
   }
 
   async createMarker(mapId: string, payload: MarkerPayload): Promise<Marker> {
-    const { marker } = await this.request<{ marker: Marker }>(`/api/maps/${mapId}/markers`, {
+    const body = serializeMarkerPayload(payload);
+    const { marker } = await this.request<{ marker: unknown }>(`/api/maps/${mapId}/markers`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
-    return marker;
+    return normalizeMarker(marker);
   }
 
   async updateMarker(markerId: string, payload: Partial<MarkerPayload>) {
+    const body = serializeMarkerPayload(payload);
     await this.request(`/api/markers/${markerId}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
   }
 
