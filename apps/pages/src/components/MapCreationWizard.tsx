@@ -23,6 +23,9 @@ interface MapCreationWizardProps {
   onComplete: (map: MapRecord, markers: Marker[], regions: Region[]) => void;
 }
 
+type DraftMarkerKind = 'point' | 'area';
+type DraftMarkerAreaShape = 'circle' | 'lasso' | null;
+
 interface DraftMarker {
   id: string;
   label: string;
@@ -30,6 +33,12 @@ interface DraftMarker {
   notes: string;
   x: number;
   y: number;
+  iconKey: string | null;
+  kind: DraftMarkerKind;
+  areaShape: DraftMarkerAreaShape;
+  areaCenter: { x: number; y: number } | null;
+  areaRadius: number | null;
+  areaPoints: Array<{ x: number; y: number }>;
 }
 
 interface DraftRoom {
@@ -489,9 +498,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       );
       if (!point) return;
       setMarkers((current) =>
-        current.map((marker) =>
-          marker.id === draggingId ? { ...marker, x: point.x, y: point.y } : marker,
-        ),
+        current.map((marker) => {
+          if (marker.id !== draggingId) {
+            return marker;
+          }
+          if (marker.kind === 'point') {
+            return { ...marker, x: point.x, y: point.y };
+          }
+          if (marker.kind === 'area' && marker.areaShape === 'circle') {
+            return {
+              ...marker,
+              x: point.x,
+              y: point.y,
+              areaCenter: { x: point.x, y: point.y },
+            };
+          }
+          return marker;
+        }),
       );
     };
 
@@ -535,6 +558,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
 
   const canLaunchRoomsEditor = defineRoomReady && Boolean(defineRoomImageRef.current);
+  const pointMarkers = useMemo(
+    () => markers.filter((marker) => marker.kind === 'point'),
+    [markers],
+  );
 
   const handleFileSelected = useCallback((selected: File) => {
     setFile(selected);
@@ -558,16 +585,70 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleMarkerChange = (markerId: string, field: keyof DraftMarker, value: string) => {
+  const handleMarkerChange = (markerId: string, field: keyof DraftMarker, value: unknown) => {
     setMarkers((current) =>
-      current.map((marker) =>
-        marker.id === markerId
-          ? {
-              ...marker,
-              [field]: field === 'x' || field === 'y' ? Number(value) : value,
+      current.map((marker) => {
+        if (marker.id !== markerId) {
+          return marker;
+        }
+
+        const nextMarker: DraftMarker = { ...marker };
+
+        if (field === 'x' || field === 'y') {
+          const numericValue =
+            typeof value === 'number'
+              ? value
+              : typeof value === 'string'
+              ? Number(value)
+              : Number.NaN;
+          if (Number.isFinite(numericValue)) {
+            nextMarker[field] = numericValue;
+          }
+          return nextMarker;
+        }
+
+        if (field === 'areaRadius') {
+          const numericValue =
+            typeof value === 'number'
+              ? value
+              : typeof value === 'string'
+              ? Number(value)
+              : Number.NaN;
+          nextMarker.areaRadius = Number.isFinite(numericValue) ? numericValue : nextMarker.areaRadius;
+          return nextMarker;
+        }
+
+        if (field === 'areaCenter') {
+          if (value === null) {
+            nextMarker.areaCenter = null;
+            return nextMarker;
+          }
+          if (typeof value === 'object' && value) {
+            const candidate = value as { x?: number; y?: number };
+            const xValue = Number(candidate.x);
+            const yValue = Number(candidate.y);
+            if (Number.isFinite(xValue) && Number.isFinite(yValue)) {
+              nextMarker.areaCenter = { x: xValue, y: yValue };
             }
-          : marker,
-      ),
+          }
+          return nextMarker;
+        }
+
+        if (field === 'areaPoints') {
+          if (Array.isArray(value)) {
+            nextMarker.areaPoints = value
+              .map((point) => ({
+                x: Number((point as { x?: number }).x ?? 0),
+                y: Number((point as { y?: number }).y ?? 0),
+              }))
+              .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+          }
+          return nextMarker;
+        }
+
+        (nextMarker as Record<keyof DraftMarker, unknown>)[field] = value as DraftMarker[typeof field];
+        return nextMarker;
+      }),
     );
   };
 
@@ -585,6 +666,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       notes: '',
       x: 0.5,
       y: 0.5,
+      iconKey: null,
+      kind: 'point',
+      areaShape: null,
+      areaCenter: null,
+      areaRadius: null,
+      areaPoints: [],
     };
     setMarkers((current) => [...current, newMarker]);
     setExpandedMarkerId(newMarker.id);
@@ -925,7 +1012,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     />
                     <div className="absolute inset-0 z-10">
                       <div ref={mapAreaRef} className="relative h-full w-full">
-                        {markers.map((marker) => (
+                        {pointMarkers.map((marker) => (
                           <button
                             key={marker.id}
                             type="button"
@@ -944,7 +1031,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                             {marker.label || 'Marker'}
                           </button>
                         ))}
-                        {markers.length === 0 && (
+                        {pointMarkers.length === 0 && (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
                             Add markers from the panel to start placing points of interest.
                           </div>
@@ -980,6 +1067,50 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                 <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
                   {markers.map((marker) => {
                     const isExpanded = expandedMarkerId === marker.id;
+                    const displayColor = marker.color || '#facc15';
+                    const geometrySummary = (() => {
+                      if (marker.kind === 'point') {
+                        return `Position: ${Math.round(marker.x * 100)}% × ${Math.round(marker.y * 100)}%`;
+                      }
+                      if (marker.kind === 'area') {
+                        if (marker.areaShape === 'circle') {
+                          const center = marker.areaCenter ?? { x: marker.x, y: marker.y };
+                          const centerX = Math.round(center.x * 100);
+                          const centerY = Math.round(center.y * 100);
+                          const radiusPercent = Math.round((marker.areaRadius ?? 0) * 100);
+                          return `Circle: center ${centerX}% × ${centerY}% • radius ${radiusPercent}%`;
+                        }
+                        if (marker.areaShape === 'lasso') {
+                          return `Lasso: ${marker.areaPoints.length} point${
+                            marker.areaPoints.length === 1 ? '' : 's'
+                          }`;
+                        }
+                        return 'Area marker';
+                      }
+                      return null;
+                    })();
+                    const metadata: React.ReactNode[] = [];
+                    if (geometrySummary) {
+                      metadata.push(
+                        <span key="geometry">
+                          {geometrySummary}
+                        </span>,
+                      );
+                    }
+                    metadata.push(
+                      <span key="color" className="flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 rounded-full border border-slate-700/70"
+                          style={{ backgroundColor: displayColor }}
+                        />
+                        <span>{displayColor}</span>
+                      </span>,
+                    );
+                    if (marker.iconKey) {
+                      metadata.push(
+                        <span key="icon">Icon: {marker.iconKey}</span>,
+                      );
+                    }
                     return (
                       <div
                         key={marker.id}
@@ -999,18 +1130,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         >
                           <div>
                             <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                              <span>
-                                Position: {Math.round(marker.x * 100)}% × {Math.round(marker.y * 100)}%
-                              </span>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className="h-3 w-3 rounded-full border border-slate-700/70"
-                                  style={{ backgroundColor: marker.color || '#facc15' }}
-                                />
-                                <span>{marker.color}</span>
-                              </span>
-                            </div>
+                            {metadata.length > 0 && (
+                              <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                                {metadata.map((item, index) => (
+                                  <React.Fragment key={index}>{item}</React.Fragment>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <span
                             className={`text-[10px] uppercase tracking-[0.35em] ${
