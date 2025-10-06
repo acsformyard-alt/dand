@@ -12,7 +12,7 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import type { RoomMask } from '../utils/roomMask';
+import { roomMaskToPolygon, type RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 import {
   getMapMarkerIconDefinition,
@@ -44,6 +44,8 @@ interface DraftMarker {
   areaCenter: { x: number; y: number } | null;
   areaRadius: number | null;
   areaPoints: Array<{ x: number; y: number }>;
+  linkedRoomId: string | null;
+  linkedRoomIdSource: 'auto' | 'manual';
 }
 
 type CircleCaptureState = {
@@ -288,6 +290,52 @@ const computePolygonCentroid = (points: Array<{ x: number; y: number }>) => {
   };
 };
 
+const isPointInPolygon = (
+  point: { x: number; y: number },
+  polygon: Array<{ x: number; y: number }>,
+) => {
+  if (polygon.length < 3) {
+    return false;
+  }
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i += 1) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersects = yi > point.y !== yj > point.y;
+    if (intersects) {
+      const slope = (xj - xi) / (yj - yi + Number.EPSILON);
+      const xIntersection = slope * (point.y - yi) + xi;
+      if (point.x < xIntersection) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+};
+
+const deriveMarkerReferencePoint = (marker: DraftMarker) => {
+  if (marker.kind === 'area') {
+    if (marker.areaCenter) {
+      return marker.areaCenter;
+    }
+    if (marker.areaPoints.length >= 3) {
+      return computePolygonCentroid(marker.areaPoints);
+    }
+  }
+  return { x: marker.x, y: marker.y };
+};
+
+const describeRoomCategory = (room: DraftRoom) => {
+  const tags = (room.tags || '').toLowerCase();
+  const name = room.name.toLowerCase();
+  if (tags.includes('hall') || name.includes('hall')) {
+    return 'Hallway';
+  }
+  return 'Room';
+};
+
 type MarkerIconBadgeSize = 'sm' | 'md' | 'lg';
 
 const markerIconBadgeSizeClasses: Record<MarkerIconBadgeSize, string> = {
@@ -448,6 +496,83 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
     setDefineRoomContainer(node);
   }, []);
+
+  const roomPolygonById = useMemo(() => {
+    const polygons = new Map<string, Array<{ x: number; y: number }>>();
+    for (const room of definedRooms) {
+      if (!room.mask) {
+        continue;
+      }
+      const polygon = roomMaskToPolygon(room.mask);
+      if (polygon.length >= 3) {
+        polygons.set(room.id, polygon);
+      }
+    }
+    return polygons;
+  }, [definedRooms]);
+
+  const findContainingRoomId = useCallback(
+    (point: { x: number; y: number } | null) => {
+      if (!point) {
+        return null;
+      }
+      for (const [roomId, polygon] of roomPolygonById) {
+        if (isPointInPolygon(point, polygon)) {
+          return roomId;
+        }
+      }
+      return null;
+    },
+    [roomPolygonById],
+  );
+
+  const applyAutoAssociation = useCallback(
+    (marker: DraftMarker, pointOverride?: { x: number; y: number } | null): DraftMarker => {
+      if (marker.linkedRoomIdSource === 'manual') {
+        return marker;
+      }
+      const referencePoint = pointOverride ?? deriveMarkerReferencePoint(marker);
+      const nextLinkedRoomId = findContainingRoomId(referencePoint);
+      if (nextLinkedRoomId === marker.linkedRoomId && marker.linkedRoomIdSource === 'auto') {
+        return marker;
+      }
+      if (nextLinkedRoomId === marker.linkedRoomId && marker.linkedRoomIdSource !== 'auto') {
+        return { ...marker, linkedRoomIdSource: 'auto' };
+      }
+      return {
+        ...marker,
+        linkedRoomId: nextLinkedRoomId,
+        linkedRoomIdSource: 'auto',
+      };
+    },
+    [findContainingRoomId],
+  );
+
+  const updateMarkerWithAssociation = useCallback(
+    (
+      marker: DraftMarker,
+      updates: Partial<DraftMarker>,
+      pointOverride?: { x: number; y: number } | null,
+    ): DraftMarker => {
+      const merged = { ...marker, ...updates };
+      return applyAutoAssociation(merged, pointOverride);
+    },
+    [applyAutoAssociation],
+  );
+
+  useEffect(() => {
+    setMarkers((current) => {
+      let changed = false;
+      const next = current.map((marker) => {
+        const updated = applyAutoAssociation(marker);
+        if (updated !== marker) {
+          changed = true;
+        }
+        return updated;
+      });
+      return changed ? next : current;
+    });
+  }, [applyAutoAssociation]);
 
   useEffect(() => {
     stepRef.current = step;
@@ -701,22 +826,38 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
             return marker;
           }
           if (marker.kind === 'point') {
-            return { ...marker, x: point.x, y: point.y };
+            return updateMarkerWithAssociation(
+              marker,
+              { x: point.x, y: point.y },
+              point,
+            );
           }
           if (marker.kind === 'area' && marker.areaShape === 'circle') {
-            return {
-              ...marker,
-              x: point.x,
-              y: point.y,
-              areaCenter: { x: point.x, y: point.y },
-            };
+            return updateMarkerWithAssociation(
+              marker,
+              {
+                x: point.x,
+                y: point.y,
+                areaCenter: { x: point.x, y: point.y },
+              },
+              point,
+            );
           }
           return marker;
         }),
       );
     };
 
+    const markerId = draggingId;
+
     const handlePointerUp = () => {
+      if (markerId) {
+        setMarkers((current) =>
+          current.map((marker) =>
+            marker.id === markerId ? applyAutoAssociation(marker) : marker,
+          ),
+        );
+      }
       setDraggingId(null);
     };
 
@@ -728,7 +869,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [draggingId, imageDimensions, markerDisplayMetrics, areaCapture]);
+  }, [
+    draggingId,
+    imageDimensions,
+    markerDisplayMetrics,
+    areaCapture,
+    updateMarkerWithAssociation,
+    applyAutoAssociation,
+  ]);
 
   useEffect(() => {
     if (markers.length === 0) {
@@ -901,6 +1049,54 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     );
   };
 
+  const handleMarkerAssociationChange = (markerId: string, value: string) => {
+    if (value === 'auto') {
+      setMarkers((current) =>
+        current.map((marker) => {
+          if (marker.id !== markerId) {
+            return marker;
+          }
+          const resetMarker =
+            marker.linkedRoomIdSource === 'auto'
+              ? marker
+              : { ...marker, linkedRoomIdSource: 'auto' as const };
+          return applyAutoAssociation(resetMarker);
+        }),
+      );
+      return;
+    }
+
+    if (value === 'unassigned') {
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                linkedRoomId: null,
+                linkedRoomIdSource: 'manual',
+              }
+            : marker,
+        ),
+      );
+      return;
+    }
+
+    if (value.startsWith('room:')) {
+      const roomId = value.slice(5);
+      setMarkers((current) =>
+        current.map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                linkedRoomId: roomId,
+                linkedRoomIdSource: 'manual',
+              }
+            : marker,
+        ),
+      );
+    }
+  };
+
   const beginCircleCapture = useCallback(
     (marker: DraftMarker) => {
       setAreaCapture({
@@ -937,15 +1133,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         setMarkers((current) =>
           current.map((entry) =>
             entry.id === marker.id
-              ? {
-                  ...entry,
-                  areaShape: 'lasso',
-                  areaPoints: polygon,
-                  areaRadius: null,
-                  areaCenter: centroid,
-                  x: centroid.x,
-                  y: centroid.y,
-                }
+              ? updateMarkerWithAssociation(
+                  entry,
+                  {
+                    areaShape: 'lasso',
+                    areaPoints: polygon,
+                    areaRadius: null,
+                    areaCenter: centroid,
+                    x: centroid.x,
+                    y: centroid.y,
+                  },
+                  centroid,
+                )
               : entry,
           ),
         );
@@ -987,13 +1186,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setMarkers((current) =>
       current.map((marker) =>
         marker.id === capture.markerId
-          ? {
-              ...marker,
-              areaCenter: point,
-              areaRadius: 0,
-              x: point.x,
-              y: point.y,
-            }
+          ? updateMarkerWithAssociation(
+              marker,
+              {
+                areaCenter: point,
+                areaRadius: 0,
+                x: point.x,
+                y: point.y,
+              },
+              point,
+            )
           : marker,
       ),
     );
@@ -1025,13 +1227,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setMarkers((current) =>
         current.map((marker) =>
           marker.id === markerId
-            ? {
-                ...marker,
-                areaCenter: center,
-                areaRadius: radius,
-                x: center.x,
-                y: center.y,
-              }
+            ? updateMarkerWithAssociation(
+                marker,
+                {
+                  areaCenter: center,
+                  areaRadius: radius,
+                  x: center.x,
+                  y: center.y,
+                },
+                center,
+              )
             : marker,
         ),
       );
@@ -1056,13 +1261,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setMarkers((current) =>
         current.map((marker) =>
           marker.id === markerId
-            ? {
-                ...marker,
-                areaCenter: center,
-                areaRadius: finalRadius,
-                x: center.x,
-                y: center.y,
-              }
+            ? applyAutoAssociation(
+                {
+                  ...marker,
+                  areaCenter: center,
+                  areaRadius: finalRadius,
+                  x: center.x,
+                  y: center.y,
+                },
+                center,
+              )
             : marker,
         ),
       );
@@ -1082,7 +1290,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [areaCapture, imageDimensions, markerDisplayMetrics, setMarkers]);
+  }, [
+    areaCapture,
+    imageDimensions,
+    markerDisplayMetrics,
+    updateMarkerWithAssociation,
+    applyAutoAssociation,
+  ]);
 
   useEffect(() => {
     if (!areaCapture) {
@@ -1103,13 +1317,16 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         setMarkers((current) =>
           current.map((marker) =>
             marker.id === markerId
-              ? {
-                  ...marker,
-                  areaCenter: original.center,
-                  areaRadius: original.radius,
-                  x: original.x,
-                  y: original.y,
-                }
+              ? applyAutoAssociation(
+                  {
+                    ...marker,
+                    areaCenter: original.center,
+                    areaRadius: original.radius,
+                    x: original.x,
+                    y: original.y,
+                  },
+                  original.center,
+                )
               : marker,
           ),
         );
@@ -1120,7 +1337,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [areaCapture, setMarkers]);
+  }, [areaCapture, setMarkers, applyAutoAssociation]);
 
   useEffect(() => {
     if (!areaCapture) {
@@ -1137,19 +1354,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setMarkers((current) =>
         current.map((marker) =>
           marker.id === markerId
-            ? {
-                ...marker,
-                areaCenter: original.center,
-                areaRadius: original.radius,
-                x: original.x,
-                y: original.y,
-              }
+            ? applyAutoAssociation(
+                {
+                  ...marker,
+                  areaCenter: original.center,
+                  areaRadius: original.radius,
+                  x: original.x,
+                  y: original.y,
+                },
+                original.center,
+              )
             : marker,
         ),
       );
     }
     setAreaCapture(null);
-  }, [areaCapture, setMarkers, step]);
+  }, [areaCapture, setMarkers, step, applyAutoAssociation]);
 
   useEffect(() => {
     if (!areaCapture || previewUrl) {
@@ -1269,9 +1489,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           definition.kind === 'area' && areaShape === 'lasso'
             ? []
             : [],
+        linkedRoomId: null,
+        linkedRoomIdSource: 'auto',
       };
-      createdMarker = marker;
-      return [...current, marker];
+      const autoAssociated = applyAutoAssociation(marker, { x: marker.x, y: marker.y });
+      createdMarker = autoAssociated;
+      return [...current, autoAssociated];
     });
     if (createdMarker) {
       setExpandedMarkerId(createdMarker.id);
@@ -1360,8 +1583,41 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       await uploadFile(uploads.original);
       await uploadFile(uploads.display);
 
+      const createdRegions: Region[] = [];
+      const regionIdByDraftId = new Map<string, string>();
+      for (const [index, room] of definedRooms.entries()) {
+        if (!room.mask) {
+          continue;
+        }
+        const notesSections: string[] = [];
+        const trimmedDescription = room.description.trim();
+        const trimmedTags = room.tags.trim();
+        if (trimmedDescription) {
+          notesSections.push(trimmedDescription);
+        }
+        if (trimmedTags) {
+          notesSections.push(`Tags: ${trimmedTags}`);
+        }
+        if (room.visibleAtStart) {
+          notesSections.push('Visible at start of session');
+        }
+        const notesValue = notesSections.length > 0 ? notesSections.join('\n\n') : undefined;
+        const region = await apiClient.createRegion(map.id, {
+          name: room.name.trim() || `Room ${index + 1}`,
+          mask: room.mask,
+          notes: notesValue,
+          revealOrder: room.visibleAtStart ? index : undefined,
+        });
+        regionIdByDraftId.set(room.id, region.id);
+        createdRegions.push(region);
+      }
+
+      const resolvedMarkers = markers.map((marker) =>
+        marker.linkedRoomIdSource === 'auto' ? applyAutoAssociation(marker) : marker,
+      );
+
       const createdMarkers: Marker[] = [];
-      for (const marker of markers) {
+      for (const marker of resolvedMarkers) {
         let geometry: {
           kind: 'point' | 'area';
           areaShape?: 'circle' | 'polygon';
@@ -1402,6 +1658,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           }
         }
 
+        const regionId = marker.linkedRoomId ? regionIdByDraftId.get(marker.linkedRoomId) : undefined;
+
         const payload = await apiClient.createMarker(map.id, {
           label: marker.label.trim() || 'Marker',
           notes: marker.notes.trim() || undefined,
@@ -1409,36 +1667,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           x: clamp(marker.x, 0, 1),
           y: clamp(marker.y, 0, 1),
           iconKey: marker.iconKey ?? undefined,
+          regionId,
           ...geometry,
         });
         createdMarkers.push(payload);
-      }
-
-      const createdRegions: Region[] = [];
-      for (const [index, room] of definedRooms.entries()) {
-        if (!room.mask) {
-          continue;
-        }
-        const notesSections: string[] = [];
-        const trimmedDescription = room.description.trim();
-        const trimmedTags = room.tags.trim();
-        if (trimmedDescription) {
-          notesSections.push(trimmedDescription);
-        }
-        if (trimmedTags) {
-          notesSections.push(`Tags: ${trimmedTags}`);
-        }
-        if (room.visibleAtStart) {
-          notesSections.push('Visible at start of session');
-        }
-        const notesValue = notesSections.length > 0 ? notesSections.join('\n\n') : undefined;
-        const region = await apiClient.createRegion(map.id, {
-          name: room.name.trim() || `Room ${index + 1}`,
-          mask: room.mask,
-          notes: notesValue,
-          revealOrder: room.visibleAtStart ? index : undefined,
-        });
-        createdRegions.push(region);
       }
 
       onComplete(map, createdMarkers, createdRegions);
@@ -1896,7 +2128,47 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                     }
                       return null;
                     })();
+                    const associatedRoom =
+                      marker.linkedRoomId
+                        ? definedRooms.find((room) => room.id === marker.linkedRoomId)
+                        : null;
+                    const autoDetectedRoomId = findContainingRoomId(deriveMarkerReferencePoint(marker));
+                    const autoDetectedRoom =
+                      autoDetectedRoomId
+                        ? definedRooms.find((room) => room.id === autoDetectedRoomId)
+                        : null;
+                    const associationLabel = (() => {
+                      if (associatedRoom) {
+                        const category = describeRoomCategory(associatedRoom);
+                        return `Linked to ${category} ${associatedRoom.name}${
+                          marker.linkedRoomIdSource === 'manual' ? ' (manual)' : ''
+                        }`;
+                      }
+                      if (marker.linkedRoomId && marker.linkedRoomIdSource === 'manual') {
+                        return 'Linked to Removed Region (manual)';
+                      }
+                      if (marker.linkedRoomIdSource === 'manual') {
+                        return 'Linked to Hallway/Unassigned (manual)';
+                      }
+                      return 'Linked to Hallway/Unassigned';
+                    })();
+                    const associationSelectValue =
+                      marker.linkedRoomIdSource === 'auto'
+                        ? 'auto'
+                        : marker.linkedRoomId
+                        ? `room:${marker.linkedRoomId}`
+                        : 'unassigned';
+                    const autoOptionLabel = autoDetectedRoom
+                      ? `Auto-detect (${describeRoomCategory(autoDetectedRoom)} ${autoDetectedRoom.name})`
+                      : 'Auto-detect (Hallway/Unassigned)';
+                    const needsManualFallbackOption =
+                      marker.linkedRoomIdSource === 'manual' &&
+                      !!marker.linkedRoomId &&
+                      !definedRooms.some((room) => room.id === marker.linkedRoomId);
                     const metadata: React.ReactNode[] = [];
+                    metadata.push(
+                      <span key="association">{associationLabel}</span>,
+                    );
                     if (geometrySummary) {
                       metadata.push(
                         <span key="geometry">
@@ -1984,6 +2256,29 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                                   className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                                   placeholder="Trap trigger, treasure cache, etc."
                                 />
+                              </label>
+                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                                Linked Region
+                                <select
+                                  value={associationSelectValue}
+                                  onChange={(event) =>
+                                    handleMarkerAssociationChange(marker.id, event.target.value)
+                                  }
+                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                                >
+                                  <option value="auto">{autoOptionLabel}</option>
+                                  <option value="unassigned">Hallway / Unassigned</option>
+                                  {definedRooms.map((room) => (
+                                    <option key={room.id} value={`room:${room.id}`}>
+                                      {`${describeRoomCategory(room)}: ${room.name}`}
+                                    </option>
+                                  ))}
+                                  {needsManualFallbackOption && marker.linkedRoomId && (
+                                    <option value={`room:${marker.linkedRoomId}`}>
+                                      {`Previous Region (${marker.linkedRoomId})`}
+                                    </option>
+                                  )}
+                                </select>
                               </label>
                               <div className="space-y-3">
                                 {marker.kind === 'point' && (

@@ -68,6 +68,7 @@ interface MarkerPayload {
   areaShape?: MarkerAreaShape | null;
   circle?: MarkerCircleGeometry | null;
   polygon?: MarkerPolygonGeometry | null;
+  regionId?: string | null;
 }
 
 interface SessionPayload {
@@ -187,6 +188,9 @@ const serializeMarkerPayload = (payload: Partial<MarkerPayload>) => {
   if (payload.notes !== undefined) {
     body.notes = payload.notes;
   }
+  if (payload.regionId !== undefined) {
+    body.regionId = payload.regionId === null ? null : String(payload.regionId);
+  }
   if (payload.x !== undefined) {
     body.x = clampNormalized(payload.x, 0.5);
   }
@@ -264,6 +268,9 @@ const serializeMarkerPayload = (payload: Partial<MarkerPayload>) => {
 };
 
 const normalizeMarker = (raw: any): Marker => {
+  const rawRegionId = raw?.regionId ?? raw?.data?.regionId;
+  const normalizedRegionId =
+    rawRegionId === undefined || rawRegionId === null ? null : String(rawRegionId);
   const base: Marker = {
     id: String(raw?.id ?? ''),
     mapId: raw?.mapId ? String(raw.mapId) : undefined,
@@ -278,6 +285,7 @@ const normalizeMarker = (raw: any): Marker => {
     areaShape: null,
     circle: null,
     polygon: null,
+    regionId: normalizedRegionId,
   };
 
   const data = raw?.data && typeof raw.data === 'object' ? (raw.data as Record<string, unknown>) : {};

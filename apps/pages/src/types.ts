@@ -75,6 +75,7 @@ export interface Marker {
   areaShape?: MarkerAreaShape | null;
   circle?: MarkerCircleGeometry | null;
   polygon?: MarkerPolygonGeometry | null;
+  regionId?: string | null;
 }
 
 export interface SessionRecord {
