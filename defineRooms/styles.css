@@ -15,6 +15,10 @@ body {
     #0f172a;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 #root {
   width: min(960px, 92vw);
   padding: 48px 0 64px;
@@ -327,6 +331,31 @@ body {
   position: relative;
 }
 
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+}
+
+.temporary-markers-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.temporary-markers-list {
+  flex: 1;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
 .rooms-header {
   display: flex;
   align-items: center;
@@ -631,9 +660,63 @@ body {
 .toolbar-area {
   position: relative;
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.editor-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+}
+
+.editor-tab {
+  border: none;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.75);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.editor-tab:hover:not(.active),
+.editor-tab:focus-visible:not(.active) {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.editor-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+}
+
+.editor-tab.active {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #0b1220;
+  box-shadow: 0 12px 24px rgba(56, 189, 248, 0.35);
+}
+
+.toolbar-wrapper {
+  position: relative;
+  display: flex;
   justify-content: flex-end;
   align-items: center;
   flex-shrink: 0;
+}
+
+.toolbar-wrapper.is-hidden {
+  display: none;
 }
 
 .toolbar {

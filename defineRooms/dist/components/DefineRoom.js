@@ -307,6 +307,56 @@ const REDO_ICON = `
     />
   </svg>
 `;
+const CHARACTER_MARKER_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M12 21c3.3-3.1 5-5.9 5-8.5a5 5 0 10-10 0c0 2.6 1.7 5.4 5 8.5z"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M12 11a3 3 0 100-6 3 3 0 000 6z"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+`;
+const OBJECT_MARKER_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M12 12l8-4.5"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M12 12v9"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M12 12L4 7.5"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+`;
 const HISTORY_LIMIT = 30;
 function colorToVector(color) {
     const hex = color.replace("#", "");
@@ -410,6 +460,7 @@ export class DefineRoom {
         this.toolButtons = new Map();
         this.brushSliderPointerId = null;
         this.brushSliderCaptureElement = null;
+        this.activeEditorMode = "rooms";
         this.rooms = [];
         this.expandedRoomId = null;
         this.activeRoomId = null;
@@ -468,15 +519,17 @@ export class DefineRoom {
             this.updateBrushRadiusFromPointer(event);
             this.stopBrushSliderInteraction();
         };
-        this.root = (_jsxs("div", { class: "define-room-overlay hidden", children: [_jsxs("div", { class: "define-room-window", children: [_jsxs("div", { class: "define-room-header", children: [_jsx("h1", { children: "Define Rooms" }), _jsx("button", { class: "define-room-close", type: "button", children: "Close" })] }), _jsxs("div", { class: "define-room-body", children: [_jsxs("section", { class: "define-room-editor", children: [_jsxs("div", { class: "toolbar-area", children: [_jsxs("div", { class: "brush-slider-container", ref: (node) => node && (this.brushSliderContainer = node), "aria-hidden": "true", "aria-label": "Brush size", children: [_jsxs("div", { class: "brush-slider-track", ref: (node) => node && (this.brushSliderTrack = node), children: [_jsx("div", { class: "brush-slider-fill", ref: (node) => node && (this.brushSliderFill = node) }), _jsx("div", { class: "brush-slider-thumb", ref: (node) => node && (this.brushSliderThumb = node) })] }), _jsx("div", { class: "brush-slider-value", "aria-hidden": "true", ref: (node) => node && (this.brushSliderValueLabel = node) })] }), _jsxs("div", { class: "toolbar", ref: (node) => node && (this.toolbarContainer = node), children: [_jsxs("div", { class: "toolbar-primary-group", children: [_jsxs("button", { class: "toolbar-button toolbar-primary", type: "button", "aria-label": "New Room", title: "New Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "New Room" })] }), _jsxs("div", { class: "toolbar-confirm-group", children: [_jsxs("button", { class: "toolbar-button toolbar-confirm", type: "button", "aria-label": "Confirm Room", title: "Confirm Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Confirm" })] }), _jsxs("button", { class: "toolbar-button toolbar-cancel", type: "button", "aria-label": "Cancel Room", title: "Cancel Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Cancel" })] })] })] }), _jsxs("div", { class: "history-group", children: [_jsxs("button", { class: "toolbar-button tool-button history-button toolbar-undo", type: "button", "aria-label": "Undo", title: "Undo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Undo" })] }), _jsxs("button", { class: "toolbar-button tool-button history-button toolbar-redo", type: "button", "aria-label": "Redo", title: "Redo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Redo" })] })] }), _jsx("div", { class: "tool-group" })] })] }), _jsxs("div", { class: "canvas-wrapper", children: [_jsx("canvas", { class: "image-layer" }), _jsx("canvas", { class: "mask-layer" }), _jsx("canvas", { class: "selection-layer" }), _jsx("div", { class: "room-hover-label", "aria-hidden": "true" })] })] }), _jsxs("aside", { class: "define-room-sidebar", ref: (node) => node && (this.roomsPanel = node), children: [_jsx("div", { class: "rooms-header", children: _jsx("h2", { children: "Rooms" }) }), _jsx("p", { class: "rooms-empty", ref: (node) => node && (this.roomsEmptyState = node), children: "No rooms defined yet." }), _jsx("div", { class: "rooms-list" }), _jsx("div", { class: "room-color-menu hidden", "aria-hidden": "true" })] })] })] }), _jsx("div", { class: "room-delete-backdrop hidden", "aria-hidden": "true", children: _jsxs("div", { class: "room-delete-card", role: "dialog", "aria-modal": "true", "aria-labelledby": "room-delete-title", tabindex: "-1", children: [_jsx("div", { class: "room-delete-icon-wrapper", children: _jsx("div", { class: "room-delete-icon", "aria-hidden": "true" }) }), _jsx("h2", { id: "room-delete-title", class: "room-delete-title", children: "Are you sure?" }), _jsx("p", { class: "room-delete-message", children: "Do you really want to continue ? This process cannot be undone" }), _jsxs("div", { class: "room-delete-actions", children: [_jsx("button", { class: "room-delete-cancel", type: "button", children: "Cancel" }), _jsx("button", { class: "room-delete-confirm", type: "button", children: "Confirm" })] })] }) })] }));
+        this.root = (_jsxs("div", { class: "define-room-overlay hidden", children: [_jsxs("div", { class: "define-room-window", children: [_jsxs("div", { class: "define-room-header", children: [_jsx("h1", { children: "Define Rooms" }), _jsx("button", { class: "define-room-close", type: "button", children: "Close" })] }), _jsxs("div", { class: "define-room-body", children: [_jsxs("section", { class: "define-room-editor", children: [_jsxs("div", { class: "toolbar-area", children: [_jsxs("div", { class: "editor-tabs", role: "tablist", children: [_jsx("button", { class: "editor-tab active", type: "button", role: "tab", "aria-selected": "true", "data-mode": "rooms", ref: (node) => node && (this.editorTabsDefineRoomsButton = node), children: "Define Rooms" }), _jsx("button", { class: "editor-tab", type: "button", role: "tab", "aria-selected": "false", "data-mode": "markers", ref: (node) => node && (this.editorTabsMarkersButton = node), children: "Temporary Markers" })] }), _jsxs("div", { class: "toolbar-wrapper", ref: (node) => node && (this.defineRoomsToolbarWrapper = node), "aria-hidden": "false", children: [_jsxs("div", { class: "brush-slider-container", ref: (node) => node && (this.brushSliderContainer = node), "aria-hidden": "true", "aria-label": "Brush size", children: [_jsxs("div", { class: "brush-slider-track", ref: (node) => node && (this.brushSliderTrack = node), children: [_jsx("div", { class: "brush-slider-fill", ref: (node) => node && (this.brushSliderFill = node) }), _jsx("div", { class: "brush-slider-thumb", ref: (node) => node && (this.brushSliderThumb = node) })] }), _jsx("div", { class: "brush-slider-value", "aria-hidden": "true", ref: (node) => node && (this.brushSliderValueLabel = node) })] }), _jsxs("div", { class: "toolbar", ref: (node) => node && (this.toolbarContainer = node), children: [_jsxs("div", { class: "toolbar-primary-group", children: [_jsxs("button", { class: "toolbar-button toolbar-primary", type: "button", "aria-label": "New Room", title: "New Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "New Room" })] }), _jsxs("div", { class: "toolbar-confirm-group", children: [_jsxs("button", { class: "toolbar-button toolbar-confirm", type: "button", "aria-label": "Confirm Room", title: "Confirm Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Confirm" })] }), _jsxs("button", { class: "toolbar-button toolbar-cancel", type: "button", "aria-label": "Cancel Room", title: "Cancel Room", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Cancel" })] })] })] }), _jsxs("div", { class: "history-group", children: [_jsxs("button", { class: "toolbar-button tool-button history-button toolbar-undo", type: "button", "aria-label": "Undo", title: "Undo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Undo" })] }), _jsxs("button", { class: "toolbar-button tool-button history-button toolbar-redo", type: "button", "aria-label": "Redo", title: "Redo", children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Redo" })] })] }), _jsx("div", { class: "tool-group" })] })] }), _jsx("div", { class: "toolbar-wrapper markers-toolbar-wrapper is-hidden", ref: (node) => node && (this.temporaryMarkersToolbarWrapper = node), "aria-hidden": "true", children: _jsxs("div", { class: "toolbar markers-toolbar", children: [_jsxs("button", { class: "toolbar-button markers-toolbar-button", type: "button", "aria-label": "Character Markers", title: "Character Markers", ref: (node) => node && (this.characterMarkerButton = node), children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Character Markers" })] }), _jsxs("button", { class: "toolbar-button markers-toolbar-button", type: "button", "aria-label": "Object Markers", title: "Object Markers", ref: (node) => node && (this.objectMarkerButton = node), children: [_jsx("span", { class: "toolbar-button-icon", "aria-hidden": "true" }), _jsx("span", { class: "toolbar-button-label", "aria-hidden": "true", children: "Object Markers" })] })] }) })] }), _jsxs("div", { class: "canvas-wrapper", children: [_jsx("canvas", { class: "image-layer" }), _jsx("canvas", { class: "mask-layer" }), _jsx("canvas", { class: "selection-layer" }), _jsx("div", { class: "room-hover-label", "aria-hidden": "true" })] })] }), _jsxs("aside", { class: "define-room-sidebar", ref: (node) => node && (this.roomsPanel = node), children: [_jsxs("div", { class: "sidebar-panel rooms-sidebar", ref: (node) => node && (this.defineRoomsSidebarSection = node), "aria-hidden": "false", children: [_jsx("div", { class: "rooms-header", children: _jsx("h2", { children: "Rooms" }) }), _jsx("p", { class: "rooms-empty", ref: (node) => node && (this.roomsEmptyState = node), children: "No rooms defined yet." }), _jsx("div", { class: "rooms-list" }), _jsx("div", { class: "room-color-menu hidden", "aria-hidden": "true" })] }), _jsxs("div", { class: "sidebar-panel temporary-markers-sidebar is-hidden", ref: (node) => node && (this.temporaryMarkersSidebar = node), "aria-hidden": "true", children: [_jsx("div", { class: "rooms-header temporary-markers-header", children: _jsx("h2", { children: "Temporary Markers" }) }), _jsx("p", { class: "temporary-markers-empty", children: "No temporary markers yet." }), _jsx("div", { class: "temporary-markers-list" })] })] })] })] }), _jsx("div", { class: "room-delete-backdrop hidden", "aria-hidden": "true", children: _jsxs("div", { class: "room-delete-card", role: "dialog", "aria-modal": "true", "aria-labelledby": "room-delete-title", tabindex: "-1", children: [_jsx("div", { class: "room-delete-icon-wrapper", children: _jsx("div", { class: "room-delete-icon", "aria-hidden": "true" }) }), _jsx("h2", { id: "room-delete-title", class: "room-delete-title", children: "Are you sure?" }), _jsx("p", { class: "room-delete-message", children: "Do you really want to continue ? This process cannot be undone" }), _jsxs("div", { class: "room-delete-actions", children: [_jsx("button", { class: "room-delete-cancel", type: "button", children: "Cancel" }), _jsx("button", { class: "room-delete-confirm", type: "button", children: "Confirm" })] })] }) })] }));
         this.initializeDomReferences();
         this.attachEventListeners();
+        this.switchEditorMode("rooms", true);
     }
     mount(container) {
         container.appendChild(this.root);
     }
     open(image) {
         this.root.classList.remove("hidden");
+        this.switchEditorMode("rooms");
         this.prepareImage(image);
     }
     close() {
@@ -484,6 +537,7 @@ export class DefineRoom {
         this.stopBrushSliderInteraction();
         this.closeColorMenu();
         this.hideDeleteDialog();
+        this.switchEditorMode("rooms");
     }
     get element() {
         return this.root;
@@ -495,8 +549,8 @@ export class DefineRoom {
         this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel");
         this.undoButton = this.root.querySelector(".toolbar-undo");
         this.redoButton = this.root.querySelector(".toolbar-redo");
-        this.roomsList = this.roomsPanel.querySelector(".rooms-list");
-        this.colorMenu = this.roomsPanel.querySelector(".room-color-menu");
+        this.roomsList = this.defineRoomsSidebarSection.querySelector(".rooms-list");
+        this.colorMenu = this.defineRoomsSidebarSection.querySelector(".room-color-menu");
         this.deleteBackdrop = this.root.querySelector(".room-delete-backdrop");
         this.deleteCancelButton = this.root.querySelector(".room-delete-cancel");
         this.deleteConfirmButton = this.root.querySelector(".room-delete-confirm");
@@ -540,7 +594,7 @@ export class DefineRoom {
         document.addEventListener("click", this.handleColorMenuOutsideClick);
         this.updateBrushSliderUi();
         this.roomsPanel.addEventListener("click", (event) => {
-            if (this.isConfirmingRoom) {
+            if (this.activeEditorMode !== "rooms" || this.isConfirmingRoom) {
                 return;
             }
             if (event.target === this.roomsPanel || event.target === this.roomsList) {
@@ -566,6 +620,14 @@ export class DefineRoom {
         const redoIcon = this.redoButton.querySelector(".toolbar-button-icon");
         if (redoIcon) {
             redoIcon.innerHTML = REDO_ICON;
+        }
+        const characterMarkerIcon = this.characterMarkerButton.querySelector(".toolbar-button-icon");
+        if (characterMarkerIcon) {
+            characterMarkerIcon.innerHTML = CHARACTER_MARKER_ICON;
+        }
+        const objectMarkerIcon = this.objectMarkerButton.querySelector(".toolbar-button-icon");
+        if (objectMarkerIcon) {
+            objectMarkerIcon.innerHTML = OBJECT_MARKER_ICON;
         }
         this.imageContext = this.imageCanvas.getContext("2d", { willReadFrequently: true });
         this.overlayContext = this.overlayCanvas.getContext("2d");
@@ -610,6 +672,8 @@ export class DefineRoom {
                 this.close();
             }
         });
+        this.editorTabsDefineRoomsButton.addEventListener("click", () => this.switchEditorMode("rooms"));
+        this.editorTabsMarkersButton.addEventListener("click", () => this.switchEditorMode("markers"));
         this.overlayCanvas.addEventListener("pointerdown", (event) => this.handlePointerDown(event));
         this.overlayCanvas.addEventListener("pointermove", (event) => this.handlePointerMove(event));
         this.overlayCanvas.addEventListener("pointerup", (event) => this.handlePointerUp(event));
@@ -617,6 +681,28 @@ export class DefineRoom {
         this.overlayCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
         this.overlayCanvas.style.touchAction = "none";
         this.attachBrushSliderEvents();
+    }
+    switchEditorMode(mode, force = false) {
+        if (!force && this.activeEditorMode === mode) {
+            return;
+        }
+        this.activeEditorMode = mode;
+        const isMarkers = mode === "markers";
+        this.editorTabsDefineRoomsButton.classList.toggle("active", !isMarkers);
+        this.editorTabsDefineRoomsButton.setAttribute("aria-selected", (!isMarkers).toString());
+        this.editorTabsMarkersButton.classList.toggle("active", isMarkers);
+        this.editorTabsMarkersButton.setAttribute("aria-selected", isMarkers.toString());
+        this.defineRoomsToolbarWrapper.classList.toggle("is-hidden", isMarkers);
+        this.defineRoomsToolbarWrapper.setAttribute("aria-hidden", isMarkers ? "true" : "false");
+        this.temporaryMarkersToolbarWrapper.classList.toggle("is-hidden", !isMarkers);
+        this.temporaryMarkersToolbarWrapper.setAttribute("aria-hidden", !isMarkers ? "true" : "false");
+        this.defineRoomsSidebarSection.classList.toggle("is-hidden", isMarkers);
+        this.defineRoomsSidebarSection.setAttribute("aria-hidden", isMarkers ? "true" : "false");
+        this.temporaryMarkersSidebar.classList.toggle("is-hidden", !isMarkers);
+        this.temporaryMarkersSidebar.setAttribute("aria-hidden", !isMarkers ? "true" : "false");
+        if (isMarkers) {
+            this.closeColorMenu();
+        }
     }
     initializeColorMenu() {
         if (!this.colorMenu) {
