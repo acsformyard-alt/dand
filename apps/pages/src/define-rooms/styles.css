@@ -43,32 +43,6 @@
   display: none;
 }
 
-.define-room-marker-placement .define-room-window {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-
-.define-room-marker-placement .define-room-body {
-  padding: 0;
-}
-
-.define-room-marker-placement .define-room-editor {
-  padding: 0;
-}
-
-.define-room-marker-placement .toolbar-area,
-.define-room-marker-placement .define-room-sidebar,
-.define-room-marker-placement .brush-slider-container {
-  display: none !important;
-}
-
-.define-room-marker-placement .canvas-wrapper {
-  background: transparent;
-  border: none;
-  border-radius: inherit;
-}
-
 .define-room-marker-placement .room-hover-label {
   display: none;
 }
@@ -270,6 +244,118 @@
   margin: 0;
   font-size: 0.9rem;
   color: rgba(226, 232, 240, 0.6);
+}
+
+.temporary-markers-panel {
+  gap: 16px;
+}
+
+.temporary-markers-description {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(226, 232, 240, 0.65);
+  line-height: 1.5;
+}
+
+.temporary-markers-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.temporary-markers-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.75);
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.45);
+  text-align: center;
+}
+
+.temporary-markers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.temporary-marker-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(30, 41, 59, 0.5);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.25);
+}
+
+.temporary-marker-item-character {
+  border-color: rgba(129, 140, 248, 0.45);
+}
+
+.temporary-marker-item-object {
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.temporary-marker-item-index {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.65);
+  min-width: 34px;
+  text-align: center;
+}
+
+.temporary-marker-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b1220;
+  box-shadow: 0 16px 34px rgba(59, 130, 246, 0.35);
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+}
+
+.temporary-marker-item-character .temporary-marker-item-icon {
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+  box-shadow: 0 16px 36px rgba(129, 140, 248, 0.35);
+}
+
+.temporary-marker-item-object .temporary-marker-item-icon {
+  background: linear-gradient(135deg, #38bdf8, #34d399);
+  box-shadow: 0 16px 36px rgba(45, 212, 191, 0.35);
+}
+
+.temporary-marker-item-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.temporary-marker-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.temporary-marker-item-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.temporary-marker-item-coordinates {
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+  color: rgba(148, 163, 184, 0.78);
 }
 
 .rooms-list {
@@ -550,6 +636,75 @@
   flex-shrink: 0;
 }
 
+.toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.toolbar-switch-tab {
+  margin-left: 0;
+  width: 36px;
+  min-width: 36px;
+  justify-content: center;
+  background: rgba(22, 32, 51, 0.95);
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.toolbar-switch-tab[data-target-tab="temporary-markers"] {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(129, 140, 248, 0.92));
+  color: #0b1220;
+  border-color: transparent;
+}
+
+.toolbar-switch-tab[data-target-tab="rooms"] {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.82));
+  color: rgba(15, 23, 42, 0.92);
+  border-color: transparent;
+  box-shadow: 0 12px 32px rgba(244, 114, 182, 0.35);
+}
+
+.toolbar-switch-tab:hover:not(:disabled),
+.toolbar-switch-tab:focus-visible:not(:disabled) {
+  width: 36px;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 38px rgba(56, 189, 248, 0.4);
+}
+
+.toolbar-switch-tab[data-target-tab="rooms"]:hover:not(:disabled),
+.toolbar-switch-tab[data-target-tab="rooms"]:focus-visible:not(:disabled) {
+  box-shadow: 0 16px 38px rgba(244, 114, 182, 0.42);
+}
+
+.toolbar-switch-tab:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.28);
+}
+
+.toolbar-switch-tab .toolbar-button-icon {
+  opacity: 1;
+  width: 18px;
+  height: 18px;
+  transform: none;
+}
+
+.toolbar-switch-tab .toolbar-button-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar-switch-tab:hover:not(:disabled) .toolbar-button-icon,
+.toolbar-switch-tab:focus-visible:not(:disabled) .toolbar-button-icon {
+  opacity: 1;
+  width: 18px;
+  transform: none;
+}
+
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -775,6 +930,30 @@
   transform: translateX(-10px);
 }
 
+.toolbar-temporary {
+  border: none;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #0b1220;
+  box-shadow: 0 16px 36px rgba(56, 189, 248, 0.35);
+}
+
+.toolbar-temporary.is-active {
+  background: linear-gradient(135deg, #60a5fa, #a855f7);
+  color: #0b1220;
+  box-shadow: 0 22px 44px rgba(129, 140, 248, 0.45);
+}
+
+.toolbar-temporary.is-active .toolbar-button-label {
+  opacity: 1;
+  transform: none;
+}
+
+.toolbar-temporary:hover:not(:disabled),
+.toolbar-temporary:focus-visible:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa, #a855f7);
+  color: #0b1220;
+}
+
 .toolbar-primary {
   border: none;
   background: linear-gradient(135deg, #f97316, #facc15);
@@ -803,12 +982,29 @@
   align-items: flex-start;
 }
 
+.toolbar-shared-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
+  margin-top: auto;
+}
+
 .tool-group {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
   width: 100%;
+}
+
+.toolbar-temporary-markers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
 }
 
 .tool-button {
@@ -892,6 +1088,70 @@
   image-rendering: pixelated;
 }
 
+.temporary-markers-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.temporary-marker {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  color: #0b1220;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.5);
+  pointer-events: none;
+}
+
+.temporary-marker-character {
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+}
+
+.temporary-marker-object {
+  background: linear-gradient(135deg, #38bdf8, #34d399);
+}
+
+.temporary-marker-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.temporary-marker-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.marker-placement-instructions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 18px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(241, 245, 249, 0.96);
+  background: rgba(15, 23, 42, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-18px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 3;
+}
+
+.marker-placement-instructions.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .canvas-wrapper .image-layer {
   position: relative;
 }
@@ -913,6 +1173,7 @@
   transform: translate(-50%, -130%);
   opacity: 0;
   transition: opacity 120ms ease;
+  z-index: 4;
 }
 
 .room-hover-label.visible {
