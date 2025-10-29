@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { DefineRoom, type DefineRoomData } from '../define-rooms/DefineRoom';
 import '../define-rooms/styles.css';
 import { apiClient } from '../api/client';
@@ -183,7 +184,485 @@ const useImageDisplayMetrics = (
       observer.observe(element);
     }
 
-    return () => {
+  
+  const markerToolbarPortal =
+    step === 3 && markerToolbarHost
+      ? createPortal(
+          <div className="flex h-full min-h-0 flex-col gap-4">
+            <div className="marker-toolbar-buttons w-full">
+              {mapMarkerIconDefinitions.map((definition) => (
+                <button
+                  key={definition.key}
+                  type="button"
+                  onClick={() => handleSelectMarkerTemplate(definition)}
+                  className="toolbar-button tool-button"
+                  aria-label={definition.label}
+                  title={definition.label}
+                >
+                  <span className="toolbar-button-icon" aria-hidden="true">
+                    {definition.icon}
+                  </span>
+                  <span className="toolbar-button-label">
+                    {definition.label.replace(' Marker', '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="marker-toolbar-custom">
+              <button
+                type="button"
+                className="toolbar-button tool-button"
+                disabled
+                title="Custom marker icons coming soon"
+              >
+                <span className="toolbar-button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                    <path d="M10 4v12" strokeLinecap="round" />
+                    <path d="M4 10h12" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span className="toolbar-button-label">Custom Icons</span>
+              </button>
+            </div>
+          </div>,
+          markerToolbarHost,
+        )
+      : null;
+
+  const markerSidebarPortal =
+    step === 3 && markerSidebarHost
+      ? createPortal(
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="border-b border-slate-800/70 p-4">
+              <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
+              <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
+              <p className="mt-2 text-xs text-slate-500">
+                Use the toolbar to add markers and drag them onto the map. Update notes and metadata here.
+              </p>
+            </div>
+            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
+              {markers.map((marker) => {
+                const isExpanded = expandedMarkerId === marker.id;
+                const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                const displayColor = marker.color.trim() || iconDefinition?.defaultColor || '#facc15';
+                const geometrySummary = (() => {
+                  if (marker.kind === 'point') {
+                    return `Position: ${Math.round(marker.x * 100)}% × ${Math.round(marker.y * 100)}%`;
+                  }
+                  if (marker.kind === 'area') {
+                    if (marker.areaShape === 'circle') {
+                      if (!marker.areaCenter || marker.areaRadius === null || marker.areaRadius <= 0) {
+                        return 'Circle boundary not set';
+                      }
+                      const centerX = Math.round(marker.areaCenter.x * 100);
+                      const centerY = Math.round(marker.areaCenter.y * 100);
+                      const radiusPercent = Math.round(marker.areaRadius * 100);
+                      return `Circle: center ${centerX}% × ${centerY}% • radius ${radiusPercent}%`;
+                    }
+                    if (marker.areaShape === 'lasso') {
+                      if (marker.areaPoints.length < 3) {
+                        return 'Lasso boundary not set';
+                      }
+                      return `Lasso: ${marker.areaPoints.length} point${marker.areaPoints.length === 1 ? '' : 's'}`;
+                    }
+                    return 'Area marker';
+                  }
+                  return null;
+                })();
+                const associatedRoom =
+                  marker.linkedRoomId
+                    ? definedRooms.find((room) => room.id === marker.linkedRoomId)
+                    : null;
+                const autoDetectedRoomId = findContainingRoomId(deriveMarkerReferencePoint(marker));
+                const autoDetectedRoom =
+                  autoDetectedRoomId
+                    ? definedRooms.find((room) => room.id === autoDetectedRoomId)
+                    : null;
+                const associationLabel = (() => {
+                  if (associatedRoom) {
+                    const category = describeRoomCategory(associatedRoom);
+                    return `Linked to ${category} ${associatedRoom.name}${
+                      marker.linkedRoomIdSource === 'manual' ? ' (manual)' : ''
+                    }`;
+                  }
+                  if (marker.linkedRoomId && marker.linkedRoomIdSource === 'manual') {
+                    return 'Linked to Removed Region (manual)';
+                  }
+                  if (marker.linkedRoomIdSource === 'manual') {
+                    return 'Linked to Hallway/Unassigned (manual)';
+                  }
+                  return 'Linked to Hallway/Unassigned';
+                })();
+                const associationSelectValue =
+                  marker.linkedRoomIdSource === 'auto'
+                    ? 'auto'
+                    : marker.linkedRoomId
+                    ? `room:${marker.linkedRoomId}`
+                    : 'unassigned';
+                const autoOptionLabel = autoDetectedRoom
+                  ? `Auto-detect (${describeRoomCategory(autoDetectedRoom)} ${autoDetectedRoom.name})`
+                  : 'Auto-detect (Hallway/Unassigned)';
+                const needsManualFallbackOption =
+                  marker.linkedRoomIdSource === 'manual' &&
+                  !!marker.linkedRoomId &&
+                  !definedRooms.some((room) => room.id === marker.linkedRoomId);
+                const metadata: React.ReactNode[] = [];
+                metadata.push(<span key="association">{associationLabel}</span>);
+                if (geometrySummary) {
+                  metadata.push(
+                    <span key="geometry">
+                      {geometrySummary}
+                    </span>,
+                  );
+                }
+                metadata.push(
+                  <span key="appearance" className="flex items-center gap-2">
+                    <MarkerIconBadge
+                      definition={iconDefinition}
+                      color={displayColor}
+                      size="sm"
+                      fallbackLabel={marker.label}
+                      className="border-slate-700/70 shadow-none"
+                    />
+                    <span>
+                      {iconDefinition
+                        ? iconDefinition.label.replace(' Marker', '')
+                        : marker.iconKey
+                        ? `Icon: ${marker.iconKey}`
+                        : 'Marker'}
+                    </span>
+                    <span className="text-slate-500">{displayColor}</span>
+                  </span>,
+                );
+                return (
+                  <div
+                    key={marker.id}
+                    className={`rounded-2xl border border-slate-800/60 bg-slate-950/70 p-4 transition hover:border-slate-700/80 ${
+                      isExpanded ? 'ring-2 ring-amber-300/60' : ''
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedMarkerId((current) => (current === marker.id ? null : marker.id))
+                      }
+                      className="flex w-full items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 text-left">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800/70 bg-slate-900/70 text-slate-200"
+                          aria-hidden
+                        >
+                          <MarkerIconBadge
+                            definition={iconDefinition}
+                            color={displayColor}
+                            size="md"
+                            fallbackLabel={marker.label}
+                            className="border-transparent shadow-none"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">
+                            {marker.label.trim() || iconDefinition?.label.replace(' Marker', '') || 'Marker'}
+                          </p>
+                          <div className="mt-1 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                            {metadata}
+                          </div>
+                        </div>
+                      </div>
+                      <svg
+                        viewBox="0 0 20 20"
+                        className={`h-4 w-4 text-slate-500 transition ${isExpanded ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      >
+                        <path
+                          d="M6 8l4 4 4-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.8}
+                        />
+                      </svg>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-4 space-y-4 text-sm text-slate-200">
+                        <div className="space-y-2">
+                          <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                            Marker Label
+                          </label>
+                          <input
+                            type="text"
+                            value={marker.label}
+                            onChange={(event) =>
+                              handleMarkerChange(marker.id, 'label', event.target.value)
+                            }
+                            className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                          />
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                            Notes
+                            <textarea
+                              value={marker.notes}
+                              onChange={(event) =>
+                                handleMarkerChange(marker.id, 'notes', event.target.value)
+                              }
+                              rows={2}
+                              className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              placeholder="Trap trigger, treasure cache, etc."
+                            />
+                          </label>
+                          <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
+                            Linked Region
+                            <select
+                              value={associationSelectValue}
+                              onChange={(event) =>
+                                handleMarkerAssociationChange(marker.id, event.target.value)
+                              }
+                              className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                            >
+                              <option value="auto">{autoOptionLabel}</option>
+                              <option value="unassigned">Hallway / Unassigned</option>
+                              {definedRooms.map((room) => (
+                                <option key={room.id} value={`room:${room.id}`}>
+                                  {`${describeRoomCategory(room)}: ${room.name}`}
+                                </option>
+                              ))}
+                              {needsManualFallbackOption && marker.linkedRoomId && (
+                                <option value={`room:${marker.linkedRoomId}`}>
+                                  {`Previous Region (${marker.linkedRoomId})`}
+                                </option>
+                              )}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                              Marker Color
+                            </label>
+                            <input
+                              type="text"
+                              value={marker.color}
+                              onChange={(event) =>
+                                handleMarkerChange(marker.id, 'color', event.target.value)
+                              }
+                              className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                              Marker Icon
+                            </label>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveIconPickerId((current) =>
+                                    current === marker.id ? null : marker.id,
+                                  )
+                                }
+                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-left text-sm text-white hover:border-amber-400/60"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <MarkerIconBadge
+                                    definition={iconDefinition}
+                                    color={displayColor}
+                                    size="sm"
+                                    fallbackLabel={marker.label}
+                                    className="border-transparent shadow-none"
+                                  />
+                                  <span>
+                                    {iconDefinition
+                                      ? iconDefinition.label.replace(' Marker', '')
+                                      : marker.iconKey
+                                      ? `Icon: ${marker.iconKey}`
+                                      : 'Select Icon'}
+                                  </span>
+                                </span>
+                                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden>
+                                  <path
+                                    d="M6 8l4 4 4-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={1.6}
+                                  />
+                                </svg>
+                              </button>
+                              {activeIconPickerId === marker.id && (
+                                <div
+                                  ref={(node) => {
+                                    if (node) {
+                                      iconPickerDropdownRef.current = node;
+                                    }
+                                  }}
+                                  className="absolute right-0 top-full z-30 mt-2 w-48 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-3 shadow-xl"
+                                >
+                                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
+                                    Marker Icon
+                                  </p>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {mapMarkerIconDefinitions.map((definition) => (
+                                      <button
+                                        key={definition.key}
+                                        type="button"
+                                        onClick={() => handleMarkerIconChange(marker.id, definition)}
+                                        className={`group flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800/70 bg-slate-900/70 text-slate-200 transition hover:border-amber-400/60 hover:text-amber-100 ${
+                                          marker.iconKey === definition.key
+                                            ? 'border-amber-300/70 bg-amber-300/10 text-amber-200'
+                                            : ''
+                                        }`}
+                                        aria-label={definition.label}
+                                        title={definition.label}
+                                      >
+                                        <span className="sr-only">{definition.label}</span>
+                                        <span className="pointer-events-none text-current">{definition.icon}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {marker.kind === 'point' && (
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">X Position</label>
+                              <input
+                                type="number"
+                                value={Math.round(marker.x * 100)}
+                                onChange={(event) =>
+                                  handleMarkerChange(marker.id, 'x', clamp(Number(event.target.value) / 100, 0, 1))
+                                }
+                                className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Y Position</label>
+                              <input
+                                type="number"
+                                value={Math.round(marker.y * 100)}
+                                onChange={(event) =>
+                                  handleMarkerChange(marker.id, 'y', clamp(Number(event.target.value) / 100, 0, 1))
+                                }
+                                className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {marker.kind === 'area' && marker.areaShape === 'circle' && (
+                          <div className="space-y-3">
+                            <div className="grid gap-3 lg:grid-cols-2">
+                              <div className="space-y-2">
+                                <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Center X</label>
+                                <input
+                                  type="number"
+                                  value={Math.round((marker.areaCenter?.x ?? 0) * 100)}
+                                  onChange={(event) => {
+                                    const nextValue = clamp(Number(event.target.value) / 100, 0, 1);
+                                    handleMarkerChange(marker.id, 'areaCenter', {
+                                      x: nextValue,
+                                      y: marker.areaCenter?.y ?? marker.y,
+                                    });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Center Y</label>
+                                <input
+                                  type="number"
+                                  value={Math.round((marker.areaCenter?.y ?? 0) * 100)}
+                                  onChange={(event) => {
+                                    const nextValue = clamp(Number(event.target.value) / 100, 0, 1);
+                                    handleMarkerChange(marker.id, 'areaCenter', {
+                                      x: marker.areaCenter?.x ?? marker.x,
+                                      y: nextValue,
+                                    });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                                Radius (% of map width)
+                              </label>
+                              <input
+                                type="number"
+                                value={Math.round((marker.areaRadius ?? 0) * 100)}
+                                onChange={(event) =>
+                                  handleMarkerChange(
+                                    marker.id,
+                                    'areaRadius',
+                                    clamp(Number(event.target.value) / 100, 0, 1),
+                                  )
+                                }
+                                className="w-full rounded-xl border border-slate-800/70 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {marker.kind === 'area' && marker.areaShape === 'lasso' && (
+                          <div className="space-y-2">
+                            <label className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                              Lasso Points
+                            </label>
+                            <div className="space-y-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCaptureAreaPolygon(marker.id)}
+                                className="rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
+                              >
+                                Redraw Boundary
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelAreaPolygonCapture(marker.id)}
+                                className="rounded-full border border-slate-800/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-amber-400/50 hover:text-amber-100"
+                              >
+                                Cancel Drawing
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap justify-between gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateMarker(marker.id)}
+                            className="rounded-full border border-slate-800/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover;border-amber-400/50 hover:text-amber-100"
+                          >
+                            Duplicate Marker
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMarker(marker.id)}
+                            className="rounded-full border border-rose-500/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:border-rose-400/80 hover:text-rose-100"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {markers.length === 0 && (
+                <div className="rounded-2xl border border-slate-800/60 bg-slate-950/70 p-6 text-center text-xs text-slate-500">
+                  Use the toolbar to add your first marker.
+                </div>
+              )}
+            </div>
+          </div>,
+          markerSidebarHost,
+        )
+      : null;
+
+  return () => {
       window.removeEventListener('resize', scheduleUpdate);
       if (observer) observer.disconnect();
       if (animationFrame !== null && typeof window !== 'undefined') {
@@ -481,7 +960,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [definedRooms, setDefinedRooms] = useState<DraftRoom[]>([]);
   const [defineRoomContainer, setDefineRoomContainer] = useState<HTMLDivElement | null>(null);
-  const [markerPaletteOpen, setMarkerPaletteOpen] = useState(false);
+  const [markerSidebarHost, setMarkerSidebarHost] = useState<HTMLElement | null>(null);
+  const [markerToolbarHost, setMarkerToolbarHost] = useState<HTMLElement | null>(null);
   const [activeIconPickerId, setActiveIconPickerId] = useState<string | null>(null);
   const [areaCapture, setAreaCapture] = useState<AreaCaptureState | null>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -490,7 +970,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const defineRoomImageRef = useRef<HTMLImageElement | null>(null);
   const stepRef = useRef(step);
   const brushSliderHostRef = useRef<HTMLDivElement | null>(null);
-  const markerPaletteRef = useRef<HTMLDivElement | null>(null);
   const iconPickerDropdownRef = useRef<HTMLDivElement | null>(null);
   const [defineRoomReady, setDefineRoomReady] = useState(false);
   const defineRoomContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -753,29 +1232,24 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   }, [step, syncRoomsFromEditor]);
 
   useEffect(() => {
-    if (!markerPaletteOpen) {
-      return undefined;
+    if (!defineRoomReady) {
+      setMarkerSidebarHost(null);
+      setMarkerToolbarHost(null);
+      return;
     }
-    const handleClickAway = (event: MouseEvent) => {
-      if (!markerPaletteRef.current) {
-        return;
-      }
-      if (!markerPaletteRef.current.contains(event.target as Node)) {
-        setMarkerPaletteOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMarkerPaletteOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', handleClickAway);
-    window.addEventListener('keydown', handleKeyDown);
+    const editor = defineRoomRef.current;
+    if (!editor) {
+      setMarkerSidebarHost(null);
+      setMarkerToolbarHost(null);
+      return;
+    }
+    setMarkerSidebarHost(editor.getMarkerSidebarHost());
+    setMarkerToolbarHost(editor.getMarkerToolbarHost());
     return () => {
-      window.removeEventListener('mousedown', handleClickAway);
-      window.removeEventListener('keydown', handleKeyDown);
+      setMarkerSidebarHost(null);
+      setMarkerToolbarHost(null);
     };
-  }, [markerPaletteOpen]);
+  }, [defineRoomReady]);
 
   useEffect(() => {
     if (!activeIconPickerId) {
@@ -918,6 +1392,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const tags = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
 
   const canLaunchRoomsEditor = defineRoomReady && Boolean(defineRoomImageRef.current);
+  const editorUnavailableMessage = (() => {
+    if (!previewUrl) {
+      return step === 3
+        ? 'Upload a map image to place markers.'
+        : 'Upload a map image to start defining rooms.';
+    }
+    if (!canLaunchRoomsEditor) {
+      return 'Loading room editor…';
+    }
+    return null;
+  })();
   const pointMarkers = useMemo(
     () => markers.filter((marker) => marker.kind === 'point'),
     [markers],
@@ -1510,7 +1995,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
 
   const handleSelectMarkerTemplate = (definition: MapMarkerIconDefinition) => {
     handleAddMarker(definition);
-    setMarkerPaletteOpen(false);
   };
 
   const handleContinue = () => {
@@ -1729,11 +2213,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         </header>
         <main className="flex-1 min-h-0 overflow-x-auto overflow-y-auto py-4">
           <div className="flex h-full min-h-0">
-          <div
-            ref={brushSliderHostRef}
-            className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
-          />
-          <div className="flex min-h-0 flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
+            <div
+              ref={brushSliderHostRef}
+              className="relative flex h-full w-0 flex-shrink-0 overflow-visible"
+            />
+            {markerToolbarPortal}
+            {markerSidebarPortal}
+            <div className="flex min-h-0 flex-1 flex-col overflow-x-visible overflow-y-hidden px-[10vw]">
           {step === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <div className="w-full max-w-4xl rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4 text-center">
@@ -1872,31 +2358,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-          {step === 2 && (
+          {(step === 2 || step === 3) && (
             <div className="flex h-full min-h-0 flex-1 justify-center">
-              <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
-                <div
-                  ref={defineRoomContainerRef}
-                  className={`flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-slate-800/70 bg-slate-950/80 ${
-                    canLaunchRoomsEditor ? '' : 'items-center justify-center text-sm text-slate-500'
-                  }`}
-                >
-                  {!canLaunchRoomsEditor && (
-                    <p>{previewUrl ? 'Loading room editor…' : 'Upload a map image to start defining rooms.'}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {step === 3 && (
-            <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="relative flex h-full min-h-0 max-h-full items-center justify-center overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                {previewUrl ? (
-                  <>
-                    <div
-                      ref={defineRoomContainerRef}
-                      className="absolute inset-0"
-                    />
+              <div className="relative flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
+                <div className="relative flex h-full min-h-0 w-full overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80">
+                  <div ref={defineRoomContainerRef} className="absolute inset-0" />
+                  {step === 3 && previewUrl && canLaunchRoomsEditor && (
                     <div className="absolute inset-0 z-10">
                       <div
                         ref={mapAreaRef}
@@ -1982,8 +2449,23 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         {areaCapture?.type === 'lasso' && (
                           <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center">
                             <span className="rounded-full bg-slate-950/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-200">
-                              Use the room editor tools to outline this area.
+                              Click to plot points around the area boundary.
                             </span>
+                          </div>
+                        )}
+                        {areaCapture?.type === 'lasso' && (
+                          <div className="pointer-events-none absolute inset-0">
+                            <svg className="absolute inset-0" width="100%" height="100%" viewBox="0 0 100 100">
+                              <polyline
+                                points={areaCapture.type === 'lasso'
+                                  ? areaCapturePointsToPolyline(areaCapture, markerDisplayMetrics)
+                                  : ''}
+                                fill="none"
+                                stroke="#38bdf8"
+                                strokeWidth={2}
+                                strokeDasharray="6 4"
+                              />
+                            </svg>
                           </div>
                         )}
                         {pointMarkers.map((marker) => {
@@ -2025,425 +2507,22 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
                         })}
                         {markers.length === 0 && (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-                            Add markers from the panel to start placing points of interest.
+                            Use the toolbar to add markers, then drag them into place.
                           </div>
                         )}
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Upload a map image to place markers.
-                  </div>
-                )}
-              </div>
-              <div className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800/70 bg-slate-900/70">
-                <div className="border-b border-slate-800/70 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Markers</p>
-                      <h3 className="text-lg font-semibold text-white">Drag &amp; Drop Points</h3>
-                    </div>
-                    <div className="relative" ref={markerPaletteRef}>
-                      <button
-                        type="button"
-                        onClick={() => setMarkerPaletteOpen((current) => !current)}
-                        className="flex items-center gap-2 rounded-full border border-amber-400/60 bg-amber-300/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90"
-                        aria-haspopup="true"
-                        aria-expanded={markerPaletteOpen}
-                      >
-                        Add Marker
-                        <svg
-                          viewBox="0 0 12 12"
-                          className={`h-2.5 w-2.5 transition ${markerPaletteOpen ? 'rotate-180' : ''}`}
-                          aria-hidden
-                        >
-                          <path
-                            d="M2.25 4.5 6 8.25 9.75 4.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                          />
-                        </svg>
-                      </button>
-                      {markerPaletteOpen && (
-                        <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-3 shadow-xl">
-                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
-                            Marker Type
-                          </p>
-                          <div className="grid grid-cols-3 gap-2">
-                            {mapMarkerIconDefinitions.map((definition) => (
-                              <button
-                                key={definition.key}
-                                type="button"
-                                onClick={() => handleSelectMarkerTemplate(definition)}
-                                className="group flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800/70 bg-slate-900/70 text-slate-200 transition hover:border-amber-400/60 hover:text-amber-100"
-                                aria-label={definition.label}
-                                title={definition.label}
-                              >
-                                <span className="sr-only">{definition.label}</span>
-                                <span className="pointer-events-none text-current">{definition.icon}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Create markers and drag them directly onto the map. Use notes to capture quick reminders.
-                  </p>
-                </div>
-                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4">
-                  {markers.map((marker) => {
-                    const isExpanded = expandedMarkerId === marker.id;
-                    const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
-                    const displayColor =
-                      marker.color.trim() || iconDefinition?.defaultColor || '#facc15';
-                    const geometrySummary = (() => {
-                      if (marker.kind === 'point') {
-                        return `Position: ${Math.round(marker.x * 100)}% × ${Math.round(marker.y * 100)}%`;
-                      }
-                    if (marker.kind === 'area') {
-                      if (marker.areaShape === 'circle') {
-                        if (!marker.areaCenter || marker.areaRadius === null || marker.areaRadius <= 0) {
-                          return 'Circle boundary not set';
-                        }
-                        const centerX = Math.round(marker.areaCenter.x * 100);
-                        const centerY = Math.round(marker.areaCenter.y * 100);
-                        const radiusPercent = Math.round(marker.areaRadius * 100);
-                        return `Circle: center ${centerX}% × ${centerY}% • radius ${radiusPercent}%`;
-                      }
-                      if (marker.areaShape === 'lasso') {
-                        if (marker.areaPoints.length < 3) {
-                          return 'Lasso boundary not set';
-                        }
-                        return `Lasso: ${marker.areaPoints.length} point${
-                          marker.areaPoints.length === 1 ? '' : 's'
-                        }`;
-                      }
-                      return 'Area marker';
-                    }
-                      return null;
-                    })();
-                    const associatedRoom =
-                      marker.linkedRoomId
-                        ? definedRooms.find((room) => room.id === marker.linkedRoomId)
-                        : null;
-                    const autoDetectedRoomId = findContainingRoomId(deriveMarkerReferencePoint(marker));
-                    const autoDetectedRoom =
-                      autoDetectedRoomId
-                        ? definedRooms.find((room) => room.id === autoDetectedRoomId)
-                        : null;
-                    const associationLabel = (() => {
-                      if (associatedRoom) {
-                        const category = describeRoomCategory(associatedRoom);
-                        return `Linked to ${category} ${associatedRoom.name}${
-                          marker.linkedRoomIdSource === 'manual' ? ' (manual)' : ''
-                        }`;
-                      }
-                      if (marker.linkedRoomId && marker.linkedRoomIdSource === 'manual') {
-                        return 'Linked to Removed Region (manual)';
-                      }
-                      if (marker.linkedRoomIdSource === 'manual') {
-                        return 'Linked to Hallway/Unassigned (manual)';
-                      }
-                      return 'Linked to Hallway/Unassigned';
-                    })();
-                    const associationSelectValue =
-                      marker.linkedRoomIdSource === 'auto'
-                        ? 'auto'
-                        : marker.linkedRoomId
-                        ? `room:${marker.linkedRoomId}`
-                        : 'unassigned';
-                    const autoOptionLabel = autoDetectedRoom
-                      ? `Auto-detect (${describeRoomCategory(autoDetectedRoom)} ${autoDetectedRoom.name})`
-                      : 'Auto-detect (Hallway/Unassigned)';
-                    const needsManualFallbackOption =
-                      marker.linkedRoomIdSource === 'manual' &&
-                      !!marker.linkedRoomId &&
-                      !definedRooms.some((room) => room.id === marker.linkedRoomId);
-                    const metadata: React.ReactNode[] = [];
-                    metadata.push(
-                      <span key="association">{associationLabel}</span>,
-                    );
-                    if (geometrySummary) {
-                      metadata.push(
-                        <span key="geometry">
-                          {geometrySummary}
-                        </span>,
-                      );
-                    }
-                    metadata.push(
-                      <span key="appearance" className="flex items-center gap-2">
-                        <MarkerIconBadge
-                          definition={iconDefinition}
-                          color={displayColor}
-                          size="sm"
-                          fallbackLabel={marker.label}
-                          className="border-slate-700/70 shadow-none"
-                        />
-                        <span>{
-                          iconDefinition
-                            ? iconDefinition.label.replace(' Marker', '')
-                            : marker.iconKey
-                            ? `Icon: ${marker.iconKey}`
-                            : 'Marker'
-                        }</span>
-                        <span className="text-slate-500">{displayColor}</span>
-                      </span>,
-                    );
-                    return (
-                      <div
-                        key={marker.id}
-                        className={`rounded-2xl border px-4 py-3 transition ${
-                          isExpanded
-                            ? 'border-amber-400/60 bg-slate-950/80'
-                            : 'border-slate-800/70 bg-slate-950/70'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedMarkerId(isExpanded ? null : marker.id)
-                          }
-                          className="flex w-full items-start justify-between gap-3 text-left"
-                          aria-expanded={isExpanded}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-white">{marker.label || 'Marker'}</p>
-                            {metadata.length > 0 && (
-                              <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                                {metadata.map((item, index) => (
-                                  <React.Fragment key={index}>{item}</React.Fragment>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={`text-[10px] uppercase tracking-[0.35em] ${
-                              isExpanded ? 'text-amber-200' : 'text-slate-400'
-                            }`}
-                          >
-                            {isExpanded ? 'Hide' : 'Edit'}
-                          </span>
-                        </button>
-                        {isExpanded && (
-                          <div className="mt-3 space-y-3">
-                            <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                              Label
-                              <input
-                                type="text"
-                                value={marker.label}
-                                onChange={(event) =>
-                                  handleMarkerChange(marker.id, 'label', event.target.value)
-                                }
-                                className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                placeholder="Secret Door"
-                              />
-                            </label>
-                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Notes
-                                <textarea
-                                  value={marker.notes}
-                                  onChange={(event) =>
-                                    handleMarkerChange(marker.id, 'notes', event.target.value)
-                                  }
-                                  rows={2}
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                  placeholder="Trap trigger, treasure cache, etc."
-                                />
-                              </label>
-                              <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                Linked Region
-                                <select
-                                  value={associationSelectValue}
-                                  onChange={(event) =>
-                                    handleMarkerAssociationChange(marker.id, event.target.value)
-                                  }
-                                  className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                >
-                                  <option value="auto">{autoOptionLabel}</option>
-                                  <option value="unassigned">Hallway / Unassigned</option>
-                                  {definedRooms.map((room) => (
-                                    <option key={room.id} value={`room:${room.id}`}>
-                                      {`${describeRoomCategory(room)}: ${room.name}`}
-                                    </option>
-                                  ))}
-                                  {needsManualFallbackOption && marker.linkedRoomId && (
-                                    <option value={`room:${marker.linkedRoomId}`}>
-                                      {`Previous Region (${marker.linkedRoomId})`}
-                                    </option>
-                                  )}
-                                </select>
-                              </label>
-                              <div className="space-y-3">
-                                {marker.kind === 'point' && (
-                                  <div className="relative">
-                                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Icon</p>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setActiveIconPickerId((current) =>
-                                          current === marker.id ? null : marker.id,
-                                        )
-                                      }
-                                      className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 transition hover:border-amber-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                      aria-haspopup="true"
-                                      aria-expanded={activeIconPickerId === marker.id}
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <MarkerIconBadge
-                                          definition={iconDefinition}
-                                          color={displayColor}
-                                          size="sm"
-                                          fallbackLabel={marker.label}
-                                          className="border-slate-700/70 shadow-none"
-                                        />
-                                        <span className="font-semibold uppercase tracking-[0.25em] text-slate-200">
-                                          {iconDefinition
-                                            ? iconDefinition.label.replace(' Marker', '')
-                                            : 'Marker'}
-                                        </span>
-                                      </span>
-                                      <svg
-                                        viewBox="0 0 12 12"
-                                        className={`h-2.5 w-2.5 text-slate-400 transition ${
-                                          activeIconPickerId === marker.id ? 'rotate-180 text-amber-200' : ''
-                                        }`}
-                                        aria-hidden
-                                      >
-                                        <path
-                                          d="M2.25 4.5 6 8.25 9.75 4.5"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={1.5}
-                                        />
-                                      </svg>
-                                    </button>
-                                    {activeIconPickerId === marker.id && (
-                                      <div
-                                        ref={(node) => {
-                                          if (activeIconPickerId === marker.id) {
-                                            iconPickerDropdownRef.current = node;
-                                          }
-                                        }}
-                                        className="absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl border border-slate-800/70 bg-slate-950/95 p-3 shadow-xl"
-                                      >
-                                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
-                                          Select Icon
-                                        </p>
-                                        <div className="space-y-2">
-                                          {mapMarkerIconDefinitions
-                                            .filter((definition) => definition.kind === marker.kind)
-                                            .map((definition) => {
-                                              const isSelected = definition.key === marker.iconKey;
-                                              return (
-                                                <button
-                                                  key={definition.key}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    handleMarkerIconChange(marker.id, definition);
-                                                    setActiveIconPickerId(null);
-                                                  }}
-                                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-xs transition ${
-                                                    isSelected
-                                                      ? 'border-amber-400/60 bg-amber-300/10 text-amber-100'
-                                                      : 'border-slate-800/70 bg-slate-900/70 text-slate-200 hover:border-amber-400/60 hover:text-amber-100'
-                                                  }`}
-                                                  aria-label={definition.label}
-                                                >
-                                                  <MarkerIconBadge
-                                                    definition={definition}
-                                                    color={definition.defaultColor}
-                                                    size="sm"
-                                                    className="border-slate-700/70 shadow-none"
-                                                    fallbackLabel={definition.label}
-                                                  />
-                                                  <div className="flex-1">
-                                                    <p className="font-semibold uppercase tracking-[0.25em]">
-                                                      {definition.label.replace(' Marker', '')}
-                                                    </p>
-                                                    <p className="mt-1 text-[9px] uppercase tracking-[0.35em] text-slate-500">
-                                                      {definition.defaultColor}
-                                                    </p>
-                                                  </div>
-                                                </button>
-                                              );
-                                            })}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {marker.kind === 'area' && (
-                                  <div className="space-y-2">
-                                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Boundary</p>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleChangeBoundary(marker)}
-                                      disabled={Boolean(
-                                        areaCapture && areaCapture.markerId === marker.id,
-                                      )}
-                                      className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
-                                        areaCapture && areaCapture.markerId === marker.id
-                                          ? 'cursor-not-allowed border-slate-800/60 text-slate-500'
-                                          : 'border-amber-400/60 text-amber-100 hover:bg-amber-300/20'
-                                      }`}
-                                    >
-                                      Change boundary
-                                    </button>
-                                    {areaCapture && areaCapture.markerId === marker.id && (
-                                      <p className="text-[10px] uppercase tracking-[0.35em] text-amber-200">
-                                        {marker.areaShape === 'lasso'
-                                          ? 'Use the lasso tool overlay to redraw the area.'
-                                          : 'Click and drag on the map to resize the circle.'}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                                <label className="block text-[10px] uppercase tracking-[0.4em] text-slate-500">
-                                  Color
-                                  <input
-                                    type="text"
-                                    value={marker.color}
-                                    onChange={(event) =>
-                                      handleMarkerChange(marker.id, 'color', event.target.value)
-                                    }
-                                    className="mt-2 w-full rounded-xl border border-slate-800/60 bg-slate-950/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                                    placeholder="#facc15"
-                                  />
-                                </label>
-                              </div>
-                            </div>
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMarker(marker.id)}
-                                className="rounded-full border border-rose-400/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:bg-rose-400/20"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {markers.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-700/70 px-4 py-8 text-center text-xs text-slate-500">
-                      No markers yet. Add a marker to start placing points of interest.
+                  )}
+                  {editorUnavailableMessage && (
+                    <div className="relative z-20 flex h-full w-full items-center justify-center text-sm text-slate-500">
+                      {editorUnavailableMessage}
                     </div>
                   )}
                 </div>
               </div>
             </div>
           )}
+          
           </div>
         </div>
       </main>

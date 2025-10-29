@@ -456,6 +456,9 @@ export class DefineRoom {
   private root: HTMLElement;
 
   private roomsPanel!: HTMLElement;
+  private markerPanel!: HTMLElement;
+  private markerPanelContent!: HTMLElement;
+  private markerToolbarHost!: HTMLElement;
 
   private roomsList!: HTMLElement;
 
@@ -690,6 +693,10 @@ export class DefineRoom {
                   ></div>
                 </div>
                 <div class="toolbar" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
+                  <div
+                    class="marker-toolbar"
+                    ref={(node: HTMLElement | null) => node && (this.markerToolbarHost = node)}
+                  ></div>
                   <div class="toolbar-primary-group">
                     <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
                       <span class="toolbar-button-icon" aria-hidden="true"></span>
@@ -746,15 +753,26 @@ export class DefineRoom {
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
             </section>
-            <aside class="define-room-sidebar" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
-              <div class="rooms-header">
-                <h2>Rooms</h2>
+            <aside class="define-room-sidebar">
+              <div class="rooms-panel" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
+                <div class="rooms-header">
+                  <h2>Rooms</h2>
+                </div>
+                <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
+                  No rooms defined yet.
+                </p>
+                <div class="rooms-list"></div>
+                <div class="room-color-menu hidden" aria-hidden="true"></div>
               </div>
-              <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
-                No rooms defined yet.
-              </p>
-              <div class="rooms-list"></div>
-              <div class="room-color-menu hidden" aria-hidden="true"></div>
+              <div
+                class="marker-panel"
+                ref={(node: HTMLElement | null) => node && (this.markerPanel = node)}
+              >
+                <div
+                  class="marker-panel-content"
+                  ref={(node: HTMLElement | null) => node && (this.markerPanelContent = node)}
+                ></div>
+              </div>
             </aside>
           </div>
         </div>
@@ -827,6 +845,14 @@ export class DefineRoom {
     }));
   }
 
+  public getMarkerSidebarHost(): HTMLElement | null {
+    return this.markerPanelContent ?? null;
+  }
+
+  public getMarkerToolbarHost(): HTMLElement | null {
+    return this.markerToolbarHost ?? null;
+  }
+
   public getImageDimensions(): { width: number; height: number } {
     return { width: this.width, height: this.height };
   }
@@ -849,6 +875,18 @@ export class DefineRoom {
     }
     this.interactionMode = nextMode;
     this.root.classList.toggle("define-room-marker-placement", enabled);
+    if (this.toolbarContainer) {
+      this.toolbarContainer.classList.toggle("marker-mode", enabled);
+    }
+    if (this.markerToolbarHost) {
+      this.markerToolbarHost.classList.toggle("marker-toolbar--active", enabled);
+    }
+    if (this.roomsPanel) {
+      this.roomsPanel.classList.toggle("rooms-panel--hidden", enabled);
+    }
+    if (this.markerPanel) {
+      this.markerPanel.classList.toggle("marker-panel--active", enabled);
+    }
     if (enabled && this.currentTool !== "move") {
       this.setTool("move");
     }

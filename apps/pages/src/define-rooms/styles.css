@@ -57,8 +57,7 @@
   padding: 0;
 }
 
-.define-room-marker-placement .toolbar-area,
-.define-room-marker-placement .define-room-sidebar,
+
 .define-room-marker-placement .brush-slider-container {
   display: none !important;
 }
@@ -238,6 +237,26 @@
   flex-direction: column;
   gap: 18px;
   position: relative;
+}
+
+.rooms-panel.rooms-panel--hidden {
+  display: none;
+}
+
+.marker-panel {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.marker-panel.marker-panel--active {
+  display: flex;
+}
+
+.marker-panel-content {
+  flex: 1;
+  min-height: 0;
 }
 
 .rooms-header {
@@ -685,6 +704,38 @@
   width: 3px;
   border-radius: 999px;
   background: linear-gradient(180deg, #38bdf8, #3b82f6);
+}
+
+.marker-toolbar {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+}
+
+.marker-toolbar.marker-toolbar--active {
+  display: flex;
+}
+
+.marker-toolbar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.marker-toolbar-custom {
+  margin-top: auto;
+  width: 100%;
+}
+
+.toolbar.marker-mode .toolbar-primary-group,
+.toolbar.marker-mode .toolbar-confirm-group,
+.toolbar.marker-mode .history-group,
+.toolbar.marker-mode .tool-group {
+  display: none !important;
 }
 
 .toolbar-button {
