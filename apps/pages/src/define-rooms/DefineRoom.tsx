@@ -513,6 +513,12 @@ export class DefineRoom {
 
   private toolButtons: Map<ToolType, HTMLButtonElement> = new Map();
 
+  private markerToolbarHost: HTMLElement | null = null;
+
+  private markerSidebarHost: HTMLElement | null = null;
+
+  private markerOverlayHost: HTMLElement | null = null;
+
   private brushSliderContainer!: HTMLElement;
 
   private brushSliderTrack!: HTMLElement;
@@ -690,53 +696,59 @@ export class DefineRoom {
                   ></div>
                 </div>
                 <div class="toolbar" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
-                  <div class="toolbar-primary-group">
-                    <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">New Room</span>
-                    </button>
-                    <div class="toolbar-confirm-group">
+                  <div class="toolbar-room-controls">
+                    <div class="toolbar-primary-group">
+                      <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">New Room</span>
+                      </button>
+                      <div class="toolbar-confirm-group">
+                        <button
+                          class="toolbar-button toolbar-confirm"
+                          type="button"
+                          aria-label="Confirm Room"
+                          title="Confirm Room"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Confirm</span>
+                        </button>
+                        <button
+                          class="toolbar-button toolbar-cancel"
+                          type="button"
+                          aria-label="Cancel Room"
+                          title="Cancel Room"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Cancel</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="history-group">
                       <button
-                        class="toolbar-button toolbar-confirm"
+                        class="toolbar-button tool-button history-button toolbar-undo"
                         type="button"
-                        aria-label="Confirm Room"
-                        title="Confirm Room"
+                        aria-label="Undo"
+                        title="Undo"
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Confirm</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Undo</span>
                       </button>
                       <button
-                        class="toolbar-button toolbar-cancel"
+                        class="toolbar-button tool-button history-button toolbar-redo"
                         type="button"
-                        aria-label="Cancel Room"
-                        title="Cancel Room"
+                        aria-label="Redo"
+                        title="Redo"
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Cancel</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Redo</span>
                       </button>
                     </div>
+                    <div class="tool-group"></div>
                   </div>
-                  <div class="history-group">
-                    <button
-                      class="toolbar-button tool-button history-button toolbar-undo"
-                      type="button"
-                      aria-label="Undo"
-                      title="Undo"
-                    >
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">Undo</span>
-                    </button>
-                    <button
-                      class="toolbar-button tool-button history-button toolbar-redo"
-                      type="button"
-                      aria-label="Redo"
-                      title="Redo"
-                    >
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">Redo</span>
-                    </button>
-                  </div>
-                  <div class="tool-group"></div>
+                  <div
+                    class="marker-toolbar-host"
+                    ref={(node: HTMLElement | null) => node && (this.markerToolbarHost = node)}
+                  ></div>
                 </div>
               </div>
               <div class="canvas-wrapper">
@@ -744,17 +756,30 @@ export class DefineRoom {
                 <canvas class="mask-layer"></canvas>
                 <canvas class="selection-layer"></canvas>
                 <div class="room-hover-label" aria-hidden="true"></div>
+                <div
+                  class="marker-overlay-host"
+                  ref={(node: HTMLElement | null) => node && (this.markerOverlayHost = node)}
+                ></div>
               </div>
             </section>
-            <aside class="define-room-sidebar" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
-              <div class="rooms-header">
-                <h2>Rooms</h2>
+            <aside class="define-room-sidebar">
+              <div
+                class="define-room-sidebar-rooms"
+                ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}
+              >
+                <div class="rooms-header">
+                  <h2>Rooms</h2>
+                </div>
+                <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
+                  No rooms defined yet.
+                </p>
+                <div class="rooms-list"></div>
+                <div class="room-color-menu hidden" aria-hidden="true"></div>
               </div>
-              <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
-                No rooms defined yet.
-              </p>
-              <div class="rooms-list"></div>
-              <div class="room-color-menu hidden" aria-hidden="true"></div>
+              <div
+                class="define-room-sidebar-markers"
+                ref={(node: HTMLElement | null) => node && (this.markerSidebarHost = node)}
+              ></div>
             </aside>
           </div>
         </div>
@@ -842,6 +867,18 @@ export class DefineRoom {
     return this.root;
   }
 
+  public getMarkerToolbarHost(): HTMLElement | null {
+    return this.markerToolbarHost;
+  }
+
+  public getMarkerSidebarHost(): HTMLElement | null {
+    return this.markerSidebarHost;
+  }
+
+  public getMarkerOverlayHost(): HTMLElement | null {
+    return this.markerOverlayHost;
+  }
+
   public setMarkerPlacementMode(enabled: boolean): void {
     const nextMode: DefineRoomInteractionMode = enabled ? "marker-placement" : "editing";
     if (this.interactionMode === nextMode) {
@@ -918,6 +955,16 @@ export class DefineRoom {
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
+    this.markerToolbarHost =
+      this.markerToolbarHost ?? (this.root.querySelector(".marker-toolbar-host") as HTMLElement | null);
+    this.markerSidebarHost =
+      this.markerSidebarHost ?? (this.root.querySelector(".define-room-sidebar-markers") as HTMLElement | null);
+    const roomsPanel =
+      this.roomsPanel ?? (this.root.querySelector(".define-room-sidebar-rooms") as HTMLElement | null);
+    if (!roomsPanel) {
+      throw new Error("Rooms panel element not found");
+    }
+    this.roomsPanel = roomsPanel;
     this.roomsList = this.roomsPanel.querySelector(".rooms-list") as HTMLElement;
     this.colorMenu = this.roomsPanel.querySelector(".room-color-menu") as HTMLElement;
     this.deleteBackdrop = this.root.querySelector(".room-delete-backdrop") as HTMLElement;
@@ -926,6 +973,8 @@ export class DefineRoom {
     this.deleteDialogIcon = this.root.querySelector(".room-delete-icon") as HTMLElement;
     const toolGroup = this.root.querySelector(".tool-group") as HTMLElement;
     this.canvasWrapper = this.root.querySelector(".canvas-wrapper") as HTMLElement;
+    this.markerOverlayHost =
+      this.markerOverlayHost ?? (this.root.querySelector(".marker-overlay-host") as HTMLElement | null);
     this.imageCanvas = this.root.querySelector(".image-layer") as HTMLCanvasElement;
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
     this.selectionCanvas = this.root.querySelector(".selection-layer") as HTMLCanvasElement;
