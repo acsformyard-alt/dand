@@ -587,51 +587,6 @@
   flex-shrink: 0;
 }
 
-.define-room-tabs {
-  display: inline-flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(8px);
-}
-
-.define-room-tab {
-  border: none;
-  background: transparent;
-  color: rgba(148, 163, 184, 0.75);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  padding: 8px 16px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.define-room-tab:hover,
-.define-room-tab:focus-visible {
-  color: rgba(226, 232, 240, 0.95);
-  outline: none;
-}
-
-.define-room-tab[aria-selected="true"] {
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
-  color: #0b1220;
-  box-shadow: 0 16px 32px rgba(56, 189, 248, 0.35);
-}
-
-.define-room-tab[aria-selected="false"]:hover {
-  background: rgba(30, 41, 59, 0.65);
-}
-
-.define-room-tab[aria-selected="false"]:focus-visible {
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.45);
-}
-
 .toolbar {
   display: flex;
   flex-direction: column;
