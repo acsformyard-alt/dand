@@ -374,6 +374,7 @@ const SWITCH_TO_ROOMS_ICON = `
 `;
 
 const TOOL_ORDER: ToolType[] = ["move", "magnify", "brush", "eraser", "lasso", "magnetic", "wand"];
+const SHARED_TOOL_SET = new Set<ToolType>(["move", "magnify"]);
 
 const UNDO_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -781,6 +782,33 @@ export class DefineRoom {
                     ></span>
                   </button>
                   <div
+                    class="toolbar toolbar-shared"
+                    role="group"
+                    aria-label="Common tools"
+                  >
+                    <div class="history-group">
+                      <button
+                        class="toolbar-button tool-button history-button toolbar-undo"
+                        type="button"
+                        aria-label="Undo"
+                        title="Undo"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Undo</span>
+                      </button>
+                      <button
+                        class="toolbar-button tool-button history-button toolbar-redo"
+                        type="button"
+                        aria-label="Redo"
+                        title="Redo"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Redo</span>
+                      </button>
+                    </div>
+                    <div class="tool-group tool-group-shared"></div>
+                  </div>
+                  <div
                     class="toolbar toolbar-rooms"
                     id="define-room-toolbar"
                     role="group"
@@ -813,27 +841,7 @@ export class DefineRoom {
                         </button>
                       </div>
                     </div>
-                    <div class="history-group">
-                      <button
-                        class="toolbar-button tool-button history-button toolbar-undo"
-                        type="button"
-                        aria-label="Undo"
-                        title="Undo"
-                      >
-                        <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Undo</span>
-                      </button>
-                      <button
-                        class="toolbar-button tool-button history-button toolbar-redo"
-                        type="button"
-                        aria-label="Redo"
-                        title="Redo"
-                      >
-                        <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Redo</span>
-                      </button>
-                    </div>
-                    <div class="tool-group"></div>
+                    <div class="tool-group tool-group-rooms"></div>
                   </div>
                   <div
                     class="toolbar toolbar-temporary-markers"
@@ -1137,7 +1145,8 @@ export class DefineRoom {
     this.deleteCancelButton = this.root.querySelector(".room-delete-cancel") as HTMLButtonElement;
     this.deleteConfirmButton = this.root.querySelector(".room-delete-confirm") as HTMLButtonElement;
     this.deleteDialogIcon = this.root.querySelector(".room-delete-icon") as HTMLElement;
-    const toolGroup = this.root.querySelector(".tool-group") as HTMLElement;
+    const roomsToolGroup = this.root.querySelector(".tool-group-rooms") as HTMLElement | null;
+    const sharedToolGroup = this.root.querySelector(".tool-group-shared") as HTMLElement | null;
     this.canvasWrapper = this.root.querySelector(".canvas-wrapper") as HTMLElement;
     this.imageCanvas = this.root.querySelector(".image-layer") as HTMLCanvasElement;
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
@@ -1267,6 +1276,11 @@ export class DefineRoom {
     this.updateHistoryControls();
 
     TOOL_ORDER.forEach((tool) => {
+      const targetGroup = SHARED_TOOL_SET.has(tool) ? sharedToolGroup : roomsToolGroup;
+      if (!targetGroup) {
+        return;
+      }
+
       const button = document.createElement("button");
       button.type = "button";
       button.className = "toolbar-button tool-button";
@@ -1286,7 +1300,7 @@ export class DefineRoom {
       button.appendChild(label);
 
       button.addEventListener("click", () => this.setTool(tool));
-      toolGroup.appendChild(button);
+      targetGroup.appendChild(button);
       this.toolButtons.set(tool, button);
     });
     this.setTool(this.currentTool);
