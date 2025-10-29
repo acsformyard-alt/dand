@@ -19,6 +19,14 @@ type ToolType = "brush" | "eraser" | "lasso" | "magnetic" | "wand" | "magnify" |
 
 type Point = { x: number; y: number };
 
+type TemporaryMarkerType = "character" | "object";
+
+type TemporaryMarker = {
+  id: string;
+  type: TemporaryMarkerType;
+  position: Point;
+};
+
 type Room = {
   id: string;
   name: string;
@@ -559,7 +567,35 @@ export class DefineRoom {
 
   private temporaryMarkersPanel!: HTMLElement;
 
+  private temporaryMarkersLayer!: HTMLElement;
+
+  private markerPlacementMessage!: HTMLElement;
+
+  private temporaryMarkersPlaceholder!: HTMLElement;
+
+  private temporaryMarkersList!: HTMLElement;
+
   private activeTab: 'rooms' | 'temporary-markers' = 'rooms';
+
+  private temporaryMarkers: TemporaryMarker[] = [];
+
+  private activeMarkerType: TemporaryMarkerType | null = null;
+
+  private previousToolBeforeMarkerPlacement: ToolType | null = null;
+
+  private handleMarkerPlacementKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (this.interactionMode !== "marker-placement") {
+      return;
+    }
+
+    event.preventDefault();
+    this.setActiveMarkerType(null);
+    this.setMarkerPlacementMode(false);
+  };
 
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     if (!this.colorMenu || this.colorMenu.classList.contains("hidden")) {
@@ -880,6 +916,16 @@ export class DefineRoom {
                 <canvas class="image-layer"></canvas>
                 <canvas class="mask-layer"></canvas>
                 <canvas class="selection-layer"></canvas>
+                <div
+                  class="temporary-markers-layer"
+                  aria-hidden="true"
+                  ref={(node: HTMLElement | null) => node && (this.temporaryMarkersLayer = node)}
+                ></div>
+                <div
+                  class="marker-placement-message"
+                  aria-hidden="true"
+                  ref={(node: HTMLElement | null) => node && (this.markerPlacementMessage = node)}
+                ></div>
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
             </section>
@@ -905,9 +951,17 @@ export class DefineRoom {
               <p class="temporary-markers-description">
                 Add quick callouts while planning without committing them to the final map yet.
               </p>
-              <div class="temporary-markers-placeholder">
+              <div
+                class="temporary-markers-placeholder"
+                ref={(node: HTMLElement | null) => node && (this.temporaryMarkersPlaceholder = node)}
+              >
                 <p class="temporary-markers-empty">Temporary markers will appear here once added.</p>
               </div>
+              <ul
+                class="temporary-markers-list"
+                aria-live="polite"
+                ref={(node: HTMLElement | null) => node && (this.temporaryMarkersList = node)}
+              ></ul>
             </aside>
           </div>
         </div>
@@ -988,6 +1042,7 @@ export class DefineRoom {
     this.close();
     this.cancelOverlayFrame();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    document.removeEventListener("keydown", this.handleMarkerPlacementKeydown);
     this.root.remove();
   }
 
@@ -998,15 +1053,193 @@ export class DefineRoom {
   public setMarkerPlacementMode(enabled: boolean): void {
     const nextMode: DefineRoomInteractionMode = enabled ? "marker-placement" : "editing";
     if (this.interactionMode === nextMode) {
+      this.updateMarkerPlacementUi();
+      this.updateCanvasCursor();
       return;
     }
     this.interactionMode = nextMode;
     this.root.classList.toggle("define-room-marker-placement", enabled);
-    if (enabled && this.currentTool !== "move") {
-      this.setTool("move");
+    if (enabled) {
+      if (this.currentTool !== "move") {
+        this.previousToolBeforeMarkerPlacement = this.currentTool;
+        this.setTool("move");
+      } else {
+        this.previousToolBeforeMarkerPlacement = null;
+      }
+    } else if (this.previousToolBeforeMarkerPlacement) {
+      const toolToRestore = this.previousToolBeforeMarkerPlacement;
+      this.previousToolBeforeMarkerPlacement = null;
+      if (this.currentTool !== toolToRestore) {
+        this.setTool(toolToRestore);
+      }
+    } else {
+      this.previousToolBeforeMarkerPlacement = null;
     }
     this.updateToolAvailability();
     this.updateCanvasCursor();
+    this.updateMarkerPlacementUi();
+  }
+
+  private setActiveMarkerType(type: TemporaryMarkerType | null): void {
+    if (this.activeMarkerType === type) {
+      return;
+    }
+    this.activeMarkerType = type;
+    this.updateMarkerPlacementUi();
+  }
+
+  private handleTemporaryMarkerButtonClick(type: TemporaryMarkerType): void {
+    const isActive = this.interactionMode === "marker-placement" && this.activeMarkerType === type;
+    if (isActive) {
+      this.setActiveMarkerType(null);
+      this.setMarkerPlacementMode(false);
+      return;
+    }
+
+    this.setActiveMarkerType(type);
+    this.setMarkerPlacementMode(true);
+  }
+
+  private getMarkerTypeLabel(type: TemporaryMarkerType): string {
+    return type === "character" ? "Character" : "Object";
+  }
+
+  private updateMarkerPlacementUi(): void {
+    const isPlacement = this.interactionMode === "marker-placement";
+    const hasType = this.activeMarkerType !== null;
+
+    if (this.characterMarkersButton) {
+      const characterActive = isPlacement && this.activeMarkerType === "character";
+      this.characterMarkersButton.classList.toggle("active", characterActive);
+      this.characterMarkersButton.setAttribute("aria-pressed", characterActive ? "true" : "false");
+    }
+
+    if (this.objectMarkersButton) {
+      const objectActive = isPlacement && this.activeMarkerType === "object";
+      this.objectMarkersButton.classList.toggle("active", objectActive);
+      this.objectMarkersButton.setAttribute("aria-pressed", objectActive ? "true" : "false");
+    }
+
+    if (this.markerPlacementMessage) {
+      const visible = isPlacement && hasType;
+      if (visible && this.activeMarkerType) {
+        const label = this.getMarkerTypeLabel(this.activeMarkerType).toLowerCase();
+        this.markerPlacementMessage.textContent = `Click to place ${label} marker`;
+      } else {
+        this.markerPlacementMessage.textContent = "";
+      }
+      this.markerPlacementMessage.classList.toggle("visible", visible);
+      this.markerPlacementMessage.setAttribute("aria-hidden", visible ? "false" : "true");
+    }
+  }
+
+  private updateTemporaryMarkersPanel(): void {
+    if (!this.temporaryMarkersPanel || !this.temporaryMarkersList || !this.temporaryMarkersPlaceholder) {
+      return;
+    }
+
+    const hasMarkers = this.temporaryMarkers.length > 0;
+
+    this.temporaryMarkersPlaceholder.hidden = hasMarkers;
+    this.temporaryMarkersPlaceholder.setAttribute("aria-hidden", hasMarkers ? "true" : "false");
+
+    if (!hasMarkers) {
+      this.temporaryMarkersList.hidden = true;
+      this.temporaryMarkersList.setAttribute("aria-hidden", "true");
+      this.temporaryMarkersList.replaceChildren();
+      return;
+    }
+
+    this.temporaryMarkersList.hidden = false;
+    this.temporaryMarkersList.setAttribute("aria-hidden", "false");
+
+    const fragment = document.createDocumentFragment();
+
+    this.temporaryMarkers.forEach((marker, index) => {
+      const item = document.createElement("li");
+      item.className = "temporary-markers-item";
+
+      const chip = document.createElement("span");
+      chip.className = `temporary-markers-chip temporary-markers-chip--${marker.type}`;
+      chip.textContent = this.getMarkerTypeLabel(marker.type).charAt(0);
+
+      const details = document.createElement("div");
+      details.className = "temporary-markers-details";
+
+      const title = document.createElement("span");
+      title.className = "temporary-markers-label";
+      title.textContent = `${this.getMarkerTypeLabel(marker.type)} marker ${index + 1}`;
+
+      const position = document.createElement("span");
+      position.className = "temporary-markers-position";
+      position.textContent = `(${marker.position.x}, ${marker.position.y})`;
+
+      details.appendChild(title);
+      details.appendChild(position);
+
+      item.appendChild(chip);
+      item.appendChild(details);
+
+      fragment.appendChild(item);
+    });
+
+    this.temporaryMarkersList.replaceChildren(fragment);
+  }
+
+  private renderTemporaryMarkers(): void {
+    if (!this.temporaryMarkersLayer) {
+      return;
+    }
+
+    const width = this.width || this.overlayCanvas?.width || 1;
+    const height = this.height || this.overlayCanvas?.height || 1;
+    const widthDenominator = Math.max(width - 1, 1);
+    const heightDenominator = Math.max(height - 1, 1);
+
+    const fragment = document.createDocumentFragment();
+
+    this.temporaryMarkers.forEach((marker) => {
+      const leftPercent = clamp((marker.position.x / widthDenominator) * 100, 0, 100);
+      const topPercent = clamp((marker.position.y / heightDenominator) * 100, 0, 100);
+
+      const markerElement = document.createElement("div");
+      markerElement.className = `temporary-marker temporary-marker--${marker.type}`;
+      markerElement.style.left = `${leftPercent}%`;
+      markerElement.style.top = `${topPercent}%`;
+      markerElement.setAttribute("aria-hidden", "true");
+      markerElement.title = `${this.getMarkerTypeLabel(marker.type)} marker at (${marker.position.x}, ${marker.position.y})`;
+
+      const label = document.createElement("span");
+      label.className = "temporary-marker-icon";
+      label.textContent = this.getMarkerTypeLabel(marker.type).charAt(0);
+
+      markerElement.appendChild(label);
+      fragment.appendChild(markerElement);
+    });
+
+    this.temporaryMarkersLayer.replaceChildren(fragment);
+  }
+
+  private resetTemporaryMarkers(): void {
+    this.temporaryMarkers = [];
+    this.renderTemporaryMarkers();
+    this.updateTemporaryMarkersPanel();
+  }
+
+  private addTemporaryMarker(point: Point): void {
+    if (!this.activeMarkerType) {
+      return;
+    }
+
+    const marker: TemporaryMarker = {
+      id: `temporary-marker-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: this.activeMarkerType,
+      position: { x: Math.round(point.x), y: Math.round(point.y) },
+    };
+
+    this.temporaryMarkers.push(marker);
+    this.renderTemporaryMarkers();
+    this.updateTemporaryMarkersPanel();
   }
 
   private setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
@@ -1020,6 +1253,11 @@ export class DefineRoom {
   private applyActiveTabState(): void {
     const isRooms = this.activeTab === 'rooms';
     this.root.classList.toggle('define-room-temporary-markers-active', !isRooms);
+
+    if (isRooms && this.interactionMode === 'marker-placement') {
+      this.setActiveMarkerType(null);
+      this.setMarkerPlacementMode(false);
+    }
 
     if (this.tabToggleButton) {
       const nextTab = isRooms ? 'temporary-markers' : 'rooms';
@@ -1151,6 +1389,20 @@ export class DefineRoom {
     this.temporaryMarkersPanel = this.root.querySelector(
       ".temporary-markers-panel",
     ) as HTMLElement;
+    this.temporaryMarkersLayer = this.root.querySelector(
+      ".temporary-markers-layer",
+    ) as HTMLElement;
+    this.markerPlacementMessage = this.root.querySelector(
+      ".marker-placement-message",
+    ) as HTMLElement;
+    if (this.temporaryMarkersPanel) {
+      this.temporaryMarkersPlaceholder = this.temporaryMarkersPanel.querySelector(
+        ".temporary-markers-placeholder",
+      ) as HTMLElement;
+      this.temporaryMarkersList = this.temporaryMarkersPanel.querySelector(
+        ".temporary-markers-list",
+      ) as HTMLElement;
+    }
     const sharedToolGroup = this.root.querySelector(
       ".shared-tool-group",
     ) as HTMLElement | null;
@@ -1198,6 +1450,10 @@ export class DefineRoom {
       if (characterIcon) {
         characterIcon.innerHTML = CHARACTER_MARKER_ICON;
       }
+      this.characterMarkersButton.addEventListener("click", () =>
+        this.handleTemporaryMarkerButtonClick("character"),
+      );
+      this.characterMarkersButton.setAttribute("aria-pressed", "false");
     }
 
     if (this.objectMarkersButton) {
@@ -1207,7 +1463,14 @@ export class DefineRoom {
       if (objectIcon) {
         objectIcon.innerHTML = OBJECT_MARKER_ICON;
       }
+      this.objectMarkersButton.addEventListener("click", () =>
+        this.handleTemporaryMarkerButtonClick("object"),
+      );
+      this.objectMarkersButton.setAttribute("aria-pressed", "false");
     }
+
+    this.updateTemporaryMarkersPanel();
+    this.updateMarkerPlacementUi();
 
     this.applyActiveTabState();
 
@@ -1350,6 +1613,7 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+    document.addEventListener("keydown", this.handleMarkerPlacementKeydown);
   }
 
   private initializeColorMenu(): void {
@@ -1739,6 +2003,7 @@ export class DefineRoom {
     this.updateRoomList();
     this.clearMaskLayer();
     this.renderOverlay();
+    this.resetTemporaryMarkers();
 
     this.isConfirmingRoom = false;
     this.pendingRoomId = null;
@@ -1747,6 +2012,8 @@ export class DefineRoom {
     this.editingOriginalMask = null;
     this.updateNewRoomControls();
     this.updateHistoryControls();
+    this.setActiveMarkerType(null);
+    this.setMarkerPlacementMode(false);
   }
 
   private generateGrayscaleMaps(): void {
@@ -2227,6 +2494,19 @@ export class DefineRoom {
 
   private handlePointerDown(event: PointerEvent): void {
     if (this.interactionMode === "marker-placement") {
+      event.preventDefault();
+      if (event.button !== 0 || !this.activeMarkerType) {
+        return;
+      }
+
+      const point = this.translatePoint(event);
+      if (!point) {
+        return;
+      }
+
+      this.addTemporaryMarker(point);
+      this.setActiveMarkerType(null);
+      this.setMarkerPlacementMode(false);
       return;
     }
     event.preventDefault();
@@ -2650,6 +2930,12 @@ export class DefineRoom {
       canvas.style.transformOrigin = origin;
       canvas.style.transform = transformValue;
     });
+
+    if (this.temporaryMarkersLayer) {
+      this.temporaryMarkersLayer.style.transition = withTransition ? this.magnifyTransition : "none";
+      this.temporaryMarkersLayer.style.transformOrigin = origin;
+      this.temporaryMarkersLayer.style.transform = transformValue;
+    }
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
@@ -2671,6 +2957,11 @@ export class DefineRoom {
 
   private updateCanvasCursor(): void {
     if (!this.overlayCanvas) {
+      return;
+    }
+
+    if (this.interactionMode === "marker-placement") {
+      this.overlayCanvas.style.cursor = "crosshair";
       return;
     }
 

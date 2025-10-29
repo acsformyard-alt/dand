@@ -295,9 +295,81 @@
   text-align: center;
 }
 
+.temporary-markers-placeholder[hidden] {
+  display: none;
+}
+
 .temporary-markers-empty {
   margin: 0;
   font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.temporary-markers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.temporary-markers-list[hidden] {
+  display: none;
+}
+
+.temporary-markers-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.35);
+}
+
+.temporary-markers-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #0b1220;
+  text-transform: uppercase;
+  box-shadow: 0 12px 28px rgba(56, 189, 248, 0.35);
+}
+
+.temporary-markers-chip--character {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+}
+
+.temporary-markers-chip--object {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  box-shadow: 0 12px 28px rgba(250, 204, 21, 0.35);
+}
+
+.temporary-markers-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.temporary-markers-label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.temporary-markers-position {
+  font-size: 0.78rem;
   color: rgba(148, 163, 184, 0.75);
 }
 
@@ -880,6 +952,12 @@
   box-shadow: 0 16px 36px rgba(56, 189, 248, 0.35);
 }
 
+.toolbar-temporary.active {
+  background: linear-gradient(135deg, #60a5fa, #a855f7);
+  color: #0b1220;
+  box-shadow: 0 18px 40px rgba(96, 165, 250, 0.45);
+}
+
 .toolbar-temporary:hover:not(:disabled),
 .toolbar-temporary:focus-visible:not(:disabled) {
   background: linear-gradient(135deg, #60a5fa, #a855f7);
@@ -1018,6 +1096,70 @@
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+}
+
+.temporary-markers-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transform-origin: top left;
+  z-index: 2;
+}
+
+.temporary-marker {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #0b1220;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow: 0 16px 32px rgba(56, 189, 248, 0.35);
+}
+
+.temporary-marker-icon {
+  line-height: 1;
+}
+
+.temporary-marker--character {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+}
+
+.temporary-marker--object {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  box-shadow: 0 16px 32px rgba(250, 204, 21, 0.38);
+}
+
+.marker-placement-message {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(248, 250, 252, 0.95);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-size: 0.9rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  text-transform: lowercase;
+  z-index: 3;
+}
+
+.marker-placement-message.visible {
+  opacity: 0.7;
 }
 
 .canvas-wrapper .image-layer {
