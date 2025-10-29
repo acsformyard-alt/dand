@@ -793,29 +793,6 @@ export class DefineRoom {
                     aria-label="Define Rooms toolbar"
                     ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}
                   >
-                    <div class="toolbar-shared-controls">
-                      <div class="history-group">
-                        <button
-                          class="toolbar-button tool-button history-button toolbar-undo"
-                          type="button"
-                          aria-label="Undo"
-                          title="Undo"
-                        >
-                          <span class="toolbar-button-icon" aria-hidden="true"></span>
-                          <span class="toolbar-button-label" aria-hidden="true">Undo</span>
-                        </button>
-                        <button
-                          class="toolbar-button tool-button history-button toolbar-redo"
-                          type="button"
-                          aria-label="Redo"
-                          title="Redo"
-                        >
-                          <span class="toolbar-button-icon" aria-hidden="true"></span>
-                          <span class="toolbar-button-label" aria-hidden="true">Redo</span>
-                        </button>
-                      </div>
-                      <div class="tool-group shared-tool-group"></div>
-                    </div>
                     <div class="toolbar-primary-group">
                       <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
@@ -872,6 +849,29 @@ export class DefineRoom {
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
                         <span class="toolbar-button-label" aria-hidden="true">Object Markers</span>
                       </button>
+                    </div>
+                    <div class="toolbar-shared-controls">
+                      <div class="history-group">
+                        <button
+                          class="toolbar-button tool-button history-button toolbar-undo"
+                          type="button"
+                          aria-label="Undo"
+                          title="Undo"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Undo</span>
+                        </button>
+                        <button
+                          class="toolbar-button tool-button history-button toolbar-redo"
+                          type="button"
+                          aria-label="Redo"
+                          title="Redo"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Redo</span>
+                        </button>
+                      </div>
+                      <div class="tool-group shared-tool-group"></div>
                     </div>
                   </div>
                 </div>
