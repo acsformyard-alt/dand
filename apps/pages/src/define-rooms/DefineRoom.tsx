@@ -37,6 +37,8 @@ type DefineRoomMode = "overlay" | "embedded";
 
 type DefineRoomInteractionMode = "editing" | "marker-placement";
 
+type MarkerType = "character" | "object";
+
 type DirtyRect = { minX: number; minY: number; maxX: number; maxY: number };
 
 type MaskHistoryEntry = {
@@ -311,6 +313,68 @@ const CANCEL_ROOM_ICON = `
   </svg>
 `;
 
+const CHARACTER_MARKER_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle
+      cx="12"
+      cy="8"
+      r="3.5"
+      stroke="currentColor"
+      stroke-width="1.6"
+    />
+    <path
+      d="M5 19c.7-3.2 3.4-5.5 7-5.5s6.3 2.3 7 5.5"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+`;
+
+const OBJECT_MARKER_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4 8l8-4 8 4v8l-8 4-8-4V8z"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M12 4v16"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+    />
+    <path
+      d="M4 12l8 4 8-4"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+`;
+
+const SWITCH_TO_TEMPORARY_MARKERS_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="5.5" stroke="currentColor" stroke-width="1.7" />
+    <path d="M12 4v2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+    <path d="M12 17.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+    <path d="M4 12h2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+    <path d="M17.8 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+  </svg>
+`;
+
+const SWITCH_TO_ROOMS_ICON = `
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="5" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
+    <rect x="13" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
+    <rect x="5" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
+    <rect x="13" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
+  </svg>
+`;
+
 const TOOL_ORDER: ToolType[] = ["move", "magnify", "brush", "eraser", "lasso", "magnetic", "wand"];
 
 const UNDO_ICON = `
@@ -452,6 +516,13 @@ function fillPolygon(
   }
 }
 
+type TemporaryMarker = {
+  id: string;
+  type: MarkerType;
+  position: Point;
+  element: HTMLElement;
+};
+
 export class DefineRoom {
   private root: HTMLElement;
 
@@ -481,6 +552,24 @@ export class DefineRoom {
 
   private toolbarContainer!: HTMLElement;
 
+  private markersToolbar!: HTMLElement;
+
+  private sharedToolGroup!: HTMLElement;
+
+  private roomsToolGroup!: HTMLElement;
+
+  private tabToggleButton!: HTMLButtonElement;
+
+  private tabToggleButtonIcon: HTMLElement | null = null;
+
+  private characterMarkersButton!: HTMLButtonElement;
+
+  private objectMarkersButton!: HTMLButtonElement;
+
+  private temporaryMarkersPanel!: HTMLElement;
+
+  private activeTab: 'rooms' | 'temporary-markers' = 'rooms';
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     if (!this.colorMenu || this.colorMenu.classList.contains("hidden")) {
       return;
@@ -498,6 +587,8 @@ export class DefineRoom {
     this.closeColorMenu();
   };
 
+
+  private toolbarPrimaryGroup!: HTMLElement;
 
   private toolbarPrimaryButton!: HTMLButtonElement;
 
@@ -536,6 +627,16 @@ export class DefineRoom {
   private canvasWrapper!: HTMLElement;
 
   private hoverLabel!: HTMLElement;
+
+  private markerLayer!: HTMLElement;
+
+  private markerInstructions!: HTMLElement;
+
+  private activeMarkerType: MarkerType | null = null;
+
+  private markerIdCounter = 0;
+
+  private temporaryMarkers: TemporaryMarker[] = [];
 
   private closeButton: HTMLButtonElement | null = null;
 
@@ -689,54 +790,109 @@ export class DefineRoom {
                     ref={(node: HTMLElement | null) => node && (this.brushSliderValueLabel = node)}
                   ></div>
                 </div>
-                <div class="toolbar" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
-                  <div class="toolbar-primary-group">
-                    <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">New Room</span>
-                    </button>
-                    <div class="toolbar-confirm-group">
+                <div class="toolbar-stack">
+                  <button
+                    class="toolbar-button toolbar-switch-tab"
+                    type="button"
+                    aria-label="Switch to Temporary Markers tab"
+                    title="Switch to Temporary Markers tab"
+                    data-target-tab="temporary-markers"
+                    ref={(node: HTMLButtonElement | null) => node && (this.tabToggleButton = node)}
+                  >
+                    <span
+                      class="toolbar-button-icon"
+                      aria-hidden="true"
+                      ref={(node: HTMLElement | null) => node && (this.tabToggleButtonIcon = node)}
+                    ></span>
+                  </button>
+                  <div
+                    class="toolbar"
+                    id="define-room-toolbar"
+                    role="group"
+                    aria-label="Define Rooms toolbar"
+                    ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}
+                  >
+                    <div class="toolbar-primary-group">
+                      <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">New Room</span>
+                      </button>
+                      <div class="toolbar-confirm-group">
+                        <button
+                          class="toolbar-button toolbar-confirm"
+                          type="button"
+                          aria-label="Confirm Room"
+                          title="Confirm Room"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Confirm</span>
+                        </button>
+                        <button
+                          class="toolbar-button toolbar-cancel"
+                          type="button"
+                          aria-label="Cancel Room"
+                          title="Cancel Room"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Cancel</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="tool-group rooms-tool-group"></div>
+                    <div
+                      class="toolbar-temporary-markers"
+                      id="temporary-markers-toolbar"
+                      role="group"
+                      aria-label="Temporary Markers toolbar"
+                      aria-hidden="true"
+                      hidden
+                      ref={(node: HTMLElement | null) => node && (this.markersToolbar = node)}
+                    >
                       <button
-                        class="toolbar-button toolbar-confirm"
+                        class="toolbar-button toolbar-temporary"
                         type="button"
-                        aria-label="Confirm Room"
-                        title="Confirm Room"
+                        aria-label="Character Markers"
+                        title="Character Markers"
+                        ref={(node: HTMLButtonElement | null) => node && (this.characterMarkersButton = node)}
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Confirm</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Character Markers</span>
                       </button>
                       <button
-                        class="toolbar-button toolbar-cancel"
+                        class="toolbar-button toolbar-temporary"
                         type="button"
-                        aria-label="Cancel Room"
-                        title="Cancel Room"
+                        aria-label="Object Markers"
+                        title="Object Markers"
+                        ref={(node: HTMLButtonElement | null) => node && (this.objectMarkersButton = node)}
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
-                        <span class="toolbar-button-label" aria-hidden="true">Cancel</span>
+                        <span class="toolbar-button-label" aria-hidden="true">Object Markers</span>
                       </button>
                     </div>
+                    <div class="toolbar-shared-controls">
+                      <div class="history-group">
+                        <button
+                          class="toolbar-button tool-button history-button toolbar-undo"
+                          type="button"
+                          aria-label="Undo"
+                          title="Undo"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Undo</span>
+                        </button>
+                        <button
+                          class="toolbar-button tool-button history-button toolbar-redo"
+                          type="button"
+                          aria-label="Redo"
+                          title="Redo"
+                        >
+                          <span class="toolbar-button-icon" aria-hidden="true"></span>
+                          <span class="toolbar-button-label" aria-hidden="true">Redo</span>
+                        </button>
+                      </div>
+                      <div class="tool-group shared-tool-group"></div>
+                    </div>
                   </div>
-                  <div class="history-group">
-                    <button
-                      class="toolbar-button tool-button history-button toolbar-undo"
-                      type="button"
-                      aria-label="Undo"
-                      title="Undo"
-                    >
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">Undo</span>
-                    </button>
-                    <button
-                      class="toolbar-button tool-button history-button toolbar-redo"
-                      type="button"
-                      aria-label="Redo"
-                      title="Redo"
-                    >
-                      <span class="toolbar-button-icon" aria-hidden="true"></span>
-                      <span class="toolbar-button-label" aria-hidden="true">Redo</span>
-                    </button>
-                  </div>
-                  <div class="tool-group"></div>
                 </div>
               </div>
               <div class="canvas-wrapper">
@@ -744,6 +900,17 @@ export class DefineRoom {
                 <canvas class="mask-layer"></canvas>
                 <canvas class="selection-layer"></canvas>
                 <div class="room-hover-label" aria-hidden="true"></div>
+                <div
+                  class="marker-placement-instructions"
+                  aria-live="polite"
+                  hidden
+                  ref={(node: HTMLElement | null) => node && (this.markerInstructions = node)}
+                ></div>
+                <div
+                  class="temporary-marker-layer"
+                  aria-hidden="true"
+                  ref={(node: HTMLElement | null) => node && (this.markerLayer = node)}
+                ></div>
               </div>
             </section>
             <aside class="define-room-sidebar" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
@@ -755,6 +922,22 @@ export class DefineRoom {
               </p>
               <div class="rooms-list"></div>
               <div class="room-color-menu hidden" aria-hidden="true"></div>
+            </aside>
+            <aside
+              class="define-room-sidebar temporary-markers-panel"
+              ref={(node: HTMLElement | null) => node && (this.temporaryMarkersPanel = node)}
+              aria-hidden="true"
+              hidden
+            >
+              <div class="rooms-header">
+                <h2>Temporary Markers</h2>
+              </div>
+              <p class="temporary-markers-description">
+                Add quick callouts while planning without committing them to the final map yet.
+              </p>
+              <div class="temporary-markers-placeholder">
+                <p class="temporary-markers-empty">Temporary markers will appear here once added.</p>
+              </div>
             </aside>
           </div>
         </div>
@@ -845,6 +1028,7 @@ export class DefineRoom {
   public setMarkerPlacementMode(enabled: boolean): void {
     const nextMode: DefineRoomInteractionMode = enabled ? "marker-placement" : "editing";
     if (this.interactionMode === nextMode) {
+      this.updateMarkerPlacementUi();
       return;
     }
     this.interactionMode = nextMode;
@@ -854,6 +1038,164 @@ export class DefineRoom {
     }
     this.updateToolAvailability();
     this.updateCanvasCursor();
+    this.updateMarkerPlacementUi();
+  }
+
+  private setActiveMarkerType(markerType: MarkerType | null): void {
+    this.activeMarkerType = markerType;
+    this.setMarkerPlacementMode(markerType !== null);
+    this.updateMarkerPlacementUi();
+  }
+
+  private updateMarkerPlacementUi(): void {
+    const isActive = this.interactionMode === "marker-placement" && this.activeMarkerType !== null;
+
+    if (this.characterMarkersButton) {
+      this.characterMarkersButton.classList.toggle(
+        "active",
+        isActive && this.activeMarkerType === "character",
+      );
+    }
+
+    if (this.objectMarkersButton) {
+      this.objectMarkersButton.classList.toggle(
+        "active",
+        isActive && this.activeMarkerType === "object",
+      );
+    }
+
+    if (this.markerInstructions) {
+      if (isActive && this.activeMarkerType) {
+        const label =
+          this.activeMarkerType === "character"
+            ? "Click to place character marker"
+            : "Click to place object marker";
+        this.markerInstructions.textContent = label;
+        this.markerInstructions.dataset.markerType = this.activeMarkerType;
+        this.markerInstructions.removeAttribute("hidden");
+      } else {
+        this.markerInstructions.textContent = "";
+        this.markerInstructions.dataset.markerType = "";
+        this.markerInstructions.setAttribute("hidden", "true");
+      }
+    }
+  }
+
+  private placeTemporaryMarker(point: Point, type: MarkerType): void {
+    if (!this.markerLayer || !this.overlayCanvas || !this.overlayCanvas.width || !this.overlayCanvas.height) {
+      return;
+    }
+
+    const markerElement = document.createElement("div");
+    markerElement.className = `temporary-marker temporary-marker-${type}`;
+    markerElement.dataset.markerId = `marker-${this.markerIdCounter}`;
+
+    const icon = document.createElement("span");
+    icon.className = "temporary-marker-icon";
+    icon.innerHTML = type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+    markerElement.appendChild(icon);
+
+    this.markerLayer.appendChild(markerElement);
+
+    const marker: TemporaryMarker = {
+      id: markerElement.dataset.markerId ?? `marker-${this.markerIdCounter}`,
+      type,
+      position: { x: Math.round(point.x), y: Math.round(point.y) },
+      element: markerElement,
+    };
+
+    this.markerIdCounter += 1;
+    this.temporaryMarkers.push(marker);
+    this.positionTemporaryMarker(marker);
+  }
+
+  private positionTemporaryMarker(marker: TemporaryMarker): void {
+    if (!this.overlayCanvas || !this.overlayCanvas.width || !this.overlayCanvas.height) {
+      return;
+    }
+
+    const percentX = clamp((marker.position.x / this.overlayCanvas.width) * 100, 0, 100);
+    const percentY = clamp((marker.position.y / this.overlayCanvas.height) * 100, 0, 100);
+    marker.element.style.left = `${percentX}%`;
+    marker.element.style.top = `${percentY}%`;
+  }
+
+  private repositionTemporaryMarkers(): void {
+    this.temporaryMarkers.forEach((marker) => this.positionTemporaryMarker(marker));
+  }
+
+  private clearTemporaryMarkers(): void {
+    this.temporaryMarkers.forEach((marker) => marker.element.remove());
+    this.temporaryMarkers = [];
+  }
+
+  private setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
+    if (this.activeTab === tab) {
+      return;
+    }
+    this.activeTab = tab;
+    this.applyActiveTabState();
+  }
+
+  private applyActiveTabState(): void {
+    const isRooms = this.activeTab === 'rooms';
+    this.root.classList.toggle('define-room-temporary-markers-active', !isRooms);
+
+    if (this.tabToggleButton) {
+      const nextTab = isRooms ? 'temporary-markers' : 'rooms';
+      const label =
+        nextTab === 'temporary-markers'
+          ? 'Switch to Temporary Markers tab'
+          : 'Switch to Define Rooms tab';
+      this.tabToggleButton.setAttribute('aria-label', label);
+      this.tabToggleButton.setAttribute('title', label);
+      this.tabToggleButton.dataset.targetTab = nextTab;
+    }
+
+    if (this.tabToggleButtonIcon) {
+      const icon =
+        this.activeTab === 'rooms'
+          ? SWITCH_TO_TEMPORARY_MARKERS_ICON
+          : SWITCH_TO_ROOMS_ICON;
+      this.tabToggleButtonIcon.innerHTML = icon;
+    }
+
+    if (this.toolbarContainer) {
+      this.toolbarContainer.hidden = false;
+      this.toolbarContainer.setAttribute('aria-hidden', 'false');
+    }
+
+    if (this.toolbarPrimaryGroup) {
+      this.toolbarPrimaryGroup.hidden = !isRooms;
+      this.toolbarPrimaryGroup.setAttribute('aria-hidden', isRooms ? 'false' : 'true');
+    }
+
+    if (this.roomsToolGroup) {
+      this.roomsToolGroup.hidden = !isRooms;
+      this.roomsToolGroup.setAttribute('aria-hidden', isRooms ? 'false' : 'true');
+    }
+
+    if (this.markersToolbar) {
+      this.markersToolbar.hidden = isRooms;
+      this.markersToolbar.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
+    }
+
+    if (this.roomsPanel) {
+      this.roomsPanel.hidden = !isRooms;
+    }
+
+    if (this.temporaryMarkersPanel) {
+      this.temporaryMarkersPanel.hidden = isRooms;
+      this.temporaryMarkersPanel.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
+    }
+
+    if (isRooms) {
+      this.setActiveMarkerType(null);
+    } else {
+      this.updateMarkerPlacementUi();
+    }
+
+    this.updateBrushSliderVisibility();
   }
 
   public capturePolygonForMarker(): Promise<Array<{ x: number; y: number }> | null> {
@@ -912,19 +1254,49 @@ export class DefineRoom {
   }
 
   private initializeDomReferences(): void {
+    this.toolbarPrimaryGroup = this.root.querySelector(".toolbar-primary-group") as HTMLElement;
     this.toolbarPrimaryButton = this.root.querySelector(".toolbar-primary") as HTMLButtonElement;
     this.toolbarConfirmGroup = this.root.querySelector(".toolbar-confirm-group") as HTMLElement;
     this.toolbarConfirmButton = this.root.querySelector(".toolbar-confirm") as HTMLButtonElement;
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
+    this.tabToggleButton = this.root.querySelector(
+      ".toolbar-switch-tab",
+    ) as HTMLButtonElement;
+    this.tabToggleButtonIcon = (this.tabToggleButton?.querySelector(
+      ".toolbar-button-icon",
+    ) as HTMLElement | null) ?? null;
+    this.markersToolbar = this.root.querySelector(".toolbar-temporary-markers") as HTMLElement;
+    this.characterMarkersButton = this.root.querySelector(
+      '.toolbar-temporary[aria-label="Character Markers"]',
+    ) as HTMLButtonElement;
+    this.objectMarkersButton = this.root.querySelector(
+      '.toolbar-temporary[aria-label="Object Markers"]',
+    ) as HTMLButtonElement;
+    this.temporaryMarkersPanel = this.root.querySelector(
+      ".temporary-markers-panel",
+    ) as HTMLElement;
+    const sharedToolGroup = this.root.querySelector(
+      ".shared-tool-group",
+    ) as HTMLElement | null;
+    const roomsToolGroup = this.root.querySelector(
+      ".rooms-tool-group",
+    ) as HTMLElement | null;
+    if (!sharedToolGroup) {
+      throw new Error("DefineRoom: missing shared tool group container");
+    }
+    if (!roomsToolGroup) {
+      throw new Error("DefineRoom: missing rooms tool group container");
+    }
+    this.sharedToolGroup = sharedToolGroup;
+    this.roomsToolGroup = roomsToolGroup;
     this.roomsList = this.roomsPanel.querySelector(".rooms-list") as HTMLElement;
     this.colorMenu = this.roomsPanel.querySelector(".room-color-menu") as HTMLElement;
     this.deleteBackdrop = this.root.querySelector(".room-delete-backdrop") as HTMLElement;
     this.deleteCancelButton = this.root.querySelector(".room-delete-cancel") as HTMLButtonElement;
     this.deleteConfirmButton = this.root.querySelector(".room-delete-confirm") as HTMLButtonElement;
     this.deleteDialogIcon = this.root.querySelector(".room-delete-icon") as HTMLElement;
-    const toolGroup = this.root.querySelector(".tool-group") as HTMLElement;
     this.canvasWrapper = this.root.querySelector(".canvas-wrapper") as HTMLElement;
     this.imageCanvas = this.root.querySelector(".image-layer") as HTMLCanvasElement;
     this.overlayCanvas = this.root.querySelector(".mask-layer") as HTMLCanvasElement;
@@ -937,6 +1309,43 @@ export class DefineRoom {
     this.initializeColorMenu();
 
     this.roomsList.addEventListener("scroll", () => this.closeColorMenu());
+
+    if (this.tabToggleButton) {
+      this.tabToggleButton.addEventListener("click", () => {
+        const nextTab = this.activeTab === "rooms" ? "temporary-markers" : "rooms";
+        this.setActiveTab(nextTab);
+      });
+    }
+
+    if (this.characterMarkersButton) {
+      const characterIcon = this.characterMarkersButton.querySelector(
+        ".toolbar-button-icon",
+      ) as HTMLElement | null;
+      if (characterIcon) {
+        characterIcon.innerHTML = CHARACTER_MARKER_ICON;
+      }
+      this.characterMarkersButton.addEventListener("click", () => {
+        const shouldDeactivate =
+          this.interactionMode === "marker-placement" && this.activeMarkerType === "character";
+        this.setActiveMarkerType(shouldDeactivate ? null : "character");
+      });
+    }
+
+    if (this.objectMarkersButton) {
+      const objectIcon = this.objectMarkersButton.querySelector(
+        ".toolbar-button-icon",
+      ) as HTMLElement | null;
+      if (objectIcon) {
+        objectIcon.innerHTML = OBJECT_MARKER_ICON;
+      }
+      this.objectMarkersButton.addEventListener("click", () => {
+        const shouldDeactivate =
+          this.interactionMode === "marker-placement" && this.activeMarkerType === "object";
+        this.setActiveMarkerType(shouldDeactivate ? null : "object");
+      });
+    }
+
+    this.applyActiveTabState();
 
     if (this.deleteBackdrop) {
       this.deleteBackdrop.addEventListener("click", (event) => {
@@ -1046,7 +1455,9 @@ export class DefineRoom {
       button.appendChild(label);
 
       button.addEventListener("click", () => this.setTool(tool));
-      toolGroup.appendChild(button);
+      const targetGroup =
+        tool === "move" || tool === "magnify" ? this.sharedToolGroup : this.roomsToolGroup;
+      targetGroup.appendChild(button);
       this.toolButtons.set(tool, button);
     });
     this.setTool(this.currentTool);
@@ -1411,10 +1822,11 @@ export class DefineRoom {
     }
 
     const isBrushTool = this.currentTool === "brush" || this.currentTool === "eraser";
-    this.brushSliderContainer.classList.toggle("visible", isBrushTool);
-    this.brushSliderContainer.setAttribute("aria-hidden", isBrushTool ? "false" : "true");
+    const shouldShowSlider = this.activeTab === "rooms" && isBrushTool;
+    this.brushSliderContainer.classList.toggle("visible", shouldShowSlider);
+    this.brushSliderContainer.setAttribute("aria-hidden", shouldShowSlider ? "false" : "true");
 
-    if (!isBrushTool && this.isAdjustingBrushSize) {
+    if ((!shouldShowSlider || !isBrushTool) && this.isAdjustingBrushSize) {
       this.stopBrushSliderInteraction();
     }
   }
@@ -1441,6 +1853,9 @@ export class DefineRoom {
     this.selectionCanvas.style.height = "auto";
 
     this.resetMagnifyTransform(true);
+
+    this.clearTemporaryMarkers();
+    this.markerIdCounter = 0;
 
     this.imageContext.clearRect(0, 0, width, height);
     this.imageContext.drawImage(image, 0, 0, width, height);
@@ -1951,6 +2366,15 @@ export class DefineRoom {
 
   private handlePointerDown(event: PointerEvent): void {
     if (this.interactionMode === "marker-placement") {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      const point = this.translatePoint(event);
+      if (!point || !this.activeMarkerType) {
+        return;
+      }
+      this.placeTemporaryMarker(point, this.activeMarkerType);
       return;
     }
     event.preventDefault();
@@ -2369,11 +2793,18 @@ export class DefineRoom {
 
   private updateCanvasTransform(scale: number, origin: string, withTransition = true): void {
     const transformValue = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${scale})`;
-    [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
+    const targets: HTMLElement[] = [this.imageCanvas, this.overlayCanvas, this.selectionCanvas];
+    if (this.markerLayer) {
+      targets.push(this.markerLayer);
+    }
+
+    targets.forEach((canvas) => {
       canvas.style.transition = withTransition ? this.magnifyTransition : "none";
       canvas.style.transformOrigin = origin;
       canvas.style.transform = transformValue;
     });
+
+    this.repositionTemporaryMarkers();
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
@@ -2395,6 +2826,11 @@ export class DefineRoom {
 
   private updateCanvasCursor(): void {
     if (!this.overlayCanvas) {
+      return;
+    }
+
+    if (this.interactionMode === "marker-placement") {
+      this.overlayCanvas.style.cursor = "crosshair";
       return;
     }
 
