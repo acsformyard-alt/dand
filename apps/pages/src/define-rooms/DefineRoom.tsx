@@ -457,6 +457,10 @@ export class DefineRoom {
 
   private roomsPanel!: HTMLElement;
 
+  private roomsSidebarSection!: HTMLElement;
+
+  private markersSidebarSection!: HTMLElement;
+
   private roomsList!: HTMLElement;
 
   private roomsEmptyState!: HTMLElement;
@@ -480,6 +484,15 @@ export class DefineRoom {
   private activeColorRoomId: string | null = null;
 
   private toolbarContainer!: HTMLElement;
+
+  private markersToolbarContainer!: HTMLElement;
+
+  private tabButtons!: {
+    rooms: HTMLButtonElement;
+    temporaryMarkers: HTMLButtonElement;
+  };
+
+  private activePanel: 'rooms' | 'temporary-markers' = 'rooms';
 
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     if (!this.colorMenu || this.colorMenu.classList.contains("hidden")) {
@@ -673,6 +686,26 @@ export class DefineRoom {
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">
+                <div class="toolbar-tabs" role="tablist" aria-label="Editor view">
+                  <button
+                    class="toolbar-tab"
+                    type="button"
+                    role="tab"
+                    data-tab="rooms"
+                    aria-selected="true"
+                  >
+                    Define Rooms
+                  </button>
+                  <button
+                    class="toolbar-tab"
+                    type="button"
+                    role="tab"
+                    data-tab="temporary-markers"
+                    aria-selected="false"
+                  >
+                    Temporary Markers
+                  </button>
+                </div>
                 <div
                   class="brush-slider-container"
                   ref={(node: HTMLElement | null) => node && (this.brushSliderContainer = node)}
@@ -689,7 +722,7 @@ export class DefineRoom {
                     ref={(node: HTMLElement | null) => node && (this.brushSliderValueLabel = node)}
                   ></div>
                 </div>
-                <div class="toolbar" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
+                <div class="toolbar toolbar-rooms" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
                   <div class="toolbar-primary-group">
                     <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
                       <span class="toolbar-button-icon" aria-hidden="true"></span>
@@ -738,6 +771,32 @@ export class DefineRoom {
                   </div>
                   <div class="tool-group"></div>
                 </div>
+                <div
+                  class="toolbar toolbar-temporary is-hidden"
+                  ref={(node: HTMLElement | null) => node && (this.markersToolbarContainer = node)}
+                  aria-hidden="true"
+                >
+                  <div class="toolbar-primary-group markers-toolbar-group">
+                    <button
+                      class="toolbar-button markers-toolbar-button"
+                      type="button"
+                      aria-label="Character Markers"
+                      title="Character Markers"
+                    >
+                      <span class="toolbar-button-icon" aria-hidden="true"></span>
+                      <span class="toolbar-button-label" aria-hidden="true">Character Markers</span>
+                    </button>
+                    <button
+                      class="toolbar-button markers-toolbar-button"
+                      type="button"
+                      aria-label="Object Markers"
+                      title="Object Markers"
+                    >
+                      <span class="toolbar-button-icon" aria-hidden="true"></span>
+                      <span class="toolbar-button-label" aria-hidden="true">Object Markers</span>
+                    </button>
+                  </div>
+                </div>
               </div>
               <div class="canvas-wrapper">
                 <canvas class="image-layer"></canvas>
@@ -747,14 +806,23 @@ export class DefineRoom {
               </div>
             </section>
             <aside class="define-room-sidebar" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
-              <div class="rooms-header">
-                <h2>Rooms</h2>
+              <div class="sidebar-section rooms-sidebar-section">
+                <div class="rooms-header">
+                  <h2>Rooms</h2>
+                </div>
+                <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
+                  No rooms defined yet.
+                </p>
+                <div class="rooms-list"></div>
+                <div class="room-color-menu hidden" aria-hidden="true"></div>
               </div>
-              <p class="rooms-empty" ref={(node: HTMLElement | null) => node && (this.roomsEmptyState = node)}>
-                No rooms defined yet.
-              </p>
-              <div class="rooms-list"></div>
-              <div class="room-color-menu hidden" aria-hidden="true"></div>
+              <div class="sidebar-section temporary-markers-section is-hidden" aria-hidden="true">
+                <div class="rooms-header markers-header">
+                  <h2>Temporary Markers</h2>
+                </div>
+                <p class="temporary-markers-empty">No temporary markers yet.</p>
+                <div class="temporary-markers-list"></div>
+              </div>
             </aside>
           </div>
         </div>
@@ -918,8 +986,20 @@ export class DefineRoom {
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
+    this.tabButtons = {
+      rooms: this.root.querySelector('.toolbar-tab[data-tab="rooms"]') as HTMLButtonElement,
+      temporaryMarkers: this.root.querySelector(
+        '.toolbar-tab[data-tab="temporary-markers"]',
+      ) as HTMLButtonElement,
+    };
     this.roomsList = this.roomsPanel.querySelector(".rooms-list") as HTMLElement;
     this.colorMenu = this.roomsPanel.querySelector(".room-color-menu") as HTMLElement;
+    this.roomsSidebarSection = this.roomsPanel.querySelector(
+      ".rooms-sidebar-section",
+    ) as HTMLElement;
+    this.markersSidebarSection = this.roomsPanel.querySelector(
+      ".temporary-markers-section",
+    ) as HTMLElement;
     this.deleteBackdrop = this.root.querySelector(".room-delete-backdrop") as HTMLElement;
     this.deleteCancelButton = this.root.querySelector(".room-delete-cancel") as HTMLButtonElement;
     this.deleteConfirmButton = this.root.querySelector(".room-delete-confirm") as HTMLButtonElement;
@@ -960,6 +1040,11 @@ export class DefineRoom {
       this.deleteConfirmButton.addEventListener("click", () => this.confirmRoomDeletion());
     }
 
+    this.tabButtons.rooms.addEventListener("click", () => this.setActivePanel("rooms"));
+    this.tabButtons.temporaryMarkers.addEventListener("click", () =>
+      this.setActivePanel("temporary-markers"),
+    );
+
     if (this.deleteDialogIcon) {
       this.deleteDialogIcon.innerHTML = DELETE_ROOM_ICON;
       const dialogIconSvg = this.deleteDialogIcon.querySelector("svg");
@@ -972,6 +1057,8 @@ export class DefineRoom {
     document.addEventListener("click", this.handleColorMenuOutsideClick);
 
     this.updateBrushSliderUi();
+
+    this.updateActivePanelUi();
 
     this.roomsPanel.addEventListener("click", (event) => {
       if (this.isConfirmingRoom) {
@@ -1197,6 +1284,37 @@ export class DefineRoom {
     queueMicrotask(() => {
       this.deleteConfirmButton?.focus?.();
     });
+  }
+
+  private setActivePanel(panel: 'rooms' | 'temporary-markers'): void {
+    if (this.activePanel === panel) {
+      return;
+    }
+    this.activePanel = panel;
+    if (panel !== 'rooms') {
+      this.closeColorMenu();
+    }
+    this.updateActivePanelUi();
+  }
+
+  private updateActivePanelUi(): void {
+    const isRooms = this.activePanel === 'rooms';
+    this.tabButtons.rooms.setAttribute('aria-selected', isRooms ? 'true' : 'false');
+    this.tabButtons.rooms.classList.toggle('active', isRooms);
+    this.tabButtons.temporaryMarkers.setAttribute('aria-selected', isRooms ? 'false' : 'true');
+    this.tabButtons.temporaryMarkers.classList.toggle('active', !isRooms);
+
+    this.toolbarContainer.classList.toggle('is-hidden', !isRooms);
+    this.toolbarContainer.setAttribute('aria-hidden', isRooms ? 'false' : 'true');
+    this.markersToolbarContainer.classList.toggle('is-hidden', isRooms);
+    this.markersToolbarContainer.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
+
+    this.brushSliderContainer.classList.toggle('is-hidden', !isRooms);
+
+    this.roomsSidebarSection.classList.toggle('is-hidden', !isRooms);
+    this.roomsSidebarSection.setAttribute('aria-hidden', isRooms ? 'false' : 'true');
+    this.markersSidebarSection.classList.toggle('is-hidden', isRooms);
+    this.markersSidebarSection.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
   }
 
   private hideDeleteDialog(): void {

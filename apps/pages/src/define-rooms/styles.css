@@ -10,6 +10,10 @@
   padding: 40px;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .define-room-overlay.hidden {
   display: none;
 }
@@ -240,6 +244,13 @@
   position: relative;
 }
 
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+}
+
 .rooms-header {
   display: flex;
   align-items: center;
@@ -266,13 +277,15 @@
   cursor: not-allowed;
 }
 
-.rooms-empty {
+.rooms-empty,
+.temporary-markers-empty {
   margin: 0;
   font-size: 0.9rem;
   color: rgba(226, 232, 240, 0.6);
 }
 
-.rooms-list {
+.rooms-list,
+.temporary-markers-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
@@ -550,6 +563,51 @@
   flex-shrink: 0;
 }
 
+.toolbar-tabs {
+  position: absolute;
+  top: -62px;
+  right: 0;
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.82));
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.48);
+  z-index: 6;
+}
+
+.toolbar-tab {
+  border: none;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  white-space: nowrap;
+}
+
+.toolbar-tab:hover,
+.toolbar-tab:focus-visible {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.toolbar-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.45);
+}
+
+.toolbar-tab.active,
+.toolbar-tab[aria-selected='true'] {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #0b1220;
+  box-shadow: 0 14px 32px rgba(56, 189, 248, 0.35);
+}
+
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -566,6 +624,38 @@
   overflow: visible;
   flex-shrink: 0;
   z-index: 3;
+}
+
+.toolbar-temporary {
+  width: 210px;
+  align-items: stretch;
+  padding: 18px 20px;
+  gap: 16px;
+}
+
+.markers-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.markers-toolbar-button {
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
+  justify-content: center;
+  padding: 0 18px;
+}
+
+.markers-toolbar-button .toolbar-button-icon {
+  display: none;
+}
+
+.markers-toolbar-button .toolbar-button-label {
+  opacity: 1;
+  max-width: 100%;
+  transform: none;
 }
 
 .brush-slider-container {
@@ -933,6 +1023,17 @@
     align-items: stretch;
   }
 
+  .toolbar-area {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .toolbar-tabs {
+    position: static;
+    margin-bottom: 4px;
+  }
+
   .toolbar {
     width: 100%;
     flex-direction: row;
@@ -940,6 +1041,19 @@
     justify-content: flex-start;
     gap: 16px;
     padding: 16px;
+  }
+
+  .toolbar-temporary {
+    align-items: stretch;
+  }
+
+  .markers-toolbar-group {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .markers-toolbar-button {
+    width: 100%;
   }
 
   .toolbar::before {
@@ -972,7 +1086,8 @@
     flex-wrap: wrap;
   }
 
-  .rooms-list {
+  .rooms-list,
+  .temporary-markers-list {
     max-height: 180px;
   }
 }
