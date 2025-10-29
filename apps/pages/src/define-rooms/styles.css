@@ -272,6 +272,35 @@
   color: rgba(226, 232, 240, 0.6);
 }
 
+.temporary-markers-panel {
+  gap: 16px;
+}
+
+.temporary-markers-description {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(226, 232, 240, 0.65);
+  line-height: 1.5;
+}
+
+.temporary-markers-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.45);
+  text-align: center;
+}
+
+.temporary-markers-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.75);
+}
+
 .rooms-list {
   flex: 1;
   overflow-y: auto;
@@ -550,6 +579,75 @@
   flex-shrink: 0;
 }
 
+.toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.toolbar-switch-tab {
+  margin-left: 0;
+  width: 36px;
+  min-width: 36px;
+  justify-content: center;
+  background: rgba(22, 32, 51, 0.95);
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.toolbar-switch-tab[data-target-tab="temporary-markers"] {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(129, 140, 248, 0.92));
+  color: #0b1220;
+  border-color: transparent;
+}
+
+.toolbar-switch-tab[data-target-tab="rooms"] {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.82));
+  color: rgba(15, 23, 42, 0.92);
+  border-color: transparent;
+  box-shadow: 0 12px 32px rgba(244, 114, 182, 0.35);
+}
+
+.toolbar-switch-tab:hover:not(:disabled),
+.toolbar-switch-tab:focus-visible:not(:disabled) {
+  width: 36px;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 38px rgba(56, 189, 248, 0.4);
+}
+
+.toolbar-switch-tab[data-target-tab="rooms"]:hover:not(:disabled),
+.toolbar-switch-tab[data-target-tab="rooms"]:focus-visible:not(:disabled) {
+  box-shadow: 0 16px 38px rgba(244, 114, 182, 0.42);
+}
+
+.toolbar-switch-tab:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.28);
+}
+
+.toolbar-switch-tab .toolbar-button-icon {
+  opacity: 1;
+  width: 18px;
+  height: 18px;
+  transform: none;
+}
+
+.toolbar-switch-tab .toolbar-button-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar-switch-tab:hover:not(:disabled) .toolbar-button-icon,
+.toolbar-switch-tab:focus-visible:not(:disabled) .toolbar-button-icon {
+  opacity: 1;
+  width: 18px;
+  transform: none;
+}
+
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -775,6 +873,19 @@
   transform: translateX(-10px);
 }
 
+.toolbar-temporary {
+  border: none;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #0b1220;
+  box-shadow: 0 16px 36px rgba(56, 189, 248, 0.35);
+}
+
+.toolbar-temporary:hover:not(:disabled),
+.toolbar-temporary:focus-visible:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa, #a855f7);
+  color: #0b1220;
+}
+
 .toolbar-primary {
   border: none;
   background: linear-gradient(135deg, #f97316, #facc15);
@@ -803,12 +914,28 @@
   align-items: flex-start;
 }
 
+.toolbar-shared-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
+}
+
 .tool-group {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
   width: 100%;
+}
+
+.toolbar-temporary-markers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: flex-start;
 }
 
 .tool-button {
