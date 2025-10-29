@@ -462,6 +462,16 @@ export class DefineRoom {
 
   private toolbarContainer!: HTMLElement;
 
+  private markersToolbar!: HTMLElement;
+
+  private defineTabButton!: HTMLButtonElement;
+
+  private markersTabButton!: HTMLButtonElement;
+
+  private markersPanel!: HTMLElement;
+
+  private activeTab: "rooms" | "markers" = "rooms";
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     if (!this.colorMenu || this.colorMenu.classList.contains("hidden")) {
       return;
@@ -623,6 +633,24 @@ export class DefineRoom {
           <div class="define-room-body">
             <section class="define-room-editor">
               <div class="toolbar-area">
+                <div class="define-room-tabs">
+                  <button
+                    class="define-room-tab active"
+                    type="button"
+                    data-tab="rooms"
+                    ref={(node: HTMLButtonElement | null) => node && (this.defineTabButton = node)}
+                  >
+                    Define Rooms
+                  </button>
+                  <button
+                    class="define-room-tab"
+                    type="button"
+                    data-tab="markers"
+                    ref={(node: HTMLButtonElement | null) => node && (this.markersTabButton = node)}
+                  >
+                    Temporary Markers
+                  </button>
+                </div>
                 <div
                   class="brush-slider-container"
                   ref={(node: HTMLElement | null) => node && (this.brushSliderContainer = node)}
@@ -639,7 +667,11 @@ export class DefineRoom {
                     ref={(node: HTMLElement | null) => node && (this.brushSliderValueLabel = node)}
                   ></div>
                 </div>
-                <div class="toolbar" ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}>
+                <div
+                  class="toolbar"
+                  ref={(node: HTMLElement | null) => node && (this.toolbarContainer = node)}
+                  aria-hidden="false"
+                >
                   <div class="toolbar-primary-group">
                     <button class="toolbar-button toolbar-primary" type="button" aria-label="New Room" title="New Room">
                       <span class="toolbar-button-icon" aria-hidden="true"></span>
@@ -688,6 +720,14 @@ export class DefineRoom {
                   </div>
                   <div class="tool-group"></div>
                 </div>
+                <div
+                  class="toolbar markers-toolbar is-hidden"
+                  aria-hidden="true"
+                  ref={(node: HTMLElement | null) => node && (this.markersToolbar = node)}
+                >
+                  <button class="markers-toolbar-button" type="button">Character Markers</button>
+                  <button class="markers-toolbar-button" type="button">Object Markers</button>
+                </div>
               </div>
               <div class="canvas-wrapper">
                 <canvas class="image-layer"></canvas>
@@ -696,7 +736,11 @@ export class DefineRoom {
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
             </section>
-            <aside class="define-room-sidebar" ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}>
+            <aside
+              class="define-room-sidebar"
+              aria-hidden="false"
+              ref={(node: HTMLElement | null) => node && (this.roomsPanel = node)}
+            >
               <div class="rooms-header">
                 <h2>Rooms</h2>
               </div>
@@ -705,6 +749,13 @@ export class DefineRoom {
               </p>
               <div class="rooms-list"></div>
               <div class="room-color-menu hidden" aria-hidden="true"></div>
+            </aside>
+            <aside class="define-room-sidebar markers-sidebar is-hidden" aria-hidden="true">
+              <div class="rooms-header">
+                <h2>Temporary Markers</h2>
+              </div>
+              <p class="markers-empty">No temporary markers created yet.</p>
+              <div class="markers-list"></div>
             </aside>
           </div>
         </div>
@@ -742,6 +793,7 @@ export class DefineRoom {
 
   public open(image: HTMLImageElement): void {
     this.root.classList.remove("hidden");
+    this.setActiveTab("rooms");
     this.prepareImage(image);
   }
 
@@ -757,6 +809,10 @@ export class DefineRoom {
   }
 
   private initializeDomReferences(): void {
+    this.markersPanel = this.root.querySelector(".markers-sidebar") as HTMLElement;
+    this.markersToolbar = this.root.querySelector(".markers-toolbar") as HTMLElement;
+    this.defineTabButton = this.root.querySelector('[data-tab="rooms"]') as HTMLButtonElement;
+    this.markersTabButton = this.root.querySelector('[data-tab="markers"]') as HTMLButtonElement;
     this.toolbarPrimaryButton = this.root.querySelector(".toolbar-primary") as HTMLButtonElement;
     this.toolbarConfirmGroup = this.root.querySelector(".toolbar-confirm-group") as HTMLElement;
     this.toolbarConfirmButton = this.root.querySelector(".toolbar-confirm") as HTMLButtonElement;
@@ -895,12 +951,16 @@ export class DefineRoom {
     this.setTool(this.currentTool);
     this.updateToolAvailability();
 
+    this.setActiveTab("rooms");
+
     if (this.hoverLabel) {
       this.hoverLabel.setAttribute("aria-hidden", "true");
     }
   }
 
   private attachEventListeners(): void {
+    this.defineTabButton.addEventListener("click", () => this.setActiveTab("rooms"));
+    this.markersTabButton.addEventListener("click", () => this.setActiveTab("markers"));
     this.closeButton.addEventListener("click", () => this.close());
     this.root.addEventListener("click", (event) => {
       if (event.target === this.root) {
@@ -916,6 +976,35 @@ export class DefineRoom {
     this.overlayCanvas.style.touchAction = "none";
 
     this.attachBrushSliderEvents();
+  }
+
+  private setActiveTab(tab: "rooms" | "markers"): void {
+    this.activeTab = tab;
+    const isRooms = tab === "rooms";
+
+    if (!isRooms) {
+      this.stopBrushSliderInteraction();
+    }
+
+    this.defineTabButton.classList.toggle("active", isRooms);
+    this.defineTabButton.setAttribute("aria-pressed", isRooms ? "true" : "false");
+    this.markersTabButton.classList.toggle("active", !isRooms);
+    this.markersTabButton.setAttribute("aria-pressed", !isRooms ? "true" : "false");
+
+    this.toolbarContainer.classList.toggle("is-hidden", !isRooms);
+    this.toolbarContainer.setAttribute("aria-hidden", isRooms ? "false" : "true");
+
+    this.markersToolbar.classList.toggle("is-hidden", isRooms);
+    this.markersToolbar.setAttribute("aria-hidden", isRooms ? "true" : "false");
+
+    this.brushSliderContainer.classList.toggle("is-hidden", !isRooms);
+    this.brushSliderContainer.setAttribute("aria-hidden", isRooms ? "false" : "true");
+
+    this.roomsPanel.classList.toggle("is-hidden", !isRooms);
+    this.roomsPanel.setAttribute("aria-hidden", isRooms ? "false" : "true");
+
+    this.markersPanel.classList.toggle("is-hidden", isRooms);
+    this.markersPanel.setAttribute("aria-hidden", isRooms ? "true" : "false");
   }
 
   private initializeColorMenu(): void {

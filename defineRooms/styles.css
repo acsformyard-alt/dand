@@ -359,6 +359,12 @@ body {
   color: rgba(226, 232, 240, 0.6);
 }
 
+.markers-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.6);
+}
+
 .rooms-list {
   flex: 1;
   overflow-y: auto;
@@ -366,6 +372,16 @@ body {
   flex-direction: column;
   gap: 10px;
   padding-top: 4px;
+}
+
+.markers-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  gap: 10px;
+  padding-top: 4px;
+  color: rgba(226, 232, 240, 0.7);
 }
 
 .room-card {
@@ -631,9 +647,49 @@ body {
 .toolbar-area {
   position: relative;
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+.define-room-tabs {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.45);
+  gap: 4px;
+}
+
+.define-room-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.75);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.define-room-tab:hover,
+.define-room-tab:focus-visible {
+  color: rgba(226, 232, 240, 0.92);
+  outline: none;
+}
+
+.define-room-tab.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.85));
+  color: #0f172a;
+  box-shadow: 0 10px 22px rgba(56, 189, 248, 0.35);
+}
+
+.is-hidden {
+  display: none !important;
 }
 
 .toolbar {
@@ -652,6 +708,40 @@ body {
   overflow: visible;
   flex-shrink: 0;
   z-index: 3;
+}
+
+.markers-toolbar {
+  width: auto;
+  min-width: 0;
+  padding: 16px;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.markers-toolbar::before {
+  display: none;
+}
+
+.markers-toolbar-button {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.96);
+  color: rgba(226, 232, 240, 0.92);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.markers-toolbar-button:hover,
+.markers-toolbar-button:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  background: rgba(30, 41, 59, 0.96);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 14px 28px rgba(56, 189, 248, 0.25);
 }
 
 .brush-slider-container {
