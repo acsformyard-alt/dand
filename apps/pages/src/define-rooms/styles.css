@@ -253,19 +253,10 @@
   gap: 10px;
 }
 
-.temporary-markers-empty {
-  margin: 0;
-  font-size: 0.9rem;
-  color: rgba(226, 232, 240, 0.6);
-}
-
 .temporary-markers-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .marker-card {
@@ -278,22 +269,12 @@
 }
 
 .marker-row {
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: auto 1fr;
 }
 
-.marker-card.expanded .marker-row,
-.marker-card.repositioning .marker-row {
-  grid-template-columns: auto auto 1fr;
-}
-
-.marker-index-badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: rgba(226, 232, 240, 0.65);
-  min-width: 28px;
-  text-align: center;
+.room-card.marker-card.expanded .marker-row,
+.room-card.marker-card.repositioning .marker-row {
+  grid-template-columns: auto 1fr;
 }
 
 .marker-icon-button {
@@ -373,10 +354,6 @@
 .marker-card.repositioning .marker-row,
 .marker-card.repositioning .marker-card-body {
   border-color: rgba(56, 189, 248, 0.35);
-}
-
-.marker-card.repositioning .marker-index-badge {
-  color: rgba(56, 189, 248, 0.8);
 }
 
 .marker-card.repositioning .marker-reposition-button {

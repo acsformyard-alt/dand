@@ -923,9 +923,9 @@ export class DefineRoom {
                 <h2>Markers</h2>
               </div>
               <div class="temporary-markers-content">
-                <p class="temporary-markers-empty">Markers will appear here once added.</p>
+                <p class="rooms-empty temporary-markers-empty">Markers will appear here once added.</p>
                 <ul
-                  class="temporary-markers-list"
+                  class="rooms-list temporary-markers-list"
                   aria-live="polite"
                   aria-label="Markers"
                   hidden
@@ -1315,7 +1315,7 @@ export class DefineRoom {
 
     this.closeMarkerIconMenu();
 
-    this.temporaryMarkers.forEach((marker, index) => {
+    this.temporaryMarkers.forEach((marker) => {
       const isExpanded = this.expandedMarkerId === marker.id;
       const isRepositioning = this.repositioningMarkerId === marker.id;
 
@@ -1325,7 +1325,6 @@ export class DefineRoom {
           data-marker-id={marker.id}
         >
           <div class={`room-row marker-row ${isExpanded ? "active" : ""}`} data-marker-id={marker.id}>
-            <span class="marker-index-badge">#{index + 1}</span>
             <button class="marker-icon-button" type="button" aria-label="Change marker icon"></button>
             <input class="marker-name room-name" type="text" value={marker.name} />
           </div>
@@ -1340,7 +1339,7 @@ export class DefineRoom {
             </label>
             <label class="room-visible marker-visible">
               <input class="marker-visible-checkbox" type="checkbox" checked={marker.visibleAtStart} />
-              <span>Visible upon room entry</span>
+              <span>Visible at start of game</span>
             </label>
             <div class="marker-location-row">
               <span class="marker-location-label">Location</span>
