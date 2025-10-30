@@ -714,6 +714,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       const currentStep = stepRef.current;
       if (currentStep === 2 || currentStep === 3) {
         defineRoomRef.current?.setMarkerPlacementMode(currentStep === 3);
+        defineRoomRef.current?.setActiveTab(
+          currentStep === 3 ? 'temporary-markers' : 'rooms',
+        );
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
         defineRoomRef.current?.close();
@@ -736,12 +739,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     }
     if (step === 2 && defineRoomImageRef.current) {
       editor.setMarkerPlacementMode(false);
+      editor.setActiveTab('rooms');
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else if (step === 3 && defineRoomImageRef.current) {
       editor.setMarkerPlacementMode(true);
+      editor.setActiveTab('temporary-markers');
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else {
       editor.setMarkerPlacementMode(false);
+      editor.setActiveTab('rooms');
       editor.close();
     }
   }, [defineRoomReady, step]);

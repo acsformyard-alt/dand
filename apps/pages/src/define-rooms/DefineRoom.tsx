@@ -363,25 +363,6 @@ const OBJECT_MARKER_ICON = `
   </svg>
 `;
 
-const SWITCH_TO_TEMPORARY_MARKERS_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="12" cy="12" r="5.5" stroke="currentColor" stroke-width="1.7" />
-    <path d="M12 4v2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M12 17.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M4 12h2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M17.8 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-  </svg>
-`;
-
-const SWITCH_TO_ROOMS_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="5" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="13" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="5" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="13" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-  </svg>
-`;
-
 const TOOL_ORDER: ToolType[] = ["move", "magnify", "brush", "eraser", "lasso", "magnetic", "wand"];
 
 const UNDO_ICON = `
@@ -561,10 +542,6 @@ export class DefineRoom {
   private markersLayer!: HTMLElement;
 
   private markerInstructionLabel!: HTMLElement;
-
-  private tabToggleButton!: HTMLButtonElement;
-
-  private tabToggleButtonIcon: HTMLElement | null = null;
 
   private characterMarkersButton!: HTMLButtonElement;
 
@@ -793,20 +770,6 @@ export class DefineRoom {
                   ></div>
                 </div>
                 <div class="toolbar-stack">
-                  <button
-                    class="toolbar-button toolbar-switch-tab"
-                    type="button"
-                    aria-label="Switch to Temporary Markers tab"
-                    title="Switch to Temporary Markers tab"
-                    data-target-tab="temporary-markers"
-                    ref={(node: HTMLButtonElement | null) => node && (this.tabToggleButton = node)}
-                  >
-                    <span
-                      class="toolbar-button-icon"
-                      aria-hidden="true"
-                      ref={(node: HTMLElement | null) => node && (this.tabToggleButtonIcon = node)}
-                    ></span>
-                  </button>
                   <div
                     class="toolbar"
                     id="define-room-toolbar"
@@ -845,7 +808,7 @@ export class DefineRoom {
                       class="toolbar-temporary-markers"
                       id="temporary-markers-toolbar"
                       role="group"
-                      aria-label="Temporary Markers toolbar"
+                      aria-label="Add Markers toolbar"
                       aria-hidden="true"
                       hidden
                       ref={(node: HTMLElement | null) => node && (this.markersToolbar = node)}
@@ -923,7 +886,7 @@ export class DefineRoom {
               hidden
             >
               <div class="rooms-header">
-                <h2>Temporary Markers</h2>
+                <h2>Add Markers</h2>
               </div>
               <p class="temporary-markers-description">
                 Add quick callouts while planning without committing them to the final map yet.
@@ -1043,7 +1006,7 @@ export class DefineRoom {
     this.updateMarkerButtonsState();
   }
 
-  private setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
+  public setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
     if (this.activeTab === tab) {
       return;
     }
@@ -1057,25 +1020,6 @@ export class DefineRoom {
 
     if (isRooms && this.interactionMode === "marker-placement") {
       this.endMarkerPlacement();
-    }
-
-    if (this.tabToggleButton) {
-      const nextTab = isRooms ? 'temporary-markers' : 'rooms';
-      const label =
-        nextTab === 'temporary-markers'
-          ? 'Switch to Temporary Markers tab'
-          : 'Switch to Define Rooms tab';
-      this.tabToggleButton.setAttribute('aria-label', label);
-      this.tabToggleButton.setAttribute('title', label);
-      this.tabToggleButton.dataset.targetTab = nextTab;
-    }
-
-    if (this.tabToggleButtonIcon) {
-      const icon =
-        this.activeTab === 'rooms'
-          ? SWITCH_TO_TEMPORARY_MARKERS_ICON
-          : SWITCH_TO_ROOMS_ICON;
-      this.tabToggleButtonIcon.innerHTML = icon;
     }
 
     if (this.toolbarContainer) {
@@ -1327,12 +1271,6 @@ export class DefineRoom {
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
-    this.tabToggleButton = this.root.querySelector(
-      ".toolbar-switch-tab",
-    ) as HTMLButtonElement;
-    this.tabToggleButtonIcon = (this.tabToggleButton?.querySelector(
-      ".toolbar-button-icon",
-    ) as HTMLElement | null) ?? null;
     this.markersToolbar = this.root.querySelector(".toolbar-temporary-markers") as HTMLElement;
     this.markersLayer = this.root.querySelector(".temporary-markers-layer") as HTMLElement;
     this.markerInstructionLabel = this.root.querySelector(
@@ -1397,13 +1335,6 @@ export class DefineRoom {
     this.initializeColorMenu();
 
     this.roomsList.addEventListener("scroll", () => this.closeColorMenu());
-
-    if (this.tabToggleButton) {
-      this.tabToggleButton.addEventListener("click", () => {
-        const nextTab = this.activeTab === "rooms" ? "temporary-markers" : "rooms";
-        this.setActiveTab(nextTab);
-      });
-    }
 
     if (this.characterMarkersButton) {
       const characterIcon = this.characterMarkersButton.querySelector(
