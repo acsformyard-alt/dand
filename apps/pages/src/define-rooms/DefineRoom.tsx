@@ -527,6 +527,8 @@ export class DefineRoom {
 
   private pendingDeleteRoomId: string | null = null;
 
+  private pendingDeleteMarkerId: string | null = null;
+
   private colorMenu!: HTMLElement;
 
   private colorMenuOptions: HTMLButtonElement[] = [];
@@ -1351,7 +1353,7 @@ export class DefineRoom {
       ) as HTMLLIElement;
 
       const header = card.querySelector(".marker-row") as HTMLElement;
-      header.addEventListener("click", () => this.toggleMarkerExpansion(marker.id));
+      header.addEventListener("click", () => this.selectMarker(marker.id));
 
       const nameInput = card.querySelector(".marker-name") as HTMLInputElement;
       nameInput.addEventListener("input", (event) => {
@@ -1359,10 +1361,7 @@ export class DefineRoom {
         this.updateOverlayMarkerLabel(marker.id, marker.name);
       });
       nameInput.addEventListener("focus", () => {
-        if (this.expandedMarkerId !== marker.id) {
-          this.expandedMarkerId = marker.id;
-          this.updateTemporaryMarkersPanel();
-        }
+        this.selectMarker(marker.id, { focusName: true });
       });
 
       const iconButton = card.querySelector(".marker-icon-button") as HTMLButtonElement;
@@ -1377,7 +1376,7 @@ export class DefineRoom {
         deleteButton.innerHTML = DELETE_ROOM_ICON;
         deleteButton.addEventListener("click", (event) => {
           event.stopPropagation();
-          this.deleteTemporaryMarker(marker.id);
+          this.requestMarkerDeletion(marker.id);
         });
       }
 
@@ -1410,7 +1409,7 @@ export class DefineRoom {
       if (saveButton) {
         saveButton.addEventListener("click", (event) => {
           event.stopPropagation();
-          this.toggleMarkerExpansion(marker.id);
+          this.selectMarker(null);
         });
       }
 
@@ -1420,14 +1419,36 @@ export class DefineRoom {
     this.updateMarkerElementsRepositionState();
   }
 
-  private toggleMarkerExpansion(markerId: string): void {
-    this.expandedMarkerId = this.expandedMarkerId === markerId ? null : markerId;
+  private selectMarker(markerId: string | null, options: { focusName?: boolean } = {}): void {
+    if (this.expandedMarkerId === markerId) {
+      if (options.focusName && markerId) {
+        queueMicrotask(() => {
+          const input = this.temporaryMarkersList?.querySelector(
+            `.marker-card[data-marker-id="${markerId}"] .marker-name`,
+          ) as HTMLInputElement | null;
+          input?.focus();
+        });
+      }
+      return;
+    }
+
+    this.expandedMarkerId = markerId;
     this.updateTemporaryMarkersPanel();
+
+    if (options.focusName && markerId) {
+      queueMicrotask(() => {
+        const input = this.temporaryMarkersList?.querySelector(
+          `.marker-card[data-marker-id="${markerId}"] .marker-name`,
+        ) as HTMLInputElement | null;
+        input?.focus();
+      });
+    }
   }
 
   private deleteTemporaryMarker(markerId: string): void {
     const index = this.temporaryMarkers.findIndex((entry) => entry.id === markerId);
     if (index === -1) {
+      this.hideDeleteDialog();
       return;
     }
 
@@ -1445,6 +1466,8 @@ export class DefineRoom {
     if (this.expandedMarkerId === markerId) {
       this.expandedMarkerId = null;
     }
+
+    this.hideDeleteDialog();
 
     this.renderTemporaryMarkers();
     this.updateTemporaryMarkersPanel();
@@ -1761,7 +1784,7 @@ export class DefineRoom {
     }
 
     if (this.deleteConfirmButton) {
-      this.deleteConfirmButton.addEventListener("click", () => this.confirmRoomDeletion());
+      this.deleteConfirmButton.addEventListener("click", () => this.confirmDeletion());
     }
 
     if (this.deleteDialogIcon) {
@@ -2108,7 +2131,29 @@ export class DefineRoom {
     }
 
     this.closeColorMenu();
+    this.pendingDeleteMarkerId = null;
     this.pendingDeleteRoomId = roomId;
+    this.deleteBackdrop.classList.remove("hidden");
+    this.deleteBackdrop.setAttribute("aria-hidden", "false");
+
+    queueMicrotask(() => {
+      this.deleteConfirmButton?.focus?.();
+    });
+  }
+
+  private requestMarkerDeletion(markerId: string): void {
+    if (!this.deleteBackdrop) {
+      return;
+    }
+
+    const markerExists = this.temporaryMarkers.some((entry) => entry.id === markerId);
+    if (!markerExists) {
+      return;
+    }
+
+    this.closeMarkerIconMenu();
+    this.pendingDeleteRoomId = null;
+    this.pendingDeleteMarkerId = markerId;
     this.deleteBackdrop.classList.remove("hidden");
     this.deleteBackdrop.setAttribute("aria-hidden", "false");
 
@@ -2125,6 +2170,16 @@ export class DefineRoom {
     this.deleteBackdrop.classList.add("hidden");
     this.deleteBackdrop.setAttribute("aria-hidden", "true");
     this.pendingDeleteRoomId = null;
+    this.pendingDeleteMarkerId = null;
+  }
+
+  private confirmDeletion(): void {
+    if (this.pendingDeleteMarkerId) {
+      this.deleteTemporaryMarker(this.pendingDeleteMarkerId);
+      return;
+    }
+
+    this.confirmRoomDeletion();
   }
 
   private confirmRoomDeletion(): void {
