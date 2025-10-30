@@ -42,9 +42,22 @@ type TemporaryMarkerType = "character" | "object";
 type TemporaryMarker = {
   id: string;
   type: TemporaryMarkerType;
+  name: string;
+  description: string;
+  tags: string;
+  visibleAtStart: boolean;
   x: number;
   y: number;
 };
+
+const TEMPORARY_MARKER_ICON_OPTIONS: Array<{
+  type: TemporaryMarkerType;
+  label: string;
+  icon: string;
+}> = [
+  { type: "character", label: "Character marker", icon: CHARACTER_MARKER_ICON },
+  { type: "object", label: "Object marker", icon: OBJECT_MARKER_ICON },
+];
 
 type DirtyRect = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -559,6 +572,22 @@ export class DefineRoom {
 
   private temporaryMarkers: TemporaryMarker[] = [];
 
+  private markerIconMenu!: HTMLElement;
+
+  private markerIconOptions: HTMLButtonElement[] = [];
+
+  private markerIconMenuTrigger: HTMLElement | null = null;
+
+  private activeMarkerIconMarkerId: string | null = null;
+
+  private expandedMarkerId: string | null = null;
+
+  private relocatingMarkerId: string | null = null;
+
+  private relocatingPointerId: number | null = null;
+
+  private relocatingMarkerOriginal: { x: number; y: number } | null = null;
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     if (!this.colorMenu || this.colorMenu.classList.contains("hidden")) {
       return;
@@ -574,6 +603,23 @@ export class DefineRoom {
     }
 
     this.closeColorMenu();
+  };
+
+  private handleMarkerIconMenuOutsideClick = (event: MouseEvent): void => {
+    if (!this.markerIconMenu || this.markerIconMenu.classList.contains("hidden")) {
+      return;
+    }
+
+    const target = event.target as Node;
+    if (this.markerIconMenu.contains(target)) {
+      return;
+    }
+
+    if (this.markerIconMenuTrigger && this.markerIconMenuTrigger.contains(target)) {
+      return;
+    }
+
+    this.closeMarkerIconMenu();
   };
 
 
@@ -893,13 +939,19 @@ export class DefineRoom {
               </p>
               <div class="temporary-markers-content">
                 <p class="temporary-markers-empty">Temporary markers will appear here once added.</p>
-                <ul
+                <div
                   class="temporary-markers-list"
                   aria-live="polite"
                   aria-label="Temporary markers"
+                  role="list"
                   hidden
-                ></ul>
+                ></div>
               </div>
+              <div
+                class="marker-icon-menu hidden"
+                aria-hidden="true"
+                ref={(node: HTMLElement | null) => node && (this.markerIconMenu = node)}
+              ></div>
             </aside>
           </div>
         </div>
@@ -961,8 +1013,10 @@ export class DefineRoom {
     this.root.classList.add("hidden");
     this.stopBrushSliderInteraction();
     this.closeColorMenu();
+    this.closeMarkerIconMenu();
     this.hideDeleteDialog();
     this.endMarkerPlacement();
+    this.cancelMarkerRelocation();
   }
 
   public getRooms(): DefineRoomData[] {
@@ -981,6 +1035,7 @@ export class DefineRoom {
     this.close();
     this.cancelOverlayFrame();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    document.removeEventListener("click", this.handleMarkerIconMenuOutsideClick);
     this.root.remove();
   }
 
@@ -1017,6 +1072,11 @@ export class DefineRoom {
   private applyActiveTabState(): void {
     const isRooms = this.activeTab === 'rooms';
     this.root.classList.toggle('define-room-temporary-markers-active', !isRooms);
+
+    if (isRooms) {
+      this.closeMarkerIconMenu();
+      this.cancelMarkerRelocation();
+    }
 
     if (isRooms && this.interactionMode === "marker-placement") {
       this.endMarkerPlacement();
@@ -1150,6 +1210,13 @@ export class DefineRoom {
       return;
     }
 
+    if (this.relocatingMarkerId) {
+      this.markerInstructionLabel.textContent = "Click and drag to set the marker's new location";
+      this.markerInstructionLabel.classList.add("visible");
+      this.markerInstructionLabel.setAttribute("aria-hidden", "false");
+      return;
+    }
+
     const isActive = this.interactionMode === "marker-placement" && this.activeMarkerType !== null;
     if (!isActive) {
       this.markerInstructionLabel.textContent = "";
@@ -1164,21 +1231,108 @@ export class DefineRoom {
     this.markerInstructionLabel.setAttribute("aria-hidden", "false");
   }
 
+  private beginMarkerRelocation(markerId: string): void {
+    const marker = this.temporaryMarkers.find((entry) => entry.id === markerId);
+    if (!marker) {
+      return;
+    }
+
+    if (this.relocatingMarkerId === markerId) {
+      return;
+    }
+
+    this.relocatingMarkerId = markerId;
+    this.relocatingPointerId = null;
+    this.relocatingMarkerOriginal = { x: marker.x, y: marker.y };
+    this.setMarkerPlacementMode(false);
+    this.activeMarkerType = null;
+    this.root.classList.add("define-room-marker-relocation");
+    this.updateMarkerInstructions();
+    this.closeMarkerIconMenu();
+
+    if (this.expandedMarkerId === markerId) {
+      this.updateTemporaryMarkersPanel();
+    } else {
+      this.setExpandedMarker(markerId);
+    }
+  }
+
+  private cancelMarkerRelocation(): void {
+    if (!this.relocatingMarkerId) {
+      return;
+    }
+
+    this.endMarkerRelocation(false);
+  }
+
+  private finishMarkerRelocation(): void {
+    if (!this.relocatingMarkerId) {
+      return;
+    }
+
+    this.endMarkerRelocation(true);
+  }
+
+  private endMarkerRelocation(commit: boolean): void {
+    if (!this.relocatingMarkerId) {
+      return;
+    }
+
+    if (!commit && this.relocatingMarkerOriginal) {
+      const marker = this.temporaryMarkers.find((entry) => entry.id === this.relocatingMarkerId);
+      if (marker) {
+        marker.x = this.relocatingMarkerOriginal.x;
+        marker.y = this.relocatingMarkerOriginal.y;
+      }
+      this.renderTemporaryMarkers();
+    }
+
+    this.relocatingMarkerId = null;
+    this.relocatingPointerId = null;
+    this.relocatingMarkerOriginal = null;
+    this.root.classList.remove("define-room-marker-relocation");
+    this.updateMarkerInstructions();
+    this.updateTemporaryMarkersPanel();
+  }
+
+  private updateRelocatingMarkerPosition(point: Point): void {
+    if (!this.relocatingMarkerId) {
+      return;
+    }
+
+    const marker = this.temporaryMarkers.find((entry) => entry.id === this.relocatingMarkerId);
+    if (!marker) {
+      return;
+    }
+
+    marker.x = clamp(point.x, 0, this.width - 1);
+    marker.y = clamp(point.y, 0, this.height - 1);
+    this.renderTemporaryMarkers();
+    this.updateTemporaryMarkersPanel();
+  }
+
   private placeTemporaryMarker(type: TemporaryMarkerType, point: Point): void {
     if (this.width === 0 || this.height === 0) {
       return;
     }
 
+    const similarCount = this.temporaryMarkers.filter((entry) => entry.type === type).length + 1;
+    const defaultName =
+      type === "character" ? `Character Marker ${similarCount}` : `Object Marker ${similarCount}`;
     const marker: TemporaryMarker = {
       id: `marker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type,
+      name: defaultName,
+      description: "",
+      tags: "",
+      visibleAtStart: false,
       x: clamp(point.x, 0, this.width - 1),
       y: clamp(point.y, 0, this.height - 1),
     };
 
     this.temporaryMarkers.push(marker);
     this.renderTemporaryMarkers();
-    this.updateTemporaryMarkersPanel();
+    this.setExpandedMarker(marker.id, { focusName: true });
   }
 
   private renderTemporaryMarkers(): void {
@@ -1216,12 +1370,27 @@ export class DefineRoom {
       return;
     }
 
+    const markerIds = new Set(this.temporaryMarkers.map((entry) => entry.id));
+    if (this.expandedMarkerId && !markerIds.has(this.expandedMarkerId)) {
+      this.expandedMarkerId = null;
+    }
+    if (this.relocatingMarkerId && !markerIds.has(this.relocatingMarkerId)) {
+      this.relocatingMarkerId = null;
+      this.relocatingPointerId = null;
+      this.root.classList.remove("define-room-marker-relocation");
+      this.updateMarkerInstructions();
+    }
+    if (this.activeMarkerIconMarkerId && !markerIds.has(this.activeMarkerIconMarkerId)) {
+      this.closeMarkerIconMenu();
+    }
+
     const hasMarkers = this.temporaryMarkers.length > 0;
     this.temporaryMarkersEmptyState.hidden = hasMarkers;
     this.temporaryMarkersEmptyState.setAttribute("aria-hidden", hasMarkers ? "true" : "false");
     this.temporaryMarkersList.hidden = !hasMarkers;
     this.temporaryMarkersList.setAttribute("aria-hidden", hasMarkers ? "false" : "true");
 
+    this.closeMarkerIconMenu();
     this.temporaryMarkersList.innerHTML = "";
 
     if (!hasMarkers) {
@@ -1229,37 +1398,113 @@ export class DefineRoom {
     }
 
     this.temporaryMarkers.forEach((marker, index) => {
-      const item = document.createElement("li");
-      item.className = `temporary-marker-item temporary-marker-item-${marker.type}`;
-      item.dataset.markerId = marker.id;
+      const isExpanded = this.expandedMarkerId === marker.id;
+      const isRelocating = this.relocatingMarkerId === marker.id;
+      const card = (
+        <div
+          class={`marker-card${isExpanded ? " expanded" : ""}${isRelocating ? " relocating" : ""}`}
+          data-marker-id={marker.id}
+          role="listitem"
+        >
+          <div class={`marker-row${isExpanded ? " active" : ""}`} data-marker-id={marker.id}>
+            <span class="marker-index">#{index + 1}</span>
+            <button
+              class={`marker-icon-button marker-icon-button-${marker.type}`}
+              type="button"
+              aria-label="Change marker icon"
+              title="Change marker icon"
+            >
+              <span class="marker-icon" aria-hidden="true"></span>
+            </button>
+            <input class="marker-name" type="text" value={marker.name} />
+            <span class="marker-coordinates">({Math.round(marker.x)}, {Math.round(marker.y)})</span>
+          </div>
+          <div class="marker-card-body">
+            <label class="marker-field">
+              <span class="marker-field-label">Description</span>
+              <textarea class="marker-description" rows={3}>{marker.description}</textarea>
+            </label>
+            <label class="marker-field">
+              <span class="marker-field-label">Tags</span>
+              <input class="marker-tags" type="text" value={marker.tags} />
+            </label>
+            <label class="marker-visible">
+              <input class="marker-visible-checkbox" type="checkbox" checked={marker.visibleAtStart} />
+              <span>Visible at start of game</span>
+            </label>
+            <div class="marker-card-footer">
+              <button
+                class={`marker-change-location${isRelocating ? " is-active" : ""}`}
+                type="button"
+              >
+                {isRelocating ? "Cancel Move" : "Change Location"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) as HTMLElement;
 
-      const indexBadge = document.createElement("span");
-      indexBadge.className = "temporary-marker-item-index";
-      indexBadge.textContent = `#${index + 1}`;
+      const row = card.querySelector(".marker-row") as HTMLElement;
+      row.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest(".marker-icon-button") || target.closest(".marker-name")) {
+          return;
+        }
+        if (this.expandedMarkerId === marker.id) {
+          this.setExpandedMarker(null);
+        } else {
+          this.setExpandedMarker(marker.id);
+        }
+      });
 
-      const icon = document.createElement("span");
-      icon.className = "temporary-marker-item-icon";
-      icon.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      const nameInput = card.querySelector(".marker-name") as HTMLInputElement;
+      nameInput.addEventListener("input", (event) => {
+        marker.name = (event.target as HTMLInputElement).value;
+      });
+      nameInput.addEventListener("focus", (event) => {
+        event.stopPropagation();
+        if (this.expandedMarkerId !== marker.id) {
+          this.setExpandedMarker(marker.id, { focusName: true });
+        }
+      });
 
-      const content = document.createElement("div");
-      content.className = "temporary-marker-item-content";
+      const iconButton = card.querySelector(".marker-icon-button") as HTMLButtonElement;
+      const iconElement = card.querySelector(".marker-icon") as HTMLElement;
+      if (iconElement) {
+        iconElement.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      }
+      iconButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.openMarkerIconMenu(marker.id, iconButton);
+      });
 
-      const label = document.createElement("span");
-      label.className = "temporary-marker-item-label";
-      label.textContent = marker.type === "character" ? "Character marker" : "Object marker";
+      const descriptionField = card.querySelector(".marker-description") as HTMLTextAreaElement;
+      descriptionField.addEventListener("input", (event) => {
+        marker.description = (event.target as HTMLTextAreaElement).value;
+      });
 
-      const coordinates = document.createElement("span");
-      coordinates.className = "temporary-marker-item-coordinates";
-      coordinates.textContent = `(${Math.round(marker.x)}, ${Math.round(marker.y)})`;
+      const tagsInput = card.querySelector(".marker-tags") as HTMLInputElement;
+      tagsInput.addEventListener("input", (event) => {
+        marker.tags = (event.target as HTMLInputElement).value;
+      });
 
-      content.appendChild(label);
-      content.appendChild(coordinates);
+      const visibleCheckbox = card.querySelector(".marker-visible-checkbox") as HTMLInputElement;
+      visibleCheckbox.addEventListener("change", (event) => {
+        marker.visibleAtStart = (event.target as HTMLInputElement).checked;
+      });
 
-      item.appendChild(indexBadge);
-      item.appendChild(icon);
-      item.appendChild(content);
+      const changeLocationButton = card.querySelector(".marker-change-location") as HTMLButtonElement;
+      changeLocationButton.setAttribute("aria-pressed", isRelocating ? "true" : "false");
+      changeLocationButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (this.relocatingMarkerId === marker.id) {
+          this.cancelMarkerRelocation();
+        } else {
+          this.beginMarkerRelocation(marker.id);
+        }
+      });
 
-      this.temporaryMarkersList.appendChild(item);
+      this.temporaryMarkersList.appendChild(card);
     });
   }
 
@@ -1300,8 +1545,14 @@ export class DefineRoom {
     this.temporaryMarkersList = this.temporaryMarkersPanel.querySelector(
       ".temporary-markers-list",
     ) as HTMLElement;
+    this.markerIconMenu = this.temporaryMarkersPanel.querySelector(
+      ".marker-icon-menu",
+    ) as HTMLElement;
     if (!this.temporaryMarkersEmptyState || !this.temporaryMarkersList) {
       throw new Error("DefineRoom: missing temporary markers list");
+    }
+    if (!this.markerIconMenu) {
+      throw new Error("DefineRoom: missing marker icon menu");
     }
     const sharedToolGroup = this.root.querySelector(
       ".shared-tool-group",
@@ -1333,8 +1584,10 @@ export class DefineRoom {
     ) as HTMLButtonElement | null;
 
     this.initializeColorMenu();
+    this.initializeMarkerIconMenu();
 
     this.roomsList.addEventListener("scroll", () => this.closeColorMenu());
+    this.temporaryMarkersList.addEventListener("scroll", () => this.closeMarkerIconMenu());
 
     if (this.characterMarkersButton) {
       const characterIcon = this.characterMarkersButton.querySelector(
@@ -1400,6 +1653,7 @@ export class DefineRoom {
     }
 
     document.addEventListener("click", this.handleColorMenuOutsideClick);
+    document.addEventListener("click", this.handleMarkerIconMenuOutsideClick);
 
     this.updateBrushSliderUi();
 
@@ -1534,6 +1788,34 @@ export class DefineRoom {
     this.colorMenu.appendChild(grid);
   }
 
+  private initializeMarkerIconMenu(): void {
+    if (!this.markerIconMenu) {
+      return;
+    }
+
+    this.markerIconMenu.innerHTML = "";
+    this.markerIconOptions = [];
+
+    const grid = document.createElement("div");
+    grid.className = "marker-icon-grid";
+
+    TEMPORARY_MARKER_ICON_OPTIONS.forEach((option) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "marker-icon-option";
+      button.dataset.type = option.type;
+      button.innerHTML = `
+        <span class="marker-icon-option-icon" aria-hidden="true">${option.icon}</span>
+        <span class="marker-icon-option-label">${option.label}</span>
+      `;
+      button.addEventListener("click", () => this.handleMarkerIconSelection(option.type));
+      grid.appendChild(button);
+      this.markerIconOptions.push(button);
+    });
+
+    this.markerIconMenu.appendChild(grid);
+  }
+
   private openColorMenu(roomId: string, trigger: HTMLElement): void {
     if (!this.colorMenu) {
       return;
@@ -1609,6 +1891,82 @@ export class DefineRoom {
     this.closeColorMenu();
     this.renderOverlay();
     this.updateRoomList();
+  }
+
+  private openMarkerIconMenu(markerId: string, trigger: HTMLElement): void {
+    if (!this.markerIconMenu) {
+      return;
+    }
+
+    const marker = this.temporaryMarkers.find((entry) => entry.id === markerId);
+    if (!marker) {
+      return;
+    }
+
+    this.activeMarkerIconMarkerId = markerId;
+    this.markerIconMenuTrigger = trigger;
+    this.markerIconMenu.classList.remove("hidden");
+    this.markerIconMenu.setAttribute("aria-hidden", "false");
+
+    this.markerIconOptions.forEach((button) => {
+      button.classList.toggle("selected", button.dataset.type === marker.type);
+    });
+
+    requestAnimationFrame(() => this.positionMarkerIconMenu(trigger));
+  }
+
+  private positionMarkerIconMenu(trigger: HTMLElement): void {
+    if (!this.markerIconMenu || !this.temporaryMarkersPanel) {
+      return;
+    }
+
+    const sidebarRect = this.temporaryMarkersPanel.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = this.markerIconMenu.getBoundingClientRect();
+
+    let top = triggerRect.top - sidebarRect.top + triggerRect.height / 2 - menuRect.height / 2;
+    const maxTop = this.temporaryMarkersPanel.clientHeight - menuRect.height - 16;
+    top = Math.max(16, Math.min(top, maxTop));
+
+    let left = triggerRect.left - sidebarRect.left - menuRect.width - 12;
+    if (left < 12) {
+      left = 12;
+    }
+
+    this.markerIconMenu.style.top = `${top}px`;
+    this.markerIconMenu.style.left = `${left}px`;
+  }
+
+  private closeMarkerIconMenu(): void {
+    if (!this.markerIconMenu || this.markerIconMenu.classList.contains("hidden")) {
+      return;
+    }
+    this.markerIconMenu.classList.add("hidden");
+    this.markerIconMenu.setAttribute("aria-hidden", "true");
+    this.markerIconMenuTrigger = null;
+    this.activeMarkerIconMarkerId = null;
+  }
+
+  private handleMarkerIconSelection(type: TemporaryMarkerType): void {
+    const markerId = this.activeMarkerIconMarkerId;
+    if (!markerId) {
+      this.closeMarkerIconMenu();
+      return;
+    }
+
+    const marker = this.temporaryMarkers.find((entry) => entry.id === markerId);
+    if (!marker) {
+      this.closeMarkerIconMenu();
+      return;
+    }
+
+    if (marker.type !== type) {
+      marker.type = type;
+      this.renderTemporaryMarkers();
+      this.updateTemporaryMarkersPanel();
+    }
+
+    this.closeMarkerIconMenu();
   }
 
   private requestRoomDeletion(roomId: string): void {
@@ -1898,10 +2256,17 @@ export class DefineRoom {
     this.renderOverlay();
 
     this.temporaryMarkers = [];
+    this.expandedMarkerId = null;
+    this.relocatingMarkerId = null;
+    this.relocatingPointerId = null;
+    this.relocatingMarkerOriginal = null;
+    this.root.classList.remove("define-room-marker-relocation");
     this.renderTemporaryMarkers();
     this.updateTemporaryMarkersPanel();
     this.activeMarkerType = null;
     this.setMarkerPlacementMode(false);
+    this.closeMarkerIconMenu();
+    this.updateMarkerInstructions();
 
     this.isConfirmingRoom = false;
     this.pendingRoomId = null;
@@ -2363,8 +2728,34 @@ export class DefineRoom {
         });
       }
 
-      this.roomsList.appendChild(card);
+    this.roomsList.appendChild(card);
     });
+  }
+
+  private setExpandedMarker(id: string | null, options: { focusName?: boolean } = {}): void {
+    if (this.expandedMarkerId === id) {
+      if (options.focusName && id) {
+        queueMicrotask(() => {
+          const input = this.temporaryMarkersList?.querySelector(
+            `.marker-card[data-marker-id="${id}"] .marker-name`
+          ) as HTMLInputElement | null;
+          input?.focus();
+        });
+      }
+      return;
+    }
+
+    this.expandedMarkerId = id;
+    this.updateTemporaryMarkersPanel();
+
+    if (options.focusName && id) {
+      queueMicrotask(() => {
+        const input = this.temporaryMarkersList?.querySelector(
+          `.marker-card[data-marker-id="${id}"] .marker-name`
+        ) as HTMLInputElement | null;
+        input?.focus();
+      });
+    }
   }
 
   private setTool(tool: ToolType): void {
@@ -2390,6 +2781,25 @@ export class DefineRoom {
   }
 
   private handlePointerDown(event: PointerEvent): void {
+    if (this.relocatingMarkerId) {
+      event.preventDefault();
+      if (event.button === 1 || event.button === 2) {
+        return;
+      }
+      const point = this.translatePoint(event);
+      if (!point) {
+        return;
+      }
+      this.relocatingPointerId = event.pointerId;
+      try {
+        this.overlayCanvas.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture errors when pointer capture is not available.
+      }
+      this.updateRelocatingMarkerPosition(point);
+      return;
+    }
+
     if (this.interactionMode === "marker-placement") {
       event.preventDefault();
       if (event.button === 1 || event.button === 2) {
@@ -2491,6 +2901,17 @@ export class DefineRoom {
   }
 
   private handlePointerMove(event: PointerEvent): void {
+    if (this.relocatingMarkerId) {
+      if (this.relocatingPointerId !== null && event.pointerId === this.relocatingPointerId) {
+        event.preventDefault();
+        const point = this.translatePoint(event);
+        if (point) {
+          this.updateRelocatingMarkerPosition(point);
+        }
+      }
+      return;
+    }
+
     if (this.interactionMode === "marker-placement") {
       return;
     }
@@ -2574,6 +2995,25 @@ export class DefineRoom {
   }
 
   private handlePointerUp(event: PointerEvent): void {
+    if (this.relocatingMarkerId) {
+      if (this.relocatingPointerId !== null && event.pointerId === this.relocatingPointerId) {
+        event.preventDefault();
+        const point = this.translatePoint(event);
+        if (point) {
+          this.updateRelocatingMarkerPosition(point);
+        }
+        try {
+          if (this.overlayCanvas.hasPointerCapture(event.pointerId)) {
+            this.overlayCanvas.releasePointerCapture(event.pointerId);
+          }
+        } catch (error) {
+          // Ignore pointer capture release errors.
+        }
+        this.finishMarkerRelocation();
+      }
+      return;
+    }
+
     if (this.interactionMode === "marker-placement") {
       return;
     }

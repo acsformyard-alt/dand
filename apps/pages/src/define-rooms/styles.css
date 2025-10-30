@@ -275,99 +275,22 @@
   text-align: center;
 }
 
+
+.rooms-list,
 .temporary-markers-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.temporary-marker-item {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(30, 41, 59, 0.5);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.25);
-}
-
-.temporary-marker-item-character {
-  border-color: rgba(129, 140, 248, 0.45);
-}
-
-.temporary-marker-item-object {
-  border-color: rgba(34, 211, 238, 0.45);
-}
-
-.temporary-marker-item-index {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: rgba(226, 232, 240, 0.65);
-  min-width: 34px;
-  text-align: center;
-}
-
-.temporary-marker-item-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #0b1220;
-  box-shadow: 0 16px 34px rgba(59, 130, 246, 0.35);
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
-}
-
-.temporary-marker-item-character .temporary-marker-item-icon {
-  background: linear-gradient(135deg, #818cf8, #c084fc);
-  box-shadow: 0 16px 36px rgba(129, 140, 248, 0.35);
-}
-
-.temporary-marker-item-object .temporary-marker-item-icon {
-  background: linear-gradient(135deg, #38bdf8, #34d399);
-  box-shadow: 0 16px 36px rgba(45, 212, 191, 0.35);
-}
-
-.temporary-marker-item-icon svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-
-.temporary-marker-item-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.temporary-marker-item-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: rgba(226, 232, 240, 0.92);
-}
-
-.temporary-marker-item-coordinates {
-  font-size: 0.76rem;
-  letter-spacing: 0.01em;
-  color: rgba(148, 163, 184, 0.78);
-}
-
-.rooms-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-top: 4px;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
 }
 
-.room-card {
+.room-card,
+.marker-card {
   background: rgba(30, 41, 59, 0.5);
   border-radius: 12px;
   border: 1px solid transparent;
@@ -376,12 +299,15 @@
   transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.room-card:hover {
+.room-card:hover,
+.marker-card:hover {
   border-color: rgba(56, 189, 248, 0.4);
 }
 
 .room-card.expanded,
-.room-card.editing {
+.room-card.editing,
+.marker-card.expanded,
+.marker-card.relocating {
   border-color: rgba(56, 189, 248, 0.7);
   transform: translateY(-1px);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
@@ -391,9 +317,24 @@
   border-color: rgba(250, 204, 21, 0.7);
 }
 
+.marker-card.relocating {
+  border-color: rgba(250, 204, 21, 0.75);
+  box-shadow: 0 10px 30px rgba(250, 204, 21, 0.2);
+}
+
 .room-row {
   display: grid;
   grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.marker-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -409,11 +350,90 @@
   grid-template-columns: 16px 1fr auto;
 }
 
+.marker-card.expanded .marker-row,
+.marker-card.relocating .marker-row {
+  background: rgba(15, 23, 42, 0.35);
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.marker-card.relocating .marker-row {
+  background: rgba(250, 204, 21, 0.15);
+}
+
 .room-card:not(.expanded):not(.editing) .room-row {
   border-radius: 12px;
 }
 
-.room-card-body {
+.marker-card:not(.expanded):not(.relocating) .marker-row {
+  border-radius: 12px;
+}
+
+.marker-index {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.65);
+  min-width: 34px;
+  text-align: center;
+}
+
+.marker-icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b1220;
+  cursor: pointer;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  box-shadow: 0 16px 34px rgba(56, 189, 248, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+.marker-icon-button-character {
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+  box-shadow: 0 16px 36px rgba(129, 140, 248, 0.35);
+}
+
+.marker-icon-button-object {
+  background: linear-gradient(135deg, #38bdf8, #34d399);
+  box-shadow: 0 16px 36px rgba(45, 212, 191, 0.35);
+}
+
+.marker-icon-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.marker-icon-button:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.7);
+  outline-offset: 2px;
+}
+
+.marker-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.marker-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.marker-coordinates {
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  color: rgba(148, 163, 184, 0.78);
+  text-align: right;
+  justify-self: end;
+}
+
+.room-card-body,
+.marker-card-body {
   display: none;
   flex-direction: column;
   gap: 12px;
@@ -422,17 +442,21 @@
 }
 
 .room-card.expanded .room-card-body,
-.room-card.editing .room-card-body {
+.room-card.editing .room-card-body,
+.marker-card.expanded .marker-card-body,
+.marker-card.relocating .marker-card-body {
   display: flex;
 }
 
-.room-field {
+.room-field,
+.marker-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.room-field-label {
+.room-field-label,
+.marker-field-label {
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -440,7 +464,9 @@
 }
 
 .room-description,
-.room-tags {
+.room-tags,
+.marker-description,
+.marker-tags {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 10px;
@@ -449,19 +475,23 @@
   font-size: 0.9rem;
 }
 
-.room-description {
+.room-description,
+.marker-description {
   resize: vertical;
   min-height: 72px;
 }
 
 .room-description:focus,
-.room-tags:focus {
+.room-tags:focus,
+.marker-description:focus,
+.marker-tags:focus {
   outline: none;
   border-color: rgba(56, 189, 248, 0.6);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
 }
 
-.room-visible {
+.room-visible,
+.marker-visible {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -469,13 +499,15 @@
   color: rgba(226, 232, 240, 0.85);
 }
 
-.room-visible-checkbox {
+.room-visible-checkbox,
+.marker-visible-checkbox {
   width: 16px;
   height: 16px;
   accent-color: #38bdf8;
 }
 
-.room-card-footer {
+.room-card-footer,
+.marker-card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -509,6 +541,32 @@
 }
 
 .room-save-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(56, 189, 248, 0.45);
+}
+
+.marker-change-location {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  background: rgba(148, 163, 184, 0.2);
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.marker-change-location:hover {
+  opacity: 0.85;
+}
+
+.marker-change-location.is-active {
+  background: linear-gradient(135deg, #38bdf8, #34d399);
+  color: #0b1220;
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.35);
+}
+
+.marker-change-location.is-active:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 22px rgba(56, 189, 248, 0.45);
 }
@@ -606,7 +664,77 @@
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
-.room-name {
+.marker-icon-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 20px 45px rgba(2, 6, 23, 0.6);
+  z-index: 20;
+}
+
+.marker-icon-menu.hidden {
+  display: none;
+}
+
+.marker-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.marker-icon-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: rgba(15, 23, 42, 0.7);
+  color: rgba(226, 232, 240, 0.9);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.marker-icon-option:hover,
+.marker-icon-option:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.35);
+}
+
+.marker-icon-option.selected {
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 14px 28px rgba(56, 189, 248, 0.28);
+}
+
+.marker-icon-option-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.marker-icon-option-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.marker-icon-option-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.room-name,
+.marker-name {
   background: transparent;
   border: none;
   color: inherit;
@@ -614,7 +742,8 @@
   width: 100%;
 }
 
-.room-name:focus {
+.room-name:focus,
+.marker-name:focus {
   outline: none;
 }
 
