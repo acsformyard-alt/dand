@@ -246,25 +246,25 @@
   color: rgba(226, 232, 240, 0.6);
 }
 
-.temporary-markers-panel {
+.add-markers-panel {
   gap: 16px;
 }
 
-.temporary-markers-description {
+.add-markers-description {
   margin: 0;
   font-size: 0.88rem;
   color: rgba(226, 232, 240, 0.65);
   line-height: 1.5;
 }
 
-.temporary-markers-content {
+.add-markers-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.temporary-markers-empty {
+.add-markers-empty {
   margin: 0;
   font-size: 0.85rem;
   color: rgba(148, 163, 184, 0.75);
@@ -275,7 +275,7 @@
   text-align: center;
 }
 
-.temporary-markers-list {
+.add-markers-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -644,67 +644,6 @@
   flex-shrink: 0;
 }
 
-.toolbar-switch-tab {
-  margin-left: 0;
-  width: 36px;
-  min-width: 36px;
-  justify-content: center;
-  background: rgba(22, 32, 51, 0.95);
-  border-color: rgba(96, 165, 250, 0.45);
-  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease,
-    border-color 0.25s ease;
-}
-
-.toolbar-switch-tab[data-target-tab="temporary-markers"] {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(129, 140, 248, 0.92));
-  color: #0b1220;
-  border-color: transparent;
-}
-
-.toolbar-switch-tab[data-target-tab="rooms"] {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.82));
-  color: rgba(15, 23, 42, 0.92);
-  border-color: transparent;
-  box-shadow: 0 12px 32px rgba(244, 114, 182, 0.35);
-}
-
-.toolbar-switch-tab:hover:not(:disabled),
-.toolbar-switch-tab:focus-visible:not(:disabled) {
-  width: 36px;
-  transform: translateY(-1px);
-  box-shadow: 0 16px 38px rgba(56, 189, 248, 0.4);
-}
-
-.toolbar-switch-tab[data-target-tab="rooms"]:hover:not(:disabled),
-.toolbar-switch-tab[data-target-tab="rooms"]:focus-visible:not(:disabled) {
-  box-shadow: 0 16px 38px rgba(244, 114, 182, 0.42);
-}
-
-.toolbar-switch-tab:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.28);
-}
-
-.toolbar-switch-tab .toolbar-button-icon {
-  opacity: 1;
-  width: 18px;
-  height: 18px;
-  transform: none;
-}
-
-.toolbar-switch-tab .toolbar-button-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.toolbar-switch-tab:hover:not(:disabled) .toolbar-button-icon,
-.toolbar-switch-tab:focus-visible:not(:disabled) .toolbar-button-icon {
-  opacity: 1;
-  width: 18px;
-  transform: none;
-}
-
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -999,7 +938,7 @@
   width: 100%;
 }
 
-.toolbar-temporary-markers {
+.toolbar-add-markers {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1088,7 +1027,7 @@
   image-rendering: pixelated;
 }
 
-.temporary-markers-layer {
+.add-markers-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;

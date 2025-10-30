@@ -713,9 +713,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setDefinedRooms([]);
       const currentStep = stepRef.current;
       if (currentStep === 2 || currentStep === 3) {
+        defineRoomRef.current?.setActiveTab(currentStep === 3 ? 'add-markers' : 'rooms');
         defineRoomRef.current?.setMarkerPlacementMode(currentStep === 3);
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
+        defineRoomRef.current?.setActiveTab('rooms');
         defineRoomRef.current?.close();
       }
     };
@@ -735,12 +737,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       return;
     }
     if (step === 2 && defineRoomImageRef.current) {
+      editor.setActiveTab('rooms');
       editor.setMarkerPlacementMode(false);
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else if (step === 3 && defineRoomImageRef.current) {
+      editor.setActiveTab('add-markers');
       editor.setMarkerPlacementMode(true);
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else {
+      editor.setActiveTab('rooms');
       editor.setMarkerPlacementMode(false);
       editor.close();
     }

@@ -363,25 +363,6 @@ const OBJECT_MARKER_ICON = `
   </svg>
 `;
 
-const SWITCH_TO_TEMPORARY_MARKERS_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="12" cy="12" r="5.5" stroke="currentColor" stroke-width="1.7" />
-    <path d="M12 4v2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M12 17.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M4 12h2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-    <path d="M17.8 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-  </svg>
-`;
-
-const SWITCH_TO_ROOMS_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="5" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="13" y="5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="5" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-    <rect x="13" y="13" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6" />
-  </svg>
-`;
-
 const TOOL_ORDER: ToolType[] = ["move", "magnify", "brush", "eraser", "lasso", "magnetic", "wand"];
 
 const UNDO_ICON = `
@@ -562,21 +543,17 @@ export class DefineRoom {
 
   private markerInstructionLabel!: HTMLElement;
 
-  private tabToggleButton!: HTMLButtonElement;
-
-  private tabToggleButtonIcon: HTMLElement | null = null;
-
   private characterMarkersButton!: HTMLButtonElement;
 
   private objectMarkersButton!: HTMLButtonElement;
 
-  private temporaryMarkersPanel!: HTMLElement;
+  private addMarkersPanel!: HTMLElement;
 
-  private temporaryMarkersEmptyState!: HTMLElement;
+  private addMarkersEmptyState!: HTMLElement;
 
-  private temporaryMarkersList!: HTMLElement;
+  private addMarkersList!: HTMLElement;
 
-  private activeTab: 'rooms' | 'temporary-markers' = 'rooms';
+  private activeTab: 'rooms' | 'add-markers' = 'rooms';
 
   private activeMarkerType: TemporaryMarkerType | null = null;
 
@@ -793,20 +770,6 @@ export class DefineRoom {
                   ></div>
                 </div>
                 <div class="toolbar-stack">
-                  <button
-                    class="toolbar-button toolbar-switch-tab"
-                    type="button"
-                    aria-label="Switch to Temporary Markers tab"
-                    title="Switch to Temporary Markers tab"
-                    data-target-tab="temporary-markers"
-                    ref={(node: HTMLButtonElement | null) => node && (this.tabToggleButton = node)}
-                  >
-                    <span
-                      class="toolbar-button-icon"
-                      aria-hidden="true"
-                      ref={(node: HTMLElement | null) => node && (this.tabToggleButtonIcon = node)}
-                    ></span>
-                  </button>
                   <div
                     class="toolbar"
                     id="define-room-toolbar"
@@ -842,10 +805,10 @@ export class DefineRoom {
                     </div>
                     <div class="tool-group rooms-tool-group"></div>
                     <div
-                      class="toolbar-temporary-markers"
-                      id="temporary-markers-toolbar"
+                      class="toolbar-add-markers"
+                      id="add-markers-toolbar"
                       role="group"
-                      aria-label="Temporary Markers toolbar"
+                      aria-label="Add Markers toolbar"
                       aria-hidden="true"
                       hidden
                       ref={(node: HTMLElement | null) => node && (this.markersToolbar = node)}
@@ -901,7 +864,7 @@ export class DefineRoom {
                 <canvas class="image-layer"></canvas>
                 <canvas class="mask-layer"></canvas>
                 <canvas class="selection-layer"></canvas>
-                <div class="temporary-markers-layer" aria-hidden="true"></div>
+                <div class="add-markers-layer" aria-hidden="true"></div>
                 <div class="marker-placement-instructions" aria-hidden="true"></div>
                 <div class="room-hover-label" aria-hidden="true"></div>
               </div>
@@ -917,23 +880,23 @@ export class DefineRoom {
               <div class="room-color-menu hidden" aria-hidden="true"></div>
             </aside>
             <aside
-              class="define-room-sidebar temporary-markers-panel"
-              ref={(node: HTMLElement | null) => node && (this.temporaryMarkersPanel = node)}
+              class="define-room-sidebar add-markers-panel"
+              ref={(node: HTMLElement | null) => node && (this.addMarkersPanel = node)}
               aria-hidden="true"
               hidden
             >
               <div class="rooms-header">
-                <h2>Temporary Markers</h2>
+                <h2>Add Markers</h2>
               </div>
-              <p class="temporary-markers-description">
+              <p class="add-markers-description">
                 Add quick callouts while planning without committing them to the final map yet.
               </p>
-              <div class="temporary-markers-content">
-                <p class="temporary-markers-empty">Temporary markers will appear here once added.</p>
+              <div class="add-markers-content">
+                <p class="add-markers-empty">Markers will appear here once added.</p>
                 <ul
-                  class="temporary-markers-list"
+                  class="add-markers-list"
                   aria-live="polite"
-                  aria-label="Temporary markers"
+                  aria-label="Markers"
                   hidden
                 ></ul>
               </div>
@@ -1043,7 +1006,7 @@ export class DefineRoom {
     this.updateMarkerButtonsState();
   }
 
-  private setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
+  public setActiveTab(tab: 'rooms' | 'add-markers'): void {
     if (this.activeTab === tab) {
       return;
     }
@@ -1053,29 +1016,10 @@ export class DefineRoom {
 
   private applyActiveTabState(): void {
     const isRooms = this.activeTab === 'rooms';
-    this.root.classList.toggle('define-room-temporary-markers-active', !isRooms);
+    this.root.classList.toggle('define-room-add-markers-active', !isRooms);
 
     if (isRooms && this.interactionMode === "marker-placement") {
       this.endMarkerPlacement();
-    }
-
-    if (this.tabToggleButton) {
-      const nextTab = isRooms ? 'temporary-markers' : 'rooms';
-      const label =
-        nextTab === 'temporary-markers'
-          ? 'Switch to Temporary Markers tab'
-          : 'Switch to Define Rooms tab';
-      this.tabToggleButton.setAttribute('aria-label', label);
-      this.tabToggleButton.setAttribute('title', label);
-      this.tabToggleButton.dataset.targetTab = nextTab;
-    }
-
-    if (this.tabToggleButtonIcon) {
-      const icon =
-        this.activeTab === 'rooms'
-          ? SWITCH_TO_TEMPORARY_MARKERS_ICON
-          : SWITCH_TO_ROOMS_ICON;
-      this.tabToggleButtonIcon.innerHTML = icon;
     }
 
     if (this.toolbarContainer) {
@@ -1102,9 +1046,9 @@ export class DefineRoom {
       this.roomsPanel.hidden = !isRooms;
     }
 
-    if (this.temporaryMarkersPanel) {
-      this.temporaryMarkersPanel.hidden = isRooms;
-      this.temporaryMarkersPanel.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
+    if (this.addMarkersPanel) {
+      this.addMarkersPanel.hidden = isRooms;
+      this.addMarkersPanel.setAttribute('aria-hidden', isRooms ? 'true' : 'false');
     }
 
     this.updateBrushSliderVisibility();
@@ -1234,7 +1178,7 @@ export class DefineRoom {
 
     this.temporaryMarkers.push(marker);
     this.renderTemporaryMarkers();
-    this.updateTemporaryMarkersPanel();
+    this.updateAddMarkersPanel();
   }
 
   private renderTemporaryMarkers(): void {
@@ -1267,18 +1211,18 @@ export class DefineRoom {
     });
   }
 
-  private updateTemporaryMarkersPanel(): void {
-    if (!this.temporaryMarkersPanel || !this.temporaryMarkersEmptyState || !this.temporaryMarkersList) {
+  private updateAddMarkersPanel(): void {
+    if (!this.addMarkersPanel || !this.addMarkersEmptyState || !this.addMarkersList) {
       return;
     }
 
     const hasMarkers = this.temporaryMarkers.length > 0;
-    this.temporaryMarkersEmptyState.hidden = hasMarkers;
-    this.temporaryMarkersEmptyState.setAttribute("aria-hidden", hasMarkers ? "true" : "false");
-    this.temporaryMarkersList.hidden = !hasMarkers;
-    this.temporaryMarkersList.setAttribute("aria-hidden", hasMarkers ? "false" : "true");
+    this.addMarkersEmptyState.hidden = hasMarkers;
+    this.addMarkersEmptyState.setAttribute("aria-hidden", hasMarkers ? "true" : "false");
+    this.addMarkersList.hidden = !hasMarkers;
+    this.addMarkersList.setAttribute("aria-hidden", hasMarkers ? "false" : "true");
 
-    this.temporaryMarkersList.innerHTML = "";
+    this.addMarkersList.innerHTML = "";
 
     if (!hasMarkers) {
       return;
@@ -1315,7 +1259,7 @@ export class DefineRoom {
       item.appendChild(icon);
       item.appendChild(content);
 
-      this.temporaryMarkersList.appendChild(item);
+      this.addMarkersList.appendChild(item);
     });
   }
 
@@ -1327,14 +1271,8 @@ export class DefineRoom {
     this.toolbarCancelButton = this.root.querySelector(".toolbar-cancel") as HTMLButtonElement;
     this.undoButton = this.root.querySelector(".toolbar-undo") as HTMLButtonElement;
     this.redoButton = this.root.querySelector(".toolbar-redo") as HTMLButtonElement;
-    this.tabToggleButton = this.root.querySelector(
-      ".toolbar-switch-tab",
-    ) as HTMLButtonElement;
-    this.tabToggleButtonIcon = (this.tabToggleButton?.querySelector(
-      ".toolbar-button-icon",
-    ) as HTMLElement | null) ?? null;
-    this.markersToolbar = this.root.querySelector(".toolbar-temporary-markers") as HTMLElement;
-    this.markersLayer = this.root.querySelector(".temporary-markers-layer") as HTMLElement;
+    this.markersToolbar = this.root.querySelector(".toolbar-add-markers") as HTMLElement;
+    this.markersLayer = this.root.querySelector(".add-markers-layer") as HTMLElement;
     this.markerInstructionLabel = this.root.querySelector(
       ".marker-placement-instructions",
     ) as HTMLElement;
@@ -1344,8 +1282,8 @@ export class DefineRoom {
     this.objectMarkersButton = this.root.querySelector(
       '.toolbar-temporary[aria-label="Object Markers"]',
     ) as HTMLButtonElement;
-    this.temporaryMarkersPanel = this.root.querySelector(
-      ".temporary-markers-panel",
+    this.addMarkersPanel = this.root.querySelector(
+      ".add-markers-panel",
     ) as HTMLElement;
     if (!this.markersLayer) {
       throw new Error("DefineRoom: missing markers layer");
@@ -1353,17 +1291,17 @@ export class DefineRoom {
     if (!this.markerInstructionLabel) {
       throw new Error("DefineRoom: missing marker instruction label");
     }
-    if (!this.temporaryMarkersPanel) {
-      throw new Error("DefineRoom: missing temporary markers panel");
+    if (!this.addMarkersPanel) {
+      throw new Error("DefineRoom: missing add markers panel");
     }
-    this.temporaryMarkersEmptyState = this.temporaryMarkersPanel.querySelector(
-      ".temporary-markers-empty",
+    this.addMarkersEmptyState = this.addMarkersPanel.querySelector(
+      ".add-markers-empty",
     ) as HTMLElement;
-    this.temporaryMarkersList = this.temporaryMarkersPanel.querySelector(
-      ".temporary-markers-list",
+    this.addMarkersList = this.addMarkersPanel.querySelector(
+      ".add-markers-list",
     ) as HTMLElement;
-    if (!this.temporaryMarkersEmptyState || !this.temporaryMarkersList) {
-      throw new Error("DefineRoom: missing temporary markers list");
+    if (!this.addMarkersEmptyState || !this.addMarkersList) {
+      throw new Error("DefineRoom: missing add markers list");
     }
     const sharedToolGroup = this.root.querySelector(
       ".shared-tool-group",
@@ -1398,13 +1336,6 @@ export class DefineRoom {
 
     this.roomsList.addEventListener("scroll", () => this.closeColorMenu());
 
-    if (this.tabToggleButton) {
-      this.tabToggleButton.addEventListener("click", () => {
-        const nextTab = this.activeTab === "rooms" ? "temporary-markers" : "rooms";
-        this.setActiveTab(nextTab);
-      });
-    }
-
     if (this.characterMarkersButton) {
       const characterIcon = this.characterMarkersButton.querySelector(
         ".toolbar-button-icon",
@@ -1435,7 +1366,7 @@ export class DefineRoom {
     this.updateMarkerButtonsState();
     this.updateMarkerInstructions();
     this.renderTemporaryMarkers();
-    this.updateTemporaryMarkersPanel();
+    this.updateAddMarkersPanel();
 
     if (this.deleteBackdrop) {
       this.deleteBackdrop.addEventListener("click", (event) => {
@@ -1968,7 +1899,7 @@ export class DefineRoom {
 
     this.temporaryMarkers = [];
     this.renderTemporaryMarkers();
-    this.updateTemporaryMarkersPanel();
+    this.updateAddMarkersPanel();
     this.activeMarkerType = null;
     this.setMarkerPlacementMode(false);
 
