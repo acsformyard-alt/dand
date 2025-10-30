@@ -20,7 +20,7 @@ import {
   type MapMarkerIconDefinition,
 } from './mapMarkerIcons';
 
-type WizardStep = 0 | 1 | 2;
+type WizardStep = 0 | 1 | 2 | 3;
 
 interface MapCreationWizardProps {
   campaign: Campaign;
@@ -90,6 +90,10 @@ const steps: Array<{ title: string; description: string }> = [
   {
     title: 'Define Rooms',
     description: 'Use the room editor to outline areas before placing your markers.',
+  },
+  {
+    title: 'Add Markers',
+    description: 'Place markers to highlight important characters, objects, or areas.',
   },
 ];
 
@@ -708,7 +712,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       defineRoomRef.current?.loadImage(image);
       setDefinedRooms([]);
       const currentStep = stepRef.current;
-      if (currentStep === 2) {
+      if (currentStep === 2 || currentStep === 3) {
         defineRoomRef.current?.setMarkerPlacementMode(false);
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
@@ -730,12 +734,28 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (!editor) {
       return;
     }
-    if (step === 2 && defineRoomImageRef.current) {
+    if ((step === 2 || step === 3) && defineRoomImageRef.current) {
       editor.setMarkerPlacementMode(false);
       editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else {
       editor.setMarkerPlacementMode(false);
       editor.close();
+    }
+  }, [defineRoomReady, step]);
+
+  useEffect(() => {
+    if (!defineRoomReady) {
+      return;
+    }
+    const editor = defineRoomRef.current;
+    if (!editor) {
+      return;
+    }
+    if (step === 2) {
+      editor.setActiveTab('rooms');
+    }
+    if (step === 3) {
+      editor.setActiveTab('markers');
     }
   }, [defineRoomReady, step]);
 
@@ -1856,7 +1876,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
               </div>
             </div>
           )}
-          {step === 2 && (
+          {(step === 2 || step === 3) && (
             <div className="flex h-full min-h-0 flex-1 justify-center">
               <div className="flex h-full min-h-0 w-full rounded-3xl border border-slate-800/70 bg-slate-900/70 p-4">
                 <div
