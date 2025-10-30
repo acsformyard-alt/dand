@@ -755,7 +755,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       editor.setActiveTab('rooms');
     }
     if (step === 3) {
-      editor.setActiveTab('temporary-markers');
+      editor.setActiveTab('markers');
     }
   }, [defineRoomReady, step]);
 

@@ -557,7 +557,7 @@ export class DefineRoom {
 
   private temporaryMarkersList!: HTMLElement;
 
-  private activeTab: 'rooms' | 'temporary-markers' = 'rooms';
+  private activeTab: 'rooms' | 'markers' = 'rooms';
 
   private activeMarkerType: TemporaryMarkerType | null = null;
 
@@ -842,7 +842,7 @@ export class DefineRoom {
                       class="toolbar-temporary-markers"
                       id="temporary-markers-toolbar"
                       role="group"
-                      aria-label="Temporary Markers toolbar"
+                      aria-label="Markers toolbar"
                       aria-hidden="true"
                       hidden
                       ref={(node: HTMLElement | null) => node && (this.markersToolbar = node)}
@@ -920,17 +920,14 @@ export class DefineRoom {
               hidden
             >
               <div class="rooms-header">
-                <h2>Temporary Markers</h2>
+                <h2>Markers</h2>
               </div>
-              <p class="temporary-markers-description">
-                Add quick callouts while planning without committing them to the final map yet.
-              </p>
               <div class="temporary-markers-content">
-                <p class="temporary-markers-empty">Temporary markers will appear here once added.</p>
+                <p class="temporary-markers-empty">Markers will appear here once added.</p>
                 <ul
                   class="temporary-markers-list"
                   aria-live="polite"
-                  aria-label="Temporary markers"
+                  aria-label="Markers"
                   hidden
                 ></ul>
                 <div class="marker-icon-menu hidden" aria-hidden="true"></div>
@@ -1051,7 +1048,7 @@ export class DefineRoom {
     this.updateMarkerButtonsState();
   }
 
-  public setActiveTab(tab: 'rooms' | 'temporary-markers'): void {
+  public setActiveTab(tab: 'rooms' | 'markers'): void {
     if (this.activeTab === tab) {
       return;
     }
@@ -1061,7 +1058,7 @@ export class DefineRoom {
 
   private applyActiveTabState(): void {
     const isRooms = this.activeTab === 'rooms';
-    this.root.classList.toggle('define-room-temporary-markers-active', !isRooms);
+    this.root.classList.toggle('define-room-markers-active', !isRooms);
 
     if (isRooms) {
       if (this.repositioningMarkerId) {
@@ -1343,7 +1340,7 @@ export class DefineRoom {
             </label>
             <label class="room-visible marker-visible">
               <input class="marker-visible-checkbox" type="checkbox" checked={marker.visibleAtStart} />
-              <span>Visible at start of game</span>
+              <span>Visible upon room entry</span>
             </label>
             <div class="marker-location-row">
               <span class="marker-location-label">Location</span>
@@ -1650,7 +1647,7 @@ export class DefineRoom {
       throw new Error("DefineRoom: missing marker instruction label");
     }
     if (!this.temporaryMarkersPanel) {
-      throw new Error("DefineRoom: missing temporary markers panel");
+      throw new Error("DefineRoom: missing markers panel");
     }
     this.temporaryMarkersEmptyState = this.temporaryMarkersPanel.querySelector(
       ".temporary-markers-empty",
@@ -1659,7 +1656,7 @@ export class DefineRoom {
       ".temporary-markers-list",
     ) as HTMLElement;
     if (!this.temporaryMarkersEmptyState || !this.temporaryMarkersList) {
-      throw new Error("DefineRoom: missing temporary markers list");
+      throw new Error("DefineRoom: missing markers list");
     }
     this.markerIconMenu = this.temporaryMarkersPanel.querySelector(
       ".marker-icon-menu",
@@ -2782,7 +2779,7 @@ export class DefineRoom {
             </label>
             <label class="room-visible">
               <input class="room-visible-checkbox" type="checkbox" checked={room.visibleAtStart} />
-              <span>Visible at start of game</span>
+              <span>Visible upon room entry</span>
             </label>
             {room.isConfirmed && isExpanded && !isEditingRoom ? (
               <div class="room-card-footer">
