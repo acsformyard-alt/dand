@@ -246,15 +246,8 @@
   color: rgba(226, 232, 240, 0.6);
 }
 
-.temporary-markers-panel {
-  gap: 16px;
-}
-
-.temporary-markers-description {
-  margin: 0;
-  font-size: 0.88rem;
-  color: rgba(226, 232, 240, 0.65);
-  line-height: 1.5;
+.markers-panel {
+  position: relative;
 }
 
 .temporary-markers-content {
@@ -284,78 +277,182 @@
   gap: 10px;
 }
 
-.temporary-marker-item {
-  display: grid;
+.marker-card {
+  position: relative;
+}
+
+.marker-card.repositioning {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 12px 32px rgba(56, 189, 248, 0.25);
+}
+
+.marker-row {
   grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(30, 41, 59, 0.5);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.25);
 }
 
-.temporary-marker-item-character {
-  border-color: rgba(129, 140, 248, 0.45);
+.marker-card.expanded .marker-row,
+.marker-card.repositioning .marker-row {
+  grid-template-columns: auto auto 1fr;
 }
 
-.temporary-marker-item-object {
-  border-color: rgba(34, 211, 238, 0.45);
-}
-
-.temporary-marker-item-index {
+.marker-index-badge {
   font-size: 0.75rem;
   font-weight: 700;
   color: rgba(226, 232, 240, 0.65);
-  min-width: 34px;
+  min-width: 28px;
   text-align: center;
 }
 
-.temporary-marker-item-icon {
-  width: 36px;
-  height: 36px;
+.marker-icon-button {
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #0b1220;
-  box-shadow: 0 16px 34px rgba(59, 130, 246, 0.35);
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(226, 232, 240, 0.95);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.temporary-marker-item-character .temporary-marker-item-icon {
-  background: linear-gradient(135deg, #818cf8, #c084fc);
-  box-shadow: 0 16px 36px rgba(129, 140, 248, 0.35);
+.marker-icon-button:hover,
+.marker-icon-button:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.2);
 }
 
-.temporary-marker-item-object .temporary-marker-item-icon {
-  background: linear-gradient(135deg, #38bdf8, #34d399);
-  box-shadow: 0 16px 36px rgba(45, 212, 191, 0.35);
-}
-
-.temporary-marker-item-icon svg {
+.marker-icon-button svg {
   width: 20px;
   height: 20px;
   display: block;
 }
 
-.temporary-marker-item-content {
+.marker-card-body {
+  position: relative;
+}
+
+.marker-location-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.temporary-marker-item-label {
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.55);
   font-size: 0.85rem;
-  font-weight: 600;
-  color: rgba(226, 232, 240, 0.92);
+  color: rgba(226, 232, 240, 0.82);
 }
 
-.temporary-marker-item-coordinates {
-  font-size: 0.76rem;
-  letter-spacing: 0.01em;
-  color: rgba(148, 163, 184, 0.78);
+.marker-location-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.marker-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.marker-reposition-button {
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #0b1220;
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.marker-reposition-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(56, 189, 248, 0.45);
+}
+
+.marker-card.repositioning .marker-row,
+.marker-card.repositioning .marker-card-body {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.marker-card.repositioning .marker-index-badge {
+  color: rgba(56, 189, 248, 0.8);
+}
+
+.marker-card.repositioning .marker-reposition-button {
+  background: rgba(56, 189, 248, 0.18);
+  color: rgba(226, 232, 240, 0.92);
+  box-shadow: none;
+}
+
+.marker-card.repositioning .marker-reposition-button:hover {
+  transform: none;
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+.marker-icon-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 20px 45px rgba(2, 6, 23, 0.6);
+  z-index: 20;
+}
+
+.marker-icon-menu.hidden {
+  display: none;
+}
+
+.marker-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 48px);
+  gap: 12px;
+}
+
+.marker-icon-option {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(226, 232, 240, 0.95);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.marker-icon-option svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.marker-icon-option:hover,
+.marker-icon-option:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.8);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
+.marker-icon-option.selected {
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
 }
 
 .rooms-list {
@@ -640,69 +737,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
   flex-shrink: 0;
-}
-
-.toolbar-switch-tab {
-  margin-left: 0;
-  width: 36px;
-  min-width: 36px;
-  justify-content: center;
-  background: rgba(22, 32, 51, 0.95);
-  border-color: rgba(96, 165, 250, 0.45);
-  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease,
-    border-color 0.25s ease;
-}
-
-.toolbar-switch-tab[data-target-tab="temporary-markers"] {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(129, 140, 248, 0.92));
-  color: #0b1220;
-  border-color: transparent;
-}
-
-.toolbar-switch-tab[data-target-tab="rooms"] {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.82));
-  color: rgba(15, 23, 42, 0.92);
-  border-color: transparent;
-  box-shadow: 0 12px 32px rgba(244, 114, 182, 0.35);
-}
-
-.toolbar-switch-tab:hover:not(:disabled),
-.toolbar-switch-tab:focus-visible:not(:disabled) {
-  width: 36px;
-  transform: translateY(-1px);
-  box-shadow: 0 16px 38px rgba(56, 189, 248, 0.4);
-}
-
-.toolbar-switch-tab[data-target-tab="rooms"]:hover:not(:disabled),
-.toolbar-switch-tab[data-target-tab="rooms"]:focus-visible:not(:disabled) {
-  box-shadow: 0 16px 38px rgba(244, 114, 182, 0.42);
-}
-
-.toolbar-switch-tab:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.28);
-}
-
-.toolbar-switch-tab .toolbar-button-icon {
-  opacity: 1;
-  width: 18px;
-  height: 18px;
-  transform: none;
-}
-
-.toolbar-switch-tab .toolbar-button-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.toolbar-switch-tab:hover:not(:disabled) .toolbar-button-icon,
-.toolbar-switch-tab:focus-visible:not(:disabled) .toolbar-button-icon {
-  opacity: 1;
-  width: 18px;
-  transform: none;
+  gap: 14px;
 }
 
 .toolbar {
@@ -1095,6 +1131,10 @@
   z-index: 2;
 }
 
+.temporary-markers-layer.is-repositioning {
+  pointer-events: auto;
+}
+
 .temporary-marker {
   position: absolute;
   width: 32px;
@@ -1107,6 +1147,19 @@
   color: #0b1220;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.5);
   pointer-events: none;
+}
+
+.temporary-markers-layer.is-repositioning .temporary-marker {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.temporary-marker.is-dragging {
+  cursor: grabbing;
+}
+
+.temporary-marker.is-reposition-target {
+  box-shadow: 0 22px 46px rgba(56, 189, 248, 0.45);
 }
 
 .temporary-marker-character {
