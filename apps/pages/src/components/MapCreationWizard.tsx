@@ -91,10 +91,6 @@ const steps: Array<{ title: string; description: string }> = [
     title: 'Define Rooms',
     description: 'Use the room editor to outline areas before placing your markers.',
   },
-  {
-    title: 'Add Markers',
-    description: 'Drag markers onto the map to highlight points of interest for your players.',
-  },
 ];
 
 const clamp = (value: number, min: number, max: number) =>
@@ -712,8 +708,8 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       defineRoomRef.current?.loadImage(image);
       setDefinedRooms([]);
       const currentStep = stepRef.current;
-      if (currentStep === 2 || currentStep === 3) {
-        defineRoomRef.current?.setMarkerPlacementMode(currentStep === 3);
+      if (currentStep === 2) {
+        defineRoomRef.current?.setMarkerPlacementMode(false);
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
         defineRoomRef.current?.close();
@@ -737,20 +733,11 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (step === 2 && defineRoomImageRef.current) {
       editor.setMarkerPlacementMode(false);
       editor.open(defineRoomImageRef.current, { resetExisting: false });
-    } else if (step === 3 && defineRoomImageRef.current) {
-      editor.setMarkerPlacementMode(true);
-      editor.open(defineRoomImageRef.current, { resetExisting: false });
     } else {
       editor.setMarkerPlacementMode(false);
       editor.close();
     }
   }, [defineRoomReady, step]);
-
-  useEffect(() => {
-    if (step === 3) {
-      syncRoomsFromEditor();
-    }
-  }, [step, syncRoomsFromEditor]);
 
   useEffect(() => {
     if (!markerPaletteOpen) {
@@ -1343,9 +1330,6 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (!areaCapture) {
       return;
     }
-    if (step === 3) {
-      return;
-    }
     if (areaCapture.type === 'lasso') {
       defineRoomRef.current?.cancelMarkerPolygonCapture();
     }
@@ -1369,7 +1353,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       );
     }
     setAreaCapture(null);
-  }, [areaCapture, setMarkers, step, applyAutoAssociation]);
+  }, [areaCapture, setMarkers, applyAutoAssociation]);
 
   useEffect(() => {
     if (!areaCapture || previewUrl) {
