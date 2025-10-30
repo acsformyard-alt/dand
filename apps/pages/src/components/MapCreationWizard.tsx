@@ -713,9 +713,12 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       setDefinedRooms([]);
       const currentStep = stepRef.current;
       if (currentStep === 2 || currentStep === 3) {
-        defineRoomRef.current?.setMarkerPlacementMode(currentStep === 3);
+        const isMarkerStep = currentStep === 3;
+        defineRoomRef.current?.setActiveTab(isMarkerStep ? 'markers' : 'rooms');
+        defineRoomRef.current?.setMarkerPlacementMode(isMarkerStep);
         defineRoomRef.current?.open(image, { resetExisting: true });
       } else {
+        defineRoomRef.current?.setActiveTab('rooms');
         defineRoomRef.current?.close();
       }
     };
@@ -734,14 +737,18 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     if (!editor) {
       return;
     }
-    if (step === 2 && defineRoomImageRef.current) {
+    const image = defineRoomImageRef.current;
+    if (step === 2 && image) {
+      editor.setActiveTab('rooms');
       editor.setMarkerPlacementMode(false);
-      editor.open(defineRoomImageRef.current, { resetExisting: false });
-    } else if (step === 3 && defineRoomImageRef.current) {
+      editor.open(image, { resetExisting: false });
+    } else if (step === 3 && image) {
+      editor.setActiveTab('markers');
       editor.setMarkerPlacementMode(true);
-      editor.open(defineRoomImageRef.current, { resetExisting: false });
+      editor.open(image, { resetExisting: false });
     } else {
       editor.setMarkerPlacementMode(false);
+      editor.setActiveTab('rooms');
       editor.close();
     }
   }, [defineRoomReady, step]);
