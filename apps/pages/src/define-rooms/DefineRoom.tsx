@@ -623,6 +623,10 @@ export class DefineRoom {
 
   private repositioningMarkerId: string | null = null;
 
+  private markerOverlayUpdateFrame: number | null = null;
+
+  private markerOverlayTransitionCleanup: (() => void) | null = null;
+
   private markerDragPointerId: number | null = null;
 
   private markerDragElement: HTMLElement | null = null;
@@ -3555,7 +3559,45 @@ export class DefineRoom {
       this.markersLayer.style.transformOrigin = "";
       this.markersLayer.style.transform = "none";
     }
+
+    if (this.markerOverlayUpdateFrame !== null) {
+      window.cancelAnimationFrame(this.markerOverlayUpdateFrame);
+      this.markerOverlayUpdateFrame = null;
+    }
+
+    if (this.markerOverlayTransitionCleanup) {
+      this.markerOverlayTransitionCleanup();
+      this.markerOverlayTransitionCleanup = null;
+    }
+
     this.updateMarkerOverlayPositions();
+
+    if (withTransition) {
+      this.markerOverlayUpdateFrame = window.requestAnimationFrame(() => {
+        this.markerOverlayUpdateFrame = null;
+        this.updateMarkerOverlayPositions();
+      });
+
+      const canvases = [this.imageCanvas, this.overlayCanvas, this.selectionCanvas];
+      const handleTransitionEnd = () => {
+        const cleanup = this.markerOverlayTransitionCleanup;
+        if (cleanup) {
+          this.markerOverlayTransitionCleanup = null;
+          cleanup();
+        }
+        this.updateMarkerOverlayPositions();
+      };
+
+      canvases.forEach((canvas) => {
+        canvas.addEventListener("transitionend", handleTransitionEnd);
+      });
+
+      this.markerOverlayTransitionCleanup = () => {
+        canvases.forEach((canvas) => {
+          canvas.removeEventListener("transitionend", handleTransitionEnd);
+        });
+      };
+    }
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
