@@ -54,6 +54,8 @@ type TemporaryMarker = {
   visibleAtStart: boolean;
   x: number;
   y: number;
+  roomId: string | null;
+  roomTagName: string | null;
 };
 
 type MarkerDisplayMetrics = {
@@ -1322,8 +1324,11 @@ export class DefineRoom {
       visibleAtStart: true,
       x: clamp(point.x, 0, this.width - 1),
       y: clamp(point.y, 0, this.height - 1),
+      roomId: null,
+      roomTagName: null,
     };
 
+    this.updateMarkerRoomAssociation(marker);
     this.temporaryMarkers.push(marker);
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
@@ -1331,6 +1336,50 @@ export class DefineRoom {
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
     this.endMarkerPlacement();
+  }
+
+  private updateMarkerRoomAssociation(marker: TemporaryMarker): void {
+    const normalize = (value: string) => value.trim().toLowerCase();
+    const tags = marker.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+
+    if (marker.roomTagName) {
+      const previousTag = normalize(marker.roomTagName);
+      for (let index = tags.length - 1; index >= 0; index -= 1) {
+        if (normalize(tags[index]) === previousTag) {
+          tags.splice(index, 1);
+          break;
+        }
+      }
+    }
+
+    if (!this.imageData) {
+      marker.roomId = null;
+      marker.roomTagName = null;
+      marker.tags = tags.join(", ");
+      return;
+    }
+
+    const room = this.getRoomAtPoint({ x: marker.x, y: marker.y });
+    if (room) {
+      const roomName = room.name.trim() || "Room";
+      const normalizedRoom = normalize(roomName);
+      const existingIndex = tags.findIndex((tag) => normalize(tag) === normalizedRoom);
+      if (existingIndex === -1) {
+        tags.push(roomName);
+        marker.roomTagName = roomName;
+      } else {
+        marker.roomTagName = tags[existingIndex];
+      }
+      marker.roomId = room.id;
+    } else {
+      marker.roomId = null;
+      marker.roomTagName = null;
+    }
+
+    marker.tags = tags.join(", ");
   }
 
   private renderTemporaryMarkers(): void {
@@ -1529,8 +1578,12 @@ export class DefineRoom {
     this.closeMarkerIconMenu();
 
     this.temporaryMarkers.forEach((marker) => {
+      this.updateMarkerRoomAssociation(marker);
       const isExpanded = this.expandedMarkerId === marker.id;
       const isRepositioning = this.repositioningMarkerId === marker.id;
+      const associatedRoom =
+        marker.roomId !== null ? this.rooms.find((room) => room.id === marker.roomId) : null;
+      const associatedRoomName = associatedRoom ? associatedRoom.name.trim() || "Room" : null;
 
       const card = (
         <li
@@ -1551,6 +1604,14 @@ export class DefineRoom {
               <span class="room-field-label">Tags</span>
               <input class="room-tags marker-tags" type="text" value={marker.tags} />
             </label>
+            <div
+              class={`marker-room-association${associatedRoomName ? "" : " marker-room-association-empty"}`}
+            >
+              <span class="marker-room-label">Room</span>
+              <span class="marker-room-value">
+                {associatedRoomName ?? "No room detected"}
+              </span>
+            </div>
             <label class="room-visible marker-visible">
               <input class="marker-visible-checkbox" type="checkbox" checked={marker.visibleAtStart} />
               <span>Visible upon room entry</span>
@@ -1600,7 +1661,18 @@ export class DefineRoom {
 
       const tagsField = card.querySelector(".marker-tags") as HTMLInputElement;
       tagsField.addEventListener("input", (event) => {
-        marker.tags = (event.target as HTMLInputElement).value;
+        const value = (event.target as HTMLInputElement).value;
+        marker.tags = value;
+        if (marker.roomTagName) {
+          const normalizedTags = value
+            .split(",")
+            .map((tag) => tag.trim().toLowerCase())
+            .filter((tag) => tag.length > 0);
+          const currentTag = marker.roomTagName.trim().toLowerCase();
+          if (!normalizedTags.includes(currentTag)) {
+            marker.roomTagName = null;
+          }
+        }
       });
 
       const visibleCheckbox = card.querySelector(".marker-visible-checkbox") as HTMLInputElement;
@@ -1714,8 +1786,14 @@ export class DefineRoom {
   }
 
   private completeMarkerReposition(): void {
-    if (!this.repositioningMarkerId) {
+    const markerId = this.repositioningMarkerId;
+    if (!markerId) {
       return;
+    }
+
+    const marker = this.temporaryMarkers.find((entry) => entry.id === markerId);
+    if (marker) {
+      this.updateMarkerRoomAssociation(marker);
     }
 
     this.repositioningMarkerId = null;
@@ -4028,6 +4106,13 @@ export class DefineRoom {
           owners[i] = ownerIndex;
         }
       }
+    }
+
+    if (this.temporaryMarkers.length > 0) {
+      this.temporaryMarkers.forEach((marker) => {
+        this.updateMarkerRoomAssociation(marker);
+      });
+      this.updateTemporaryMarkersPanel();
     }
   }
 

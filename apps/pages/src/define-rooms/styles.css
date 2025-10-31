@@ -307,6 +307,37 @@
   opacity: 0.85;
 }
 
+.marker-room-association {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.marker-room-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.marker-room-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.95);
+  text-align: right;
+}
+
+.marker-room-association-empty .marker-room-value {
+  color: rgba(148, 163, 184, 0.7);
+  font-style: italic;
+}
+
 .marker-icon-menu {
   position: absolute;
   top: 0;
