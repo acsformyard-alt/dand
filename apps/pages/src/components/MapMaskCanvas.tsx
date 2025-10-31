@@ -35,6 +35,43 @@ const normaliseMarkers = (markers?: Record<string, Marker> | Marker[]) => {
   return Object.values(markers);
 };
 
+const DEFAULT_MARKER_COLOR = '#facc15';
+
+const toRgba = (color: string, alpha: number): string | null => {
+  const match = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) {
+    return null;
+  }
+  let value = match[1];
+  if (value.length === 3) {
+    value = value
+      .split('')
+      .map((char) => char + char)
+      .join('');
+  }
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const buildMarkerColorPalette = (color: string | undefined, fallback: string) => {
+  const fallbackColor = fallback || DEFAULT_MARKER_COLOR;
+  const baseColor = (color?.trim() || fallbackColor) || DEFAULT_MARKER_COLOR;
+  const computeBackground = (alpha: number) =>
+    toRgba(baseColor, alpha) ??
+    toRgba(fallbackColor, alpha) ??
+    toRgba(DEFAULT_MARKER_COLOR, alpha) ??
+    `rgba(250, 204, 21, ${alpha})`;
+
+  return {
+    text: baseColor,
+    indicator: baseColor,
+    background: computeBackground(0.2),
+    border: computeBackground(0.4),
+  };
+};
+
 const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   imageUrl,
   width,
@@ -181,22 +218,27 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       />
       {resolvedMarkers.map((marker) => {
         const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const fallbackColor = iconDefinition?.defaultColor ?? DEFAULT_MARKER_COLOR;
+        const palette = buildMarkerColorPalette(marker.color, fallbackColor);
         return (
           <button
             key={marker.id}
             onClick={() => onSelectMarker?.(marker.id)}
-            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow transition hover:border-amber-400/80 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
+            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] shadow transition"
             style={{
               left: `${(marker.x ?? 0) * 100}%`,
               top: `${(marker.y ?? 0) * 100}%`,
+              backgroundColor: palette.background,
+              borderColor: palette.border,
+              color: palette.text,
             }}
           >
             <span
               className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: marker.color || iconDefinition?.defaultColor || '#facc15' }}
+              style={{ backgroundColor: palette.indicator }}
             />
             {iconDefinition && (
-              <span className="flex h-4 w-4 items-center justify-center text-amber-800 dark:text-amber-100">
+              <span className="flex h-4 w-4 items-center justify-center">
                 {iconDefinition.icon}
               </span>
             )}

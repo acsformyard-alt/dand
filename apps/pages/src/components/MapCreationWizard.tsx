@@ -363,7 +363,7 @@ const MarkerIconBadge: React.FC<{
     (fallbackLabel?.trim().charAt(0)?.toUpperCase() ?? '') || '?';
   const iconElement = definition
     ? React.cloneElement(definition.icon, {
-        className: iconSizeClassName,
+        className: `${definition.icon.props.className ?? ''} ${iconSizeClassName}`.trim(),
       })
     : (
         <span className="font-semibold uppercase leading-none">{fallbackText}</span>
