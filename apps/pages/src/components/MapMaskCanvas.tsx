@@ -35,6 +35,33 @@ const normaliseMarkers = (markers?: Record<string, Marker> | Marker[]) => {
   return Object.values(markers);
 };
 
+const DEFAULT_MARKER_COLOR = '#facc15';
+
+const normalizeHexColor = (color: string | null | undefined) => {
+  if (!color) {
+    return null;
+  }
+  const value = color.trim().toLowerCase();
+  if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) {
+    return null;
+  }
+  if (value.length === 4) {
+    return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
+  }
+  return value;
+};
+
+const hexToRgba = (hexColor: string, alpha: number) => {
+  const normalized = normalizeHexColor(hexColor);
+  if (!normalized) {
+    return null;
+  }
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
   imageUrl,
   width,
@@ -181,22 +208,31 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       />
       {resolvedMarkers.map((marker) => {
         const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const fallbackColor = normalizeHexColor(iconDefinition?.defaultColor) ?? DEFAULT_MARKER_COLOR;
+        const markerHex = normalizeHexColor(marker.color) ?? fallbackColor;
+        const backgroundColor =
+          hexToRgba(markerHex, 0.18) ?? hexToRgba(fallbackColor, 0.18) ?? 'rgba(250, 204, 21, 0.18)';
+        const borderColor =
+          hexToRgba(markerHex, 0.45) ?? hexToRgba(fallbackColor, 0.45) ?? 'rgba(250, 204, 21, 0.45)';
         return (
           <button
             key={marker.id}
             onClick={() => onSelectMarker?.(marker.id)}
-            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow transition hover:border-amber-400/80 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
+            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] shadow transition hover:shadow-md backdrop-blur-sm"
             style={{
               left: `${(marker.x ?? 0) * 100}%`,
               top: `${(marker.y ?? 0) * 100}%`,
+              backgroundColor,
+              borderColor,
+              color: markerHex,
             }}
           >
             <span
               className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: marker.color || iconDefinition?.defaultColor || '#facc15' }}
+              style={{ backgroundColor: markerHex }}
             />
             {iconDefinition && (
-              <span className="flex h-4 w-4 items-center justify-center text-amber-800 dark:text-amber-100">
+              <span className="flex h-4 w-4 items-center justify-center">
                 {iconDefinition.icon}
               </span>
             )}
