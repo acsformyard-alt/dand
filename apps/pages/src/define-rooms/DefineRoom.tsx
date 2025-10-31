@@ -54,6 +54,7 @@ type TemporaryMarker = {
   visibleAtStart: boolean;
   x: number;
   y: number;
+  linkedRoomId: string | null;
 };
 
 type MarkerDisplayMetrics = {
@@ -1304,6 +1305,19 @@ export class DefineRoom {
     this.markerInstructionLabel.setAttribute("aria-hidden", "false");
   }
 
+  private updateMarkerRoomAssociation(marker: TemporaryMarker, referencePoint?: Point | null): void {
+    const point = referencePoint ?? { x: marker.x, y: marker.y };
+    const room = point ? this.getRoomAtPoint(point) : null;
+    const resolvedRoom = room && this.rooms.find((entry) => entry.id === room.id);
+    marker.linkedRoomId = resolvedRoom ? resolvedRoom.id : null;
+  }
+
+  private refreshMarkerRoomAssociations(): void {
+    this.temporaryMarkers.forEach((marker) => {
+      this.updateMarkerRoomAssociation(marker);
+    });
+  }
+
   private placeTemporaryMarker(type: TemporaryMarkerType, point: Point): void {
     if (this.width === 0 || this.height === 0) {
       return;
@@ -1322,8 +1336,10 @@ export class DefineRoom {
       visibleAtStart: true,
       x: clamp(point.x, 0, this.width - 1),
       y: clamp(point.y, 0, this.height - 1),
+      linkedRoomId: null,
     };
 
+    this.updateMarkerRoomAssociation(marker, point);
     this.temporaryMarkers.push(marker);
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
@@ -1338,6 +1354,7 @@ export class DefineRoom {
       return;
     }
 
+    this.refreshMarkerRoomAssociations();
     this.markersLayer.innerHTML = "";
 
     if (this.width === 0 || this.height === 0) {
@@ -1503,6 +1520,7 @@ export class DefineRoom {
       return;
     }
 
+    this.refreshMarkerRoomAssociations();
     const hasMarkers = this.temporaryMarkers.length > 0;
     this.temporaryMarkersEmptyState.hidden = hasMarkers;
     this.temporaryMarkersEmptyState.setAttribute("aria-hidden", hasMarkers ? "true" : "false");
@@ -1531,6 +1549,12 @@ export class DefineRoom {
     this.temporaryMarkers.forEach((marker) => {
       const isExpanded = this.expandedMarkerId === marker.id;
       const isRepositioning = this.repositioningMarkerId === marker.id;
+      const associatedRoom = marker.linkedRoomId
+        ? this.rooms.find((room) => room.id === marker.linkedRoomId) || null
+        : null;
+      const roomDisplayName = associatedRoom
+        ? associatedRoom.name?.trim() || "Untitled Room"
+        : "Outside defined rooms";
 
       const card = (
         <li
@@ -1551,6 +1575,12 @@ export class DefineRoom {
               <span class="room-field-label">Tags</span>
               <input class="room-tags marker-tags" type="text" value={marker.tags} />
             </label>
+            <div class="room-field marker-room-association">
+              <span class="room-field-label">Room</span>
+              <span class={`marker-room-chip ${associatedRoom ? "" : "is-unassigned"}`}>
+                {roomDisplayName}
+              </span>
+            </div>
             <label class="room-visible marker-visible">
               <input class="marker-visible-checkbox" type="checkbox" checked={marker.visibleAtStart} />
               <span>Visible upon room entry</span>
@@ -1826,6 +1856,7 @@ export class DefineRoom {
 
     marker.x = clamp(point.x, 0, this.width - 1);
     marker.y = clamp(point.y, 0, this.height - 1);
+    this.updateMarkerRoomAssociation(marker);
     const metrics = this.getMarkerDisplayMetrics();
     if (!metrics) {
       return;
@@ -3083,6 +3114,7 @@ export class DefineRoom {
       const nameInput = card.querySelector(".room-name") as HTMLInputElement;
       nameInput.addEventListener("input", (event) => {
         room.name = (event.target as HTMLInputElement).value;
+        this.updateTemporaryMarkersPanel();
       });
       nameInput.addEventListener("focus", () => this.selectRoom(room.id, { focusName: true }));
 
@@ -3132,6 +3164,9 @@ export class DefineRoom {
 
       this.roomsList.appendChild(card);
     });
+
+    this.refreshMarkerRoomAssociations();
+    this.updateTemporaryMarkersPanel();
   }
 
   private setTool(tool: ToolType): void {
