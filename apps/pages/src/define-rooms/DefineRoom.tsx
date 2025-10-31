@@ -1245,6 +1245,9 @@ export class DefineRoom {
     this.markerDragElement = null;
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
+    if (this.interactionMode === "marker-placement") {
+      this.endMarkerPlacement();
+    }
   }
 
   private renderTemporaryMarkers(): void {
@@ -1264,6 +1267,7 @@ export class DefineRoom {
       markerElement.dataset.markerId = marker.id;
       markerElement.title = marker.name;
       markerElement.setAttribute("aria-label", marker.name);
+      markerElement.style.transform = "translate(-50%, -50%)";
 
       if (this.repositioningMarkerId === marker.id) {
         markerElement.classList.add("is-reposition-target");
@@ -1587,6 +1591,7 @@ export class DefineRoom {
 
     this.markerDragPointerId = event.pointerId;
     this.markerDragElement = markerElement;
+    this.updateMarkerPositionFromPointer(event);
   }
 
   private handleMarkerDragPointerMove = (event: PointerEvent): void => {
