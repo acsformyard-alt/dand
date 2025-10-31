@@ -587,6 +587,8 @@ export class DefineRoom {
 
   private markerDragElement: HTMLElement | null = null;
 
+  private markerDragPointerOffset: { x: number; y: number } | null = null;
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     const target = event.target as Node;
 
@@ -1243,6 +1245,7 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
     if (this.interactionMode === "marker-placement") {
@@ -1515,6 +1518,7 @@ export class DefineRoom {
     this.repositioningMarkerId = marker.id;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.selectMarker(marker.id, { forceUpdate: true });
 
     if (this.markerInstructionLabel) {
@@ -1538,6 +1542,7 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
 
     if (this.markersLayer) {
       this.markersLayer.classList.remove("is-repositioning");
@@ -1583,6 +1588,11 @@ export class DefineRoom {
     }
 
     event.preventDefault();
+    const rect = markerElement.getBoundingClientRect();
+    this.markerDragPointerOffset = {
+      x: event.clientX - (rect.left + rect.width / 2),
+      y: event.clientY - (rect.top + rect.height / 2),
+    };
     markerElement.setPointerCapture(event.pointerId);
     markerElement.classList.add("is-dragging");
     markerElement.addEventListener("pointermove", this.handleMarkerDragPointerMove);
@@ -1621,6 +1631,7 @@ export class DefineRoom {
 
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.completeMarkerReposition();
   };
 
@@ -1630,7 +1641,11 @@ export class DefineRoom {
       return;
     }
 
-    const point = this.clientToCanvasPoint(event.clientX, event.clientY);
+    const offset = this.markerDragPointerOffset;
+    const adjustedClientX = offset ? event.clientX - offset.x : event.clientX;
+    const adjustedClientY = offset ? event.clientY - offset.y : event.clientY;
+
+    const point = this.clientToCanvasPoint(adjustedClientX, adjustedClientY);
     if (!point) {
       return;
     }
@@ -2485,6 +2500,7 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.closeMarkerIconMenu();
     this.renderTemporaryMarkers();
     this.updateMarkerInstructions();
