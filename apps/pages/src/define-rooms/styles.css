@@ -1069,11 +1069,51 @@
 }
 
 .temporary-marker-character {
-  background: linear-gradient(135deg, #818cf8, #c084fc);
+  background: linear-gradient(
+    135deg,
+    rgba(129, 140, 248, 0.85),
+    rgba(192, 132, 252, 0.85)
+  );
+}
+
+.temporary-marker-monster {
+  background: linear-gradient(
+    135deg,
+    rgba(248, 113, 113, 0.85),
+    rgba(250, 204, 21, 0.85)
+  );
 }
 
 .temporary-marker-object {
-  background: linear-gradient(135deg, #38bdf8, #34d399);
+  background: linear-gradient(
+    135deg,
+    rgba(56, 189, 248, 0.85),
+    rgba(52, 211, 153, 0.85)
+  );
+}
+
+.temporary-marker-trap {
+  background: linear-gradient(
+    135deg,
+    rgba(248, 113, 113, 0.85),
+    rgba(244, 63, 94, 0.85)
+  );
+}
+
+.temporary-marker-investigation {
+  background: linear-gradient(
+    135deg,
+    rgba(168, 85, 247, 0.85),
+    rgba(59, 130, 246, 0.85)
+  );
+}
+
+.temporary-marker-area {
+  background: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.85),
+    rgba(16, 185, 129, 0.85)
+  );
 }
 
 .temporary-marker-icon {
