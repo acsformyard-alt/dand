@@ -587,6 +587,8 @@ export class DefineRoom {
 
   private markerDragElement: HTMLElement | null = null;
 
+  private markerDragPointerOffset: Point | null = null;
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     const target = event.target as Node;
 
@@ -1243,8 +1245,12 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
+    if (this.interactionMode === "marker-placement") {
+      this.endMarkerPlacement();
+    }
   }
 
   private renderTemporaryMarkers(): void {
@@ -1264,6 +1270,7 @@ export class DefineRoom {
       markerElement.dataset.markerId = marker.id;
       markerElement.title = marker.name;
       markerElement.setAttribute("aria-label", marker.name);
+      markerElement.style.transform = "translate(-50%, -50%)";
 
       if (this.repositioningMarkerId === marker.id) {
         markerElement.classList.add("is-reposition-target");
@@ -1511,6 +1518,7 @@ export class DefineRoom {
     this.repositioningMarkerId = marker.id;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.selectMarker(marker.id, { forceUpdate: true });
 
     if (this.markerInstructionLabel) {
@@ -1534,6 +1542,7 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
 
     if (this.markersLayer) {
       this.markersLayer.classList.remove("is-repositioning");
@@ -1579,6 +1588,13 @@ export class DefineRoom {
     }
 
     event.preventDefault();
+
+    const rect = markerElement.getBoundingClientRect();
+    this.markerDragPointerOffset = {
+      x: rect.left + rect.width / 2 - event.clientX,
+      y: rect.top + rect.height / 2 - event.clientY,
+    };
+
     markerElement.setPointerCapture(event.pointerId);
     markerElement.classList.add("is-dragging");
     markerElement.addEventListener("pointermove", this.handleMarkerDragPointerMove);
@@ -1587,6 +1603,7 @@ export class DefineRoom {
 
     this.markerDragPointerId = event.pointerId;
     this.markerDragElement = markerElement;
+    this.updateMarkerPositionFromPointer(event);
   }
 
   private handleMarkerDragPointerMove = (event: PointerEvent): void => {
@@ -1616,6 +1633,7 @@ export class DefineRoom {
 
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.completeMarkerReposition();
   };
 
@@ -1625,7 +1643,9 @@ export class DefineRoom {
       return;
     }
 
-    const point = this.clientToCanvasPoint(event.clientX, event.clientY);
+    const offsetX = this.markerDragPointerOffset?.x ?? 0;
+    const offsetY = this.markerDragPointerOffset?.y ?? 0;
+    const point = this.clientToCanvasPoint(event.clientX + offsetX, event.clientY + offsetY);
     if (!point) {
       return;
     }
@@ -2480,6 +2500,7 @@ export class DefineRoom {
     this.repositioningMarkerId = null;
     this.markerDragPointerId = null;
     this.markerDragElement = null;
+    this.markerDragPointerOffset = null;
     this.closeMarkerIconMenu();
     this.renderTemporaryMarkers();
     this.updateMarkerInstructions();
