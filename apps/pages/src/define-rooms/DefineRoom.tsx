@@ -780,6 +780,10 @@ export class DefineRoom {
 
   private panHasMoved = false;
 
+  private markerOverlayAnimationFrame: number | null = null;
+
+  private markerOverlayAnimationActive = false;
+
   private pendingSelectionPoint: Point | null = null;
 
   private pendingSelectionPointerId: number | null = null;
@@ -1078,6 +1082,7 @@ export class DefineRoom {
   public close(): void {
     this.root.classList.add("hidden");
     this.stopBrushSliderInteraction();
+    this.stopMarkerOverlayAnimation();
     this.closeColorMenu();
     this.closeMarkerIconMenu();
     if (this.repositioningMarkerId) {
@@ -1108,6 +1113,11 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     this.cancelOverlayFrame();
+    this.stopMarkerOverlayAnimation();
+    this.overlayCanvas.removeEventListener("transitionstart", this.handleCanvasTransitionRun);
+    this.overlayCanvas.removeEventListener("transitionrun", this.handleCanvasTransitionRun);
+    this.overlayCanvas.removeEventListener("transitionend", this.handleCanvasTransitionEnd);
+    this.overlayCanvas.removeEventListener("transitioncancel", this.handleCanvasTransitionEnd);
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
     window.removeEventListener("resize", this.handleWindowResize);
     this.root.remove();
@@ -1434,6 +1444,51 @@ export class DefineRoom {
       }
     });
   }
+
+  private startMarkerOverlayAnimation(): void {
+    if (this.markerOverlayAnimationActive) {
+      return;
+    }
+
+    this.markerOverlayAnimationActive = true;
+
+    const step = () => {
+      if (!this.markerOverlayAnimationActive) {
+        return;
+      }
+      this.updateMarkerOverlayPositions();
+      this.markerOverlayAnimationFrame = window.requestAnimationFrame(step);
+    };
+
+    this.updateMarkerOverlayPositions();
+    this.markerOverlayAnimationFrame = window.requestAnimationFrame(step);
+  }
+
+  private stopMarkerOverlayAnimation(): void {
+    if (this.markerOverlayAnimationActive) {
+      this.markerOverlayAnimationActive = false;
+      if (this.markerOverlayAnimationFrame !== null) {
+        window.cancelAnimationFrame(this.markerOverlayAnimationFrame);
+        this.markerOverlayAnimationFrame = null;
+      }
+    }
+
+    this.updateMarkerOverlayPositions();
+  }
+
+  private handleCanvasTransitionRun = (event: TransitionEvent): void => {
+    if (event.propertyName !== "transform") {
+      return;
+    }
+    this.startMarkerOverlayAnimation();
+  };
+
+  private handleCanvasTransitionEnd = (event: TransitionEvent): void => {
+    if (event.propertyName !== "transform") {
+      return;
+    }
+    this.stopMarkerOverlayAnimation();
+  };
 
   private selectMarker(
     markerId: string | null,
@@ -2041,6 +2096,10 @@ export class DefineRoom {
     this.overlayCanvas.addEventListener("pointerup", (event) => this.handlePointerUp(event));
     this.overlayCanvas.addEventListener("pointerleave", (event) => this.handlePointerUp(event));
     this.overlayCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.overlayCanvas.addEventListener("transitionstart", this.handleCanvasTransitionRun);
+    this.overlayCanvas.addEventListener("transitionrun", this.handleCanvasTransitionRun);
+    this.overlayCanvas.addEventListener("transitionend", this.handleCanvasTransitionEnd);
+    this.overlayCanvas.addEventListener("transitioncancel", this.handleCanvasTransitionEnd);
     this.overlayCanvas.style.touchAction = "none";
 
     window.addEventListener("resize", this.handleWindowResize);
@@ -3555,7 +3614,11 @@ export class DefineRoom {
       this.markersLayer.style.transformOrigin = "";
       this.markersLayer.style.transform = "none";
     }
-    this.updateMarkerOverlayPositions();
+    if (withTransition) {
+      this.startMarkerOverlayAnimation();
+    } else {
+      this.stopMarkerOverlayAnimation();
+    }
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
