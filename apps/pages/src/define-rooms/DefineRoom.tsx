@@ -1245,6 +1245,7 @@ export class DefineRoom {
     this.markerDragElement = null;
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
+    this.endMarkerPlacement();
   }
 
   private renderTemporaryMarkers(): void {
@@ -1587,6 +1588,8 @@ export class DefineRoom {
 
     this.markerDragPointerId = event.pointerId;
     this.markerDragElement = markerElement;
+
+    this.updateMarkerPositionFromPointer(event);
   }
 
   private handleMarkerDragPointerMove = (event: PointerEvent): void => {
