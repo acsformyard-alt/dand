@@ -61,7 +61,6 @@ type MarkerDisplayMetrics = {
   offsetY: number;
   width: number;
   height: number;
-  scale: number;
 };
 
 type DirtyRect = { minX: number; minY: number; maxX: number; maxY: number };
@@ -371,8 +370,7 @@ const TRAP_MARKER_ICON = `
 
 const INVESTIGATION_MARKER_ICON = `
   <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M10.035,18.069a7.981,7.981,0,0,0,3.938-1.035l3.332,3.332a2.164,2.164,0,0,0,3.061-3.061l-3.332-3.332A8.032,8.032,0,0,0,4.354,4.354a8.034,8.034,0,0,0,5.681,13.715Z" />
-    <path d="M5.768,5.768A6.033,6.033,0,1,1,4,10.035,5.989,5.989,0,0,1,5.768,5.768Z" />
+    <path d="M12 2C6.486 2 2 6.263 2 12s4.486 10 10 10 10-4.263 10-10S17.514 2 12 2Zm.002 15.75a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm2.146-7.676c-.523.541-.812.892-.812 1.926v.25h-2.666v-.388c0-1.736.561-2.536 1.19-3.15.58-.566 1.232-.946 1.232-1.625 0-.696-.582-1.233-1.455-1.233-.905 0-1.61.455-2.116 1.305l-2.174-1.407C8.32 4.416 9.969 3.25 12.161 3.25c2.321 0 4.117 1.402 4.117 3.623 0 1.607-.766 2.332-2.13 4.2Z" />
   </svg>
 `;
 
@@ -594,6 +592,8 @@ export class DefineRoom {
   private roomsToolGroup!: HTMLElement;
 
   private markersLayer!: HTMLElement;
+  private markerOverlayAnimationFrame: number | null = null;
+  private markerOverlayAnimationUntil = 0;
 
   private markerInstructionLabel!: HTMLElement;
 
@@ -765,6 +765,7 @@ export class DefineRoom {
   private readonly magnifyScales: number[] = [1, 2, 3];
 
   private readonly magnifyTransition = "transform 250ms ease";
+  private readonly magnifyTransitionDurationMs = 250;
 
   private magnifyOrigin = "50% 50%";
 
@@ -1110,6 +1111,7 @@ export class DefineRoom {
     this.cancelOverlayFrame();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
     window.removeEventListener("resize", this.handleWindowResize);
+    this.cancelMarkerOverlayAnimation();
     this.root.remove();
   }
 
@@ -1385,15 +1387,11 @@ export class DefineRoom {
       return null;
     }
 
-    const currentScale = this.magnifyScales[this.magnifyIndex];
-    const scale = Number.isFinite(currentScale) && currentScale && currentScale > 0 ? currentScale : 1;
-
     return {
       offsetX: imageRect.left - wrapperRect.left,
       offsetY: imageRect.top - wrapperRect.top,
       width: imageRect.width,
       height: imageRect.height,
-      scale,
     };
   }
 
@@ -1412,7 +1410,7 @@ export class DefineRoom {
     markerElement.style.left = `${left}px`;
     markerElement.style.top = `${top}px`;
     markerElement.style.transformOrigin = "50% 50%";
-    markerElement.style.transform = `translate(-50%, -50%) scale(${metrics.scale})`;
+    markerElement.style.transform = "translate(-50%, -50%)";
   }
 
   private updateMarkerOverlayPositions(): void {
@@ -1433,6 +1431,48 @@ export class DefineRoom {
         this.positionMarkerElement(markerElement, marker, metrics);
       }
     });
+  }
+
+  private cancelMarkerOverlayAnimation(): void {
+    if (this.markerOverlayAnimationFrame !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(this.markerOverlayAnimationFrame);
+      this.markerOverlayAnimationFrame = null;
+    }
+  }
+
+  private scheduleMarkerOverlayUpdate(withTransition: boolean): void {
+    this.updateMarkerOverlayPositions();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!withTransition) {
+      this.cancelMarkerOverlayAnimation();
+      return;
+    }
+
+    const now = typeof window.performance !== "undefined" ? window.performance.now() : Date.now();
+    const buffer = 32;
+    this.markerOverlayAnimationUntil = now + this.magnifyTransitionDurationMs + buffer;
+
+    const tick = () => {
+      this.updateMarkerOverlayPositions();
+
+      const current = typeof window.performance !== "undefined" ? window.performance.now() : Date.now();
+      if (current < this.markerOverlayAnimationUntil) {
+        this.markerOverlayAnimationFrame = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      this.markerOverlayAnimationFrame = null;
+    };
+
+    if (this.markerOverlayAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.markerOverlayAnimationFrame);
+    }
+
+    this.markerOverlayAnimationFrame = window.requestAnimationFrame(tick);
   }
 
   private selectMarker(
@@ -3555,7 +3595,7 @@ export class DefineRoom {
       this.markersLayer.style.transformOrigin = "";
       this.markersLayer.style.transform = "none";
     }
-    this.updateMarkerOverlayPositions();
+    this.scheduleMarkerOverlayUpdate(withTransition);
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
