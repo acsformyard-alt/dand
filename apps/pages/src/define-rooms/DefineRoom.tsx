@@ -61,7 +61,6 @@ type MarkerDisplayMetrics = {
   offsetY: number;
   width: number;
   height: number;
-  scale: number;
 };
 
 type DirtyRect = { minX: number; minY: number; maxX: number; maxY: number };
@@ -1389,15 +1388,11 @@ export class DefineRoom {
       return null;
     }
 
-    const currentScale = this.magnifyScales[this.magnifyIndex];
-    const scale = Number.isFinite(currentScale) && currentScale && currentScale > 0 ? currentScale : 1;
-
     return {
       offsetX: imageRect.left - wrapperRect.left,
       offsetY: imageRect.top - wrapperRect.top,
       width: imageRect.width,
       height: imageRect.height,
-      scale,
     };
   }
 
@@ -1416,7 +1411,7 @@ export class DefineRoom {
     markerElement.style.left = `${left}px`;
     markerElement.style.top = `${top}px`;
     markerElement.style.transformOrigin = "50% 50%";
-    markerElement.style.transform = `translate(-50%, -50%) scale(${metrics.scale})`;
+    markerElement.style.transform = "translate(-50%, -50%)";
   }
 
   private updateMarkerOverlayPositions(): void {
