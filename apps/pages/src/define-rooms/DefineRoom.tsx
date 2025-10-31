@@ -1275,11 +1275,7 @@ export class DefineRoom {
       icon.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
       markerElement.appendChild(icon);
 
-      const percentX = clamp((marker.x / this.width) * 100, 0, 100);
-      const percentY = clamp((marker.y / this.height) * 100, 0, 100);
-
-      markerElement.style.left = `${percentX}%`;
-      markerElement.style.top = `${percentY}%`;
+      this.applyMarkerElementPosition(markerElement, marker);
 
       markerElement.addEventListener("pointerdown", (event) => {
         this.handleMarkerPointerDown(event, marker.id);
@@ -1641,16 +1637,25 @@ export class DefineRoom {
     marker.x = clamp(point.x, 0, this.width - 1);
     marker.y = clamp(point.y, 0, this.height - 1);
 
-    const percentX = clamp((marker.x / this.width) * 100, 0, 100);
-    const percentY = clamp((marker.y / this.height) * 100, 0, 100);
-
     const markerElement = this.markersLayer?.querySelector(
       `[data-marker-id="${marker.id}"]`,
     ) as HTMLElement | null;
     if (markerElement) {
-      markerElement.style.left = `${percentX}%`;
-      markerElement.style.top = `${percentY}%`;
+      this.applyMarkerElementPosition(markerElement, marker);
     }
+  }
+
+  private applyMarkerElementPosition(markerElement: HTMLElement, marker: TemporaryMarker): void {
+    if (this.width === 0 || this.height === 0) {
+      return;
+    }
+
+    const percentX = clamp((marker.x / this.width) * 100, 0, 100);
+    const percentY = clamp((marker.y / this.height) * 100, 0, 100);
+
+    markerElement.style.left = `${percentX}%`;
+    markerElement.style.top = `${percentY}%`;
+    markerElement.style.transform = "translate(-50%, -50%)";
   }
 
   private initializeDomReferences(): void {
