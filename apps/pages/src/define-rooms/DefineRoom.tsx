@@ -594,6 +594,8 @@ export class DefineRoom {
   private roomsToolGroup!: HTMLElement;
 
   private markersLayer!: HTMLElement;
+  private markerOverlayAnimationFrame: number | null = null;
+  private markerOverlayAnimationUntil = 0;
 
   private markerInstructionLabel!: HTMLElement;
 
@@ -765,6 +767,7 @@ export class DefineRoom {
   private readonly magnifyScales: number[] = [1, 2, 3];
 
   private readonly magnifyTransition = "transform 250ms ease";
+  private readonly magnifyTransitionDurationMs = 250;
 
   private magnifyOrigin = "50% 50%";
 
@@ -1110,6 +1113,7 @@ export class DefineRoom {
     this.cancelOverlayFrame();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
     window.removeEventListener("resize", this.handleWindowResize);
+    this.cancelMarkerOverlayAnimation();
     this.root.remove();
   }
 
@@ -1433,6 +1437,48 @@ export class DefineRoom {
         this.positionMarkerElement(markerElement, marker, metrics);
       }
     });
+  }
+
+  private cancelMarkerOverlayAnimation(): void {
+    if (this.markerOverlayAnimationFrame !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(this.markerOverlayAnimationFrame);
+      this.markerOverlayAnimationFrame = null;
+    }
+  }
+
+  private scheduleMarkerOverlayUpdate(withTransition: boolean): void {
+    this.updateMarkerOverlayPositions();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!withTransition) {
+      this.cancelMarkerOverlayAnimation();
+      return;
+    }
+
+    const now = typeof window.performance !== "undefined" ? window.performance.now() : Date.now();
+    const buffer = 32;
+    this.markerOverlayAnimationUntil = now + this.magnifyTransitionDurationMs + buffer;
+
+    const tick = () => {
+      this.updateMarkerOverlayPositions();
+
+      const current = typeof window.performance !== "undefined" ? window.performance.now() : Date.now();
+      if (current < this.markerOverlayAnimationUntil) {
+        this.markerOverlayAnimationFrame = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      this.markerOverlayAnimationFrame = null;
+    };
+
+    if (this.markerOverlayAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.markerOverlayAnimationFrame);
+    }
+
+    this.markerOverlayAnimationFrame = window.requestAnimationFrame(tick);
   }
 
   private selectMarker(
@@ -3555,7 +3601,7 @@ export class DefineRoom {
       this.markersLayer.style.transformOrigin = "";
       this.markersLayer.style.transform = "none";
     }
-    this.updateMarkerOverlayPositions();
+    this.scheduleMarkerOverlayUpdate(withTransition);
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
