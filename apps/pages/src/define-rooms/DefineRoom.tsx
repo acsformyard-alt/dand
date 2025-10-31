@@ -1245,6 +1245,7 @@ export class DefineRoom {
     this.markerDragElement = null;
     this.renderTemporaryMarkers();
     this.selectMarker(marker.id, { focusName: true });
+    this.endMarkerPlacement();
   }
 
   private renderTemporaryMarkers(): void {
@@ -1279,6 +1280,7 @@ export class DefineRoom {
 
       markerElement.style.left = `${percentX}%`;
       markerElement.style.top = `${percentY}%`;
+      markerElement.style.transform = "translate(-50%, -50%)";
 
       markerElement.addEventListener("pointerdown", (event) => {
         this.handleMarkerPointerDown(event, marker.id);
@@ -1587,6 +1589,8 @@ export class DefineRoom {
 
     this.markerDragPointerId = event.pointerId;
     this.markerDragElement = markerElement;
+
+    this.updateMarkerPositionFromPointer(event);
   }
 
   private handleMarkerDragPointerMove = (event: PointerEvent): void => {
@@ -1647,6 +1651,7 @@ export class DefineRoom {
     if (markerElement) {
       markerElement.style.left = `${percentX}%`;
       markerElement.style.top = `${percentY}%`;
+      markerElement.style.transform = "translate(-50%, -50%)";
     }
   }
 
