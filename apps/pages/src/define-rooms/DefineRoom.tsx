@@ -50,6 +50,14 @@ type TemporaryMarker = {
   y: number;
 };
 
+type MarkerDisplayMetrics = {
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  scale: number;
+};
+
 type DirtyRect = { minX: number; minY: number; maxX: number; maxY: number };
 
 type MaskHistoryEntry = {
@@ -1029,6 +1037,7 @@ export class DefineRoom {
     this.close();
     this.cancelOverlayFrame();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
+    window.removeEventListener("resize", this.handleWindowResize);
     this.root.remove();
   }
 
@@ -1259,6 +1268,8 @@ export class DefineRoom {
       return;
     }
 
+    const fragment = document.createDocumentFragment();
+
     this.temporaryMarkers.forEach((marker) => {
       const markerElement = document.createElement("div");
       markerElement.className = `temporary-marker temporary-marker-${marker.type}`;
@@ -1275,21 +1286,79 @@ export class DefineRoom {
       icon.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
       markerElement.appendChild(icon);
 
-      const percentX = clamp((marker.x / this.width) * 100, 0, 100);
-      const percentY = clamp((marker.y / this.height) * 100, 0, 100);
-
-      markerElement.style.left = `${percentX}%`;
-      markerElement.style.top = `${percentY}%`;
-      markerElement.style.transform = "translate(-50%, -50%)";
-
       markerElement.addEventListener("pointerdown", (event) => {
         this.handleMarkerPointerDown(event, marker.id);
       });
 
-      this.markersLayer.appendChild(markerElement);
+      fragment.appendChild(markerElement);
     });
 
+    this.markersLayer.appendChild(fragment);
+
+    this.updateMarkerOverlayPositions();
     this.updateMarkerElementsRepositionState();
+  }
+
+  private getMarkerDisplayMetrics(): MarkerDisplayMetrics | null {
+    if (!this.canvasWrapper) {
+      return null;
+    }
+
+    const imageRect = this.imageCanvas.getBoundingClientRect();
+    const wrapperRect = this.canvasWrapper.getBoundingClientRect();
+
+    if (imageRect.width === 0 || imageRect.height === 0) {
+      return null;
+    }
+
+    const currentScale = this.magnifyScales[this.magnifyIndex];
+    const scale = Number.isFinite(currentScale) && currentScale && currentScale > 0 ? currentScale : 1;
+
+    return {
+      offsetX: imageRect.left - wrapperRect.left,
+      offsetY: imageRect.top - wrapperRect.top,
+      width: imageRect.width,
+      height: imageRect.height,
+      scale,
+    };
+  }
+
+  private positionMarkerElement(
+    markerElement: HTMLElement,
+    marker: TemporaryMarker,
+    metrics: MarkerDisplayMetrics,
+  ): void {
+    const widthDenominator = Math.max(1, this.width - 1);
+    const heightDenominator = Math.max(1, this.height - 1);
+    const normalizedX = clamp(marker.x / widthDenominator, 0, 1);
+    const normalizedY = clamp(marker.y / heightDenominator, 0, 1);
+    const left = metrics.offsetX + normalizedX * metrics.width;
+    const top = metrics.offsetY + normalizedY * metrics.height;
+
+    markerElement.style.left = `${left}px`;
+    markerElement.style.top = `${top}px`;
+    markerElement.style.transformOrigin = "50% 50%";
+    markerElement.style.transform = `translate(-50%, -50%) scale(${metrics.scale})`;
+  }
+
+  private updateMarkerOverlayPositions(): void {
+    if (!this.markersLayer || this.temporaryMarkers.length === 0) {
+      return;
+    }
+
+    const metrics = this.getMarkerDisplayMetrics();
+    if (!metrics) {
+      return;
+    }
+
+    this.temporaryMarkers.forEach((marker) => {
+      const markerElement = this.markersLayer.querySelector(
+        `[data-marker-id="${marker.id}"]`,
+      ) as HTMLElement | null;
+      if (markerElement) {
+        this.positionMarkerElement(markerElement, marker, metrics);
+      }
+    });
   }
 
   private selectMarker(
@@ -1641,17 +1710,16 @@ export class DefineRoom {
 
     marker.x = clamp(point.x, 0, this.width - 1);
     marker.y = clamp(point.y, 0, this.height - 1);
-
-    const percentX = clamp((marker.x / this.width) * 100, 0, 100);
-    const percentY = clamp((marker.y / this.height) * 100, 0, 100);
+    const metrics = this.getMarkerDisplayMetrics();
+    if (!metrics) {
+      return;
+    }
 
     const markerElement = this.markersLayer?.querySelector(
       `[data-marker-id="${marker.id}"]`,
     ) as HTMLElement | null;
     if (markerElement) {
-      markerElement.style.left = `${percentX}%`;
-      markerElement.style.top = `${percentY}%`;
-      markerElement.style.transform = "translate(-50%, -50%)";
+      this.positionMarkerElement(markerElement, marker, metrics);
     }
   }
 
@@ -1911,8 +1979,14 @@ export class DefineRoom {
     this.overlayCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
     this.overlayCanvas.style.touchAction = "none";
 
+    window.addEventListener("resize", this.handleWindowResize);
+
     this.attachBrushSliderEvents();
   }
+
+  private handleWindowResize = (): void => {
+    this.updateMarkerOverlayPositions();
+  };
 
   private initializeColorMenu(): void {
     if (!this.colorMenu) {
@@ -3413,10 +3487,11 @@ export class DefineRoom {
       canvas.style.transform = transformValue;
     });
     if (this.markersLayer) {
-      this.markersLayer.style.transition = withTransition ? this.magnifyTransition : "none";
-      this.markersLayer.style.transformOrigin = origin;
-      this.markersLayer.style.transform = transformValue;
+      this.markersLayer.style.transition = "none";
+      this.markersLayer.style.transformOrigin = "";
+      this.markersLayer.style.transform = "none";
     }
+    this.updateMarkerOverlayPositions();
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
