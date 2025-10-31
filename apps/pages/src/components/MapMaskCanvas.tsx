@@ -239,8 +239,8 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       {resolvedMarkers.map((marker) => {
         const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
         const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
-        const backgroundColor = rgbaFromNormalizedHex(baseColor, 0.82);
-        const borderColor = rgbaFromNormalizedHex(baseColor, 0.9);
+        const backgroundColor = rgbaFromNormalizedHex(baseColor, 0.55);
+        const borderColor = rgbaFromNormalizedHex(baseColor, 0.7);
         const textColor = getReadableTextColor(baseColor);
         return (
           <button
