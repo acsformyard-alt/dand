@@ -37,7 +37,13 @@ type DefineRoomMode = "overlay" | "embedded";
 
 type DefineRoomInteractionMode = "editing" | "marker-placement";
 
-type TemporaryMarkerType = "character" | "object";
+type TemporaryMarkerType =
+  | "character"
+  | "monster"
+  | "object"
+  | "trap"
+  | "investigation"
+  | "area";
 
 type TemporaryMarker = {
   id: string;
@@ -333,47 +339,75 @@ const CANCEL_ROOM_ICON = `
 `;
 
 const CHARACTER_MARKER_ICON = `
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle
-      cx="12"
-      cy="8"
-      r="3.5"
-      stroke="currentColor"
-      stroke-width="1.6"
-    />
-    <path
-      d="M5 19c.7-3.2 3.4-5.5 7-5.5s6.3 2.3 7 5.5"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
+  <svg viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M458.159,404.216c-18.93-33.65-49.934-71.764-100.409-93.431c-28.868,20.196-63.938,32.087-101.745,32.087   c-37.828,0-72.898-11.89-101.767-32.087c-50.474,21.667-81.479,59.782-100.398,93.431C28.731,448.848,48.417,512,91.842,512   c43.426,0,164.164,0,164.164,0s120.726,0,164.153,0C463.583,512,483.269,448.848,458.159,404.216z" />
+    <path d="M256.005,300.641c74.144,0,134.231-60.108,134.231-134.242v-32.158C390.236,60.108,330.149,0,256.005,0   c-74.155,0-134.252,60.108-134.252,134.242V166.4C121.753,240.533,181.851,300.641,256.005,300.641z" />
+  </svg>
+`;
+
+const MONSTER_MARKER_ICON = `
+  <svg viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M196.36 25.44c-45.063 17.44-69.198 37.01-86.17 86.17v70.624h-.126v9.346c0 57.256-.92 108.17-16.478 163.72l-1.324 4.73 103.545 124.32H202.045l1.715-.71c36.42-15.074 71.277-16.862 107.068-.167l6.62 3.088 102.29-126.445-1.078-4.48c-13.006-54.042-13.137-108.684-13.76-164.16l-.105-9.24h-.018V111.61c-14.466-42.988-43.59-70.49-86.172-86.17-41.74 20.564-81.495 18.426-122.244 0zm-55.145 101.794h45.23l47.284 55h-92.515v-55zm187.3 0h45.23v55h-92.513l47.284-55zM162.378 233.857h.066l34.817 85.883 33.115-81.68 26.914 66.383 27.106-66.857 33.307 82.154 34.47-85.02 16.704 41.206 17.057-42.07h.904c.896 40.145 3.36 80.682 12.676 121.546l-9.707 11.998-31.08-35.582-4.213 79.21-14.725 18.202-37.856-50.257-9.887 78.363c-4.457-1.096-8.92-1.957-13.38-2.596l-21.378-52.726-21.585 53.242c-4.616.744-9.223 1.7-13.816 2.86l-9.443-78.403h-.002l-37.377 49.238.793 2.25-17.92-21.516-4.14-77.866-31.08 35.578-9.92-11.91c11.155-41.838 14.49-81.232 15.47-121.607l17.05 42.046 17.057-42.07z" />
   </svg>
 `;
 
 const OBJECT_MARKER_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
-      d="M4 8l8-4 8 4v8l-8 4-8-4V8z"
+      d="M2.33496 10.3368C2.02171 10.0471 2.19187 9.52339 2.61557 9.47316L8.61914 8.76107C8.79182 8.74059 8.94181 8.63215 9.01465 8.47425L11.5469 2.98446C11.7256 2.59703 12.2764 2.59695 12.4551 2.98439L14.9873 8.47413C15.0601 8.63204 15.2092 8.74077 15.3818 8.76124L21.3857 9.47316C21.8094 9.52339 21.9791 10.0472 21.6659 10.3369L17.2278 14.4419C17.1001 14.56 17.0433 14.7357 17.0771 14.9063L18.255 20.8359C18.3382 21.2544 17.8928 21.5787 17.5205 21.3703L12.2451 18.4166C12.0934 18.3317 11.9091 18.3321 11.7573 18.417L6.48144 21.3695C6.10913 21.5779 5.66294 21.2544 5.74609 20.8359L6.92414 14.9066C6.95803 14.7361 6.90134 14.5599 6.77367 14.4419L2.33496 10.3368Z"
       stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linejoin="round"
-    />
-    <path
-      d="M12 4v16"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-    />
-    <path
-      d="M4 12l8 4 8-4"
-      stroke="currentColor"
-      stroke-width="1.6"
+      stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
     />
   </svg>
 `;
+
+const TRAP_MARKER_ICON = `
+  <svg viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60.406 156.688L24 259.75 203.938 324c-.238-8.905 1.562-18.017 5.625-26.594 7.02-14.822 19.54-25.345 33.906-30.187l-24.44-53.908-19.124 54.125-33-72.718-19.094 54.093-33-72.72-19.968 56.532-34.438-75.938zm399.781 0l-34.468 75.937-19.97-56.53-33 72.718-19.094-54.094-33 72.718-19.125-54.125-31.936 70.468c-2.292-.53-4.602-.85-6.906-.936-.462-.018-.915-.03-1.375-.03-14.28-.007-28.097 8.283-34.875 22.592-9.33 19.695-1.36 42.64 17.5 51.656 18.86 9.017 41.483.758 50.812-18.937 1.127-2.38 1.99-4.805 2.625-7.25l199.22-71.125-36.408-103.063zM199.78 178.03v18.69h120.595v-18.69H199.78zm50.126 35.345v52.906h18.688v-52.905h-18.688zm10.25 90.563c9.678 0 17.53 7.824 17.53 17.5.002 9.675-7.854 17.53-17.53 17.53-9.676 0-17.53-7.853-17.53-17.53 0-9.678 7.852-17.5 17.53-17.5zM99.53 336.967c-50.15 13.628-82.56 33.83-82.56 56.22 0 41.017 106.544 74.343 237.718 74.343 131.173 0 237.687-33.327 237.687-74.342 0-22.313-32.124-42.595-81.97-56.22 17.232 8.878 27.533 19.275 27.533 30.47 0 32.127-82.313 58.53-183.25 58.53-100.938 0-182.657-26.403-182.657-58.53 0-11.257 10.095-21.56 27.5-30.47z" />
+  </svg>
+`;
+
+const INVESTIGATION_MARKER_ICON = `
+  <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10.035,18.069a7.981,7.981,0,0,0,3.938-1.035l3.332,3.332a2.164,2.164,0,0,0,3.061-3.061l-3.332-3.332A8.032,8.032,0,0,0,4.354,4.354a8.034,8.034,0,0,0,5.681,13.715Z" />
+    <path d="M5.768,5.768A6.033,6.033,0,1,1,4,10.035,5.989,5.989,0,0,1,5.768,5.768Z" />
+  </svg>
+`;
+
+const AREA_MARKER_ICON = `
+  <svg viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M165.797,288.71c-16.89,0-23.974-15.545-26.301-20.652c-1.919-4.214-4.4-6.728-6.637-6.728   c-1.343,0-2.797,0.826-3.621,2.059c-10.602,15.854-29.265,25.322-49.922,25.322c-34.197,0-62.021-27.887-62.021-62.166   c0-21.166,8.271-38.889,22.124-47.404c3.865-2.381,5.826-4.702,5.826-6.9c0-2.814-3.012-4.884-5.989-5.476   C15.409,162.026,0,144.645,0,122.485c0-24.713,20.065-44.82,44.729-44.82c11.259,0,22.653,4.772,30.479,12.766   c3.585,3.661,7.638,5.365,12.756,5.365c8.769,0,16.306-6.502,16.459-14.196c0.047-2.183-0.073-9.916-0.124-12.712   c-0.001-0.063-0.002-0.124-0.002-0.185c0-33.875,27.013-60.413,61.499-60.413c34.199,0,62.024,27.887,62.024,62.166   c0,14.94-7.221,31.259-12.493,43.174l-0.237,0.537c-3.781,8.552-3.697,16.272,0.246,22.327c4.468,6.86,13.725,11.124,24.159,11.124   c1.115,0,2.254-0.048,3.384-0.143c2.557-0.215,7.247-0.388,9.649-0.428c0.243-0.004,0.471-0.006,0.7-0.006   c24.135,0,43.77,20.104,43.77,44.818c0,24.714-20.065,44.82-44.729,44.82c-12.84,0-22.554-6.859-30.36-12.371   c-0.97-0.685-1.936-1.366-2.905-2.034c-4.171-2.877-7.974-4.159-12.333-4.159c-4.903,0-9.571,2.035-13.147,5.728   c-3.759,3.884-5.732,9.02-5.557,14.46c0.102,3.117,0.82,5.201,1.91,8.355c1.066,3.087,2.392,6.927,3.264,12.284   c1.13,6.959-0.928,13.939-5.793,19.656C181.964,284.93,173.906,288.71,165.797,288.71z M132.859,241.057   c10.559,0,19.702,6.778,25.084,18.596c4.004,8.785,6.701,8.785,7.854,8.785c2.142,0,4.599-1.195,6.113-2.975   c0.55-0.647,1.44-1.931,1.222-3.269c-0.591-3.637-1.477-6.201-2.414-8.916c-1.317-3.814-2.812-8.137-3.012-14.318   c-0.355-10.979,3.642-21.355,11.255-29.217c7.319-7.563,17.421-11.899,27.712-11.899c8.487,0,16.285,2.532,23.837,7.739   c1.029,0.709,2.061,1.436,3.094,2.166c6.58,4.646,12.264,8.658,18.668,8.658c13.484,0,24.456-11.011,24.456-24.547   c0-13.534-10.541-24.547-23.498-24.547l-0.364,0.004c-2.324,0.04-6.461,0.206-8.29,0.359c-1.692,0.142-3.401,0.213-5.079,0.213   c-17.474,0-32.855-7.6-41.145-20.331c-7.756-11.908-8.395-26.679-1.8-41.591l0.237-0.541c4.543-10.262,10.761-24.316,10.761-34.971   c0-23.1-18.73-41.893-41.752-41.893c-23.473,0-41.181,17.214-41.227,40.053c0.025,1.451,0.185,10.525,0.121,13.406   c-0.373,18.766-16.85,34.047-36.727,34.047c-10.633,0-19.798-3.854-27.24-11.454c-3.972-4.057-10.25-6.677-15.995-6.677   c-13.485,0-24.457,11.012-24.457,24.547c0,12.422,8.573,21.542,22.935,24.395c13.139,2.611,22.313,13.039,22.313,25.359   c0,6.678-2.686,16.292-15.477,24.166c-9.2,5.656-12.476,19.276-12.476,30.139c0,23.1,18.729,41.894,41.749,41.894   c13.875,0,26.239-6.103,33.074-16.325C116.959,245.29,124.8,241.057,132.859,241.057z" />
+  </svg>
+`;
+
+const MARKER_TYPES: TemporaryMarkerType[] = [
+  "character",
+  "monster",
+  "object",
+  "trap",
+  "investigation",
+  "area",
+];
+
+const MARKER_TYPE_ICONS: Record<TemporaryMarkerType, string> = {
+  character: CHARACTER_MARKER_ICON,
+  monster: MONSTER_MARKER_ICON,
+  object: OBJECT_MARKER_ICON,
+  trap: TRAP_MARKER_ICON,
+  investigation: INVESTIGATION_MARKER_ICON,
+  area: AREA_MARKER_ICON,
+};
+
+const MARKER_TYPE_CONFIG: Record<TemporaryMarkerType, { toolbarLabel: string; defaultName: string; instruction: string }> = {
+  character: { toolbarLabel: "Character Markers", defaultName: "Character Marker", instruction: "character" },
+  monster: { toolbarLabel: "Monster Markers", defaultName: "Monster Marker", instruction: "monster" },
+  object: { toolbarLabel: "Object Markers", defaultName: "Object Marker", instruction: "object" },
+  trap: { toolbarLabel: "Trap Markers", defaultName: "Trap Marker", instruction: "trap" },
+  investigation: { toolbarLabel: "Investigation Markers", defaultName: "Investigation Marker", instruction: "investigation" },
+  area: { toolbarLabel: "Area Markers", defaultName: "Area Marker", instruction: "area" },
+};
 
 const TOOL_ORDER: ToolType[] = ["move", "magnify", "brush", "eraser", "lasso", "magnetic", "wand"];
 
@@ -563,9 +597,7 @@ export class DefineRoom {
 
   private markerInstructionLabel!: HTMLElement;
 
-  private characterMarkersButton!: HTMLButtonElement;
-
-  private objectMarkersButton!: HTMLButtonElement;
+  private markerTypeButtons: Partial<Record<TemporaryMarkerType, HTMLButtonElement>> = {};
 
   private temporaryMarkersPanel!: HTMLElement;
 
@@ -868,7 +900,7 @@ export class DefineRoom {
                         type="button"
                         aria-label="Character Markers"
                         title="Character Markers"
-                        ref={(node: HTMLButtonElement | null) => node && (this.characterMarkersButton = node)}
+                        data-marker-type="character"
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
                         <span class="toolbar-button-label" aria-hidden="true">Character Markers</span>
@@ -876,12 +908,52 @@ export class DefineRoom {
                       <button
                         class="toolbar-button toolbar-temporary"
                         type="button"
+                        aria-label="Monster Markers"
+                        title="Monster Markers"
+                        data-marker-type="monster"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Monster Markers</span>
+                      </button>
+                      <button
+                        class="toolbar-button toolbar-temporary"
+                        type="button"
                         aria-label="Object Markers"
                         title="Object Markers"
-                        ref={(node: HTMLButtonElement | null) => node && (this.objectMarkersButton = node)}
+                        data-marker-type="object"
                       >
                         <span class="toolbar-button-icon" aria-hidden="true"></span>
                         <span class="toolbar-button-label" aria-hidden="true">Object Markers</span>
+                      </button>
+                      <button
+                        class="toolbar-button toolbar-temporary"
+                        type="button"
+                        aria-label="Trap Markers"
+                        title="Trap Markers"
+                        data-marker-type="trap"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Trap Markers</span>
+                      </button>
+                      <button
+                        class="toolbar-button toolbar-temporary"
+                        type="button"
+                        aria-label="Investigation Markers"
+                        title="Investigation Markers"
+                        data-marker-type="investigation"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Investigation Markers</span>
+                      </button>
+                      <button
+                        class="toolbar-button toolbar-temporary"
+                        type="button"
+                        aria-label="Area Markers"
+                        title="Area Markers"
+                        data-marker-type="area"
+                      >
+                        <span class="toolbar-button-icon" aria-hidden="true"></span>
+                        <span class="toolbar-button-label" aria-hidden="true">Area Markers</span>
                       </button>
                     </div>
                     <div class="toolbar-shared-controls">
@@ -1196,17 +1268,15 @@ export class DefineRoom {
 
   private updateMarkerButtonsState(): void {
     const isMarkerPlacement = this.interactionMode === "marker-placement" && this.activeMarkerType !== null;
-    if (this.characterMarkersButton) {
-      const isActive = isMarkerPlacement && this.activeMarkerType === "character";
-      this.characterMarkersButton.classList.toggle("is-active", isActive);
-      this.characterMarkersButton.setAttribute("aria-pressed", isActive ? "true" : "false");
-    }
-
-    if (this.objectMarkersButton) {
-      const isActive = isMarkerPlacement && this.activeMarkerType === "object";
-      this.objectMarkersButton.classList.toggle("is-active", isActive);
-      this.objectMarkersButton.setAttribute("aria-pressed", isActive ? "true" : "false");
-    }
+    MARKER_TYPES.forEach((type) => {
+      const button = this.markerTypeButtons[type];
+      if (!button) {
+        return;
+      }
+      const isActive = isMarkerPlacement && this.activeMarkerType === type;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
   }
 
   private updateMarkerInstructions(): void {
@@ -1222,8 +1292,12 @@ export class DefineRoom {
       return;
     }
 
-    const label = this.activeMarkerType === "character" ? "character" : "object";
-    this.markerInstructionLabel.textContent = `click to place ${label} marker`;
+    const activeType = this.activeMarkerType;
+    const config = activeType ? MARKER_TYPE_CONFIG[activeType] : null;
+    const instruction = config?.instruction ?? "marker";
+    const article = /^(a|e|i|o|u)/i.test(instruction) ? "an" : "a";
+    const label = `${article} ${instruction} marker`;
+    this.markerInstructionLabel.textContent = `Click to place ${label}`;
     this.markerInstructionLabel.classList.add("visible");
     this.markerInstructionLabel.setAttribute("aria-hidden", "false");
   }
@@ -1234,8 +1308,8 @@ export class DefineRoom {
     }
 
     const index = this.temporaryMarkers.filter((entry) => entry.type === type).length + 1;
-    const defaultName =
-      type === "character" ? `Character Marker ${index}` : `Object Marker ${index}`;
+    const config = MARKER_TYPE_CONFIG[type];
+    const defaultName = `${config.defaultName} ${index}`;
 
     const marker: TemporaryMarker = {
       id: `marker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1283,7 +1357,7 @@ export class DefineRoom {
 
       const icon = document.createElement("span");
       icon.className = "temporary-marker-icon";
-      icon.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      icon.innerHTML = MARKER_TYPE_ICONS[marker.type];
       markerElement.appendChild(icon);
 
       markerElement.addEventListener("pointerdown", (event) => {
@@ -1464,7 +1538,7 @@ export class DefineRoom {
       });
 
       const iconButton = card.querySelector(".marker-icon-button") as HTMLButtonElement;
-      iconButton.innerHTML = marker.type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      iconButton.innerHTML = MARKER_TYPE_ICONS[marker.type];
       iconButton.addEventListener("click", (event) => {
         event.stopPropagation();
         this.openMarkerIconMenu(marker.id, iconButton);
@@ -1569,12 +1643,14 @@ export class DefineRoom {
       return;
     }
 
-    markerElement.classList.remove("temporary-marker-character", "temporary-marker-object");
+    MARKER_TYPES.forEach((markerType) => {
+      markerElement.classList.remove(`temporary-marker-${markerType}`);
+    });
     markerElement.classList.add(`temporary-marker-${type}`);
 
     const icon = markerElement.querySelector(".temporary-marker-icon") as HTMLElement | null;
     if (icon) {
-      icon.innerHTML = type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      icon.innerHTML = MARKER_TYPE_ICONS[type];
     }
   }
 
@@ -1736,12 +1812,26 @@ export class DefineRoom {
     this.markerInstructionLabel = this.root.querySelector(
       ".marker-placement-instructions",
     ) as HTMLElement;
-    this.characterMarkersButton = this.root.querySelector(
-      '.toolbar-temporary[aria-label="Character Markers"]',
-    ) as HTMLButtonElement;
-    this.objectMarkersButton = this.root.querySelector(
-      '.toolbar-temporary[aria-label="Object Markers"]',
-    ) as HTMLButtonElement;
+    this.markerTypeButtons = {};
+    MARKER_TYPES.forEach((type) => {
+      const button = this.root.querySelector(
+        `.toolbar-temporary[data-marker-type="${type}"]`,
+      ) as HTMLButtonElement | null;
+      if (!button) {
+        return;
+      }
+      const icon = button.querySelector(
+        ".toolbar-button-icon",
+      ) as HTMLElement | null;
+      if (icon) {
+        icon.innerHTML = MARKER_TYPE_ICONS[type];
+      }
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => {
+        this.toggleMarkerPlacement(type);
+      });
+      this.markerTypeButtons[type] = button;
+    });
     this.temporaryMarkersPanel = this.root.querySelector(
       ".temporary-markers-panel",
     ) as HTMLElement;
@@ -1808,32 +1898,6 @@ export class DefineRoom {
 
     this.roomsList.addEventListener("scroll", () => this.closeColorMenu());
     this.temporaryMarkersList.addEventListener("scroll", () => this.closeMarkerIconMenu());
-
-    if (this.characterMarkersButton) {
-      const characterIcon = this.characterMarkersButton.querySelector(
-        ".toolbar-button-icon",
-      ) as HTMLElement | null;
-      if (characterIcon) {
-        characterIcon.innerHTML = CHARACTER_MARKER_ICON;
-      }
-      this.characterMarkersButton.setAttribute("aria-pressed", "false");
-      this.characterMarkersButton.addEventListener("click", () => {
-        this.toggleMarkerPlacement("character");
-      });
-    }
-
-    if (this.objectMarkersButton) {
-      const objectIcon = this.objectMarkersButton.querySelector(
-        ".toolbar-button-icon",
-      ) as HTMLElement | null;
-      if (objectIcon) {
-        objectIcon.innerHTML = OBJECT_MARKER_ICON;
-      }
-      this.objectMarkersButton.setAttribute("aria-pressed", "false");
-      this.objectMarkersButton.addEventListener("click", () => {
-        this.toggleMarkerPlacement("object");
-      });
-    }
 
     this.applyActiveTabState();
     this.updateMarkerButtonsState();
@@ -2024,12 +2088,12 @@ export class DefineRoom {
     const grid = document.createElement("div");
     grid.className = "marker-icon-grid";
 
-    (["character", "object"] as TemporaryMarkerType[]).forEach((type) => {
+    MARKER_TYPES.forEach((type) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "marker-icon-option";
       button.dataset.type = type;
-      button.innerHTML = type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+      button.innerHTML = MARKER_TYPE_ICONS[type];
       button.addEventListener("click", () => this.handleMarkerIconSelection(type));
       grid.appendChild(button);
       this.markerIconMenuOptions.push(button);
@@ -2171,7 +2235,7 @@ export class DefineRoom {
         `[data-marker-id="${marker.id}"] .marker-icon-button`,
       ) as HTMLElement | null;
       if (iconButton) {
-        iconButton.innerHTML = type === "character" ? CHARACTER_MARKER_ICON : OBJECT_MARKER_ICON;
+        iconButton.innerHTML = MARKER_TYPE_ICONS[type];
       }
       this.updateOverlayMarkerIcon(marker.id, type);
     }

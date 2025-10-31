@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Marker, Region } from '../types';
 import { roomMaskToPolygon } from '../utils/roomMask';
-import { getMapMarkerIconDefinition } from './mapMarkerIcons';
+import { getMapMarkerIconDefinition, type MapMarkerIconDefinition } from './mapMarkerIcons';
 
 interface MapMaskCanvasProps {
   imageUrl?: string | null;
@@ -33,6 +33,63 @@ const normaliseMarkers = (markers?: Record<string, Marker> | Marker[]) => {
   if (!markers) return [] as Marker[];
   if (Array.isArray(markers)) return markers;
   return Object.values(markers);
+};
+
+const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+const normalizeHexColor = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  const match = HEX_COLOR_REGEX.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+  const hex = match[1];
+  if (hex.length === 3) {
+    const [r, g, b] = hex.split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return `#${hex.toLowerCase()}`;
+};
+
+const rgbFromNormalizedHex = (hex: string) => {
+  const value = hex.slice(1);
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  };
+};
+
+const rgbaFromNormalizedHex = (hex: string, alpha: number) => {
+  const { r, g, b } = rgbFromNormalizedHex(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getReadableTextColor = (hex: string) => {
+  const { r, g, b } = rgbFromNormalizedHex(hex);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.65 ? '#0f172a' : '#f8fafc';
+};
+
+const resolveMarkerBaseColor = (
+  marker: Marker,
+  definition?: MapMarkerIconDefinition,
+): string => {
+  const candidates: Array<string | null | undefined> = [
+    marker.color,
+    definition?.defaultColor,
+    '#facc15',
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeHexColor(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return '#facc15';
 };
 
 const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
@@ -181,22 +238,29 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
       />
       {resolvedMarkers.map((marker) => {
         const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
+        const backgroundColor = rgbaFromNormalizedHex(baseColor, 0.55);
+        const borderColor = rgbaFromNormalizedHex(baseColor, 0.7);
+        const textColor = getReadableTextColor(baseColor);
         return (
           <button
             key={marker.id}
             onClick={() => onSelectMarker?.(marker.id)}
-            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border border-amber-400/60 bg-amber-100/90 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-800 shadow transition hover:border-amber-400/80 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100"
+            className="absolute flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] shadow transition hover:brightness-105"
             style={{
               left: `${(marker.x ?? 0) * 100}%`,
               top: `${(marker.y ?? 0) * 100}%`,
+              backgroundColor,
+              borderColor,
+              color: textColor,
             }}
           >
             <span
               className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: marker.color || iconDefinition?.defaultColor || '#facc15' }}
+              style={{ backgroundColor: baseColor }}
             />
             {iconDefinition && (
-              <span className="flex h-4 w-4 items-center justify-center text-amber-800 dark:text-amber-100">
+              <span className="flex h-4 w-4 items-center justify-center">
                 {iconDefinition.icon}
               </span>
             )}
