@@ -627,6 +627,8 @@ export class DefineRoom {
 
   private markerDragElement: HTMLElement | null = null;
 
+  private markerOverlayUpdateFrame: number | null = null;
+
   private handleColorMenuOutsideClick = (event: MouseEvent): void => {
     const target = event.target as Node;
 
@@ -1108,6 +1110,10 @@ export class DefineRoom {
   public destroy(): void {
     this.close();
     this.cancelOverlayFrame();
+    [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
+      canvas.removeEventListener("transitionend", this.handleCanvasTransitionEnd);
+    });
+    this.cancelMarkerOverlayUpdate();
     document.removeEventListener("click", this.handleColorMenuOutsideClick);
     window.removeEventListener("resize", this.handleWindowResize);
     this.root.remove();
@@ -1432,6 +1438,29 @@ export class DefineRoom {
       if (markerElement) {
         this.positionMarkerElement(markerElement, marker, metrics);
       }
+    });
+  }
+
+  private cancelMarkerOverlayUpdate(): void {
+    if (this.markerOverlayUpdateFrame !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(this.markerOverlayUpdateFrame);
+      this.markerOverlayUpdateFrame = null;
+    }
+  }
+
+  private scheduleMarkerOverlayUpdate(): void {
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame === "undefined") {
+      this.updateMarkerOverlayPositions();
+      return;
+    }
+
+    this.cancelMarkerOverlayUpdate();
+
+    this.markerOverlayUpdateFrame = window.requestAnimationFrame(() => {
+      this.markerOverlayUpdateFrame = window.requestAnimationFrame(() => {
+        this.markerOverlayUpdateFrame = null;
+        this.updateMarkerOverlayPositions();
+      });
     });
   }
 
@@ -1893,6 +1922,10 @@ export class DefineRoom {
       ".define-room-close",
     ) as HTMLButtonElement | null;
 
+    [this.imageCanvas, this.overlayCanvas, this.selectionCanvas].forEach((canvas) => {
+      canvas.addEventListener("transitionend", this.handleCanvasTransitionEnd);
+    });
+
     this.initializeColorMenu();
     this.initializeMarkerIconMenu();
 
@@ -2049,6 +2082,13 @@ export class DefineRoom {
   }
 
   private handleWindowResize = (): void => {
+    this.updateMarkerOverlayPositions();
+  };
+
+  private handleCanvasTransitionEnd = (event: TransitionEvent): void => {
+    if (event.propertyName !== "transform") {
+      return;
+    }
     this.updateMarkerOverlayPositions();
   };
 
@@ -3556,6 +3596,7 @@ export class DefineRoom {
       this.markersLayer.style.transform = "none";
     }
     this.updateMarkerOverlayPositions();
+    this.scheduleMarkerOverlayUpdate();
   }
 
   private resetMagnifyTransform(useDefaultOrigin = false): void {
