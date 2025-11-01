@@ -60,6 +60,121 @@ type SignedUrlBucket = R2Bucket & {
   createSignedUrl?: R2SignedUrlMethod;
 };
 
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function encodeRfc3986(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function buildCanonicalQuery(params: Record<string, string>): string {
+  return Object.keys(params)
+    .sort()
+    .map((key) => `${encodeRfc3986(key)}=${encodeRfc3986(params[key])}`)
+    .join('&');
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', textEncoder.encode(value));
+  return bufferToHex(hashBuffer);
+}
+
+async function hmacSha256(key: string | ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
+  const keyBytes =
+    typeof key === 'string'
+      ? textEncoder.encode(key)
+      : key instanceof Uint8Array
+        ? key
+        : new Uint8Array(key);
+  const rawKey =
+    keyBytes.byteOffset === 0 && keyBytes.byteLength === keyBytes.buffer.byteLength
+      ? (keyBytes.buffer as ArrayBuffer)
+      : (keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer);
+  const cryptoKey = await crypto.subtle.importKey('raw', rawKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return crypto.subtle.sign('HMAC', cryptoKey, textEncoder.encode(data));
+}
+
+function resolveBucketName(bucket: SignedUrlBucket): string | null {
+  const candidates = ['bucketName', 'name'];
+  const bucketRecord = bucket as unknown as Record<string, unknown>;
+  for (const candidate of candidates) {
+    const value = bucketRecord[candidate];
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+async function createR2PresignedUrl(
+  env: Env,
+  bucket: SignedUrlBucket,
+  key: string,
+  method: 'GET' | 'PUT' | 'POST',
+  expiration: number,
+): Promise<string> {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = env;
+  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+    throw new Error('Missing R2 signing secrets in environment');
+  }
+
+  const bucketName = resolveBucketName(bucket);
+  if (!bucketName) {
+    throw new Error('Unable to resolve bucket name for R2 presigned URL');
+  }
+
+  const safeExpiration = Math.min(Math.max(Math.floor(expiration), 1), 60 * 60 * 24 * 7);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const shortDate = amzDate.slice(0, 8);
+  const region = 'auto';
+  const service = 's3';
+  const credentialScope = `${shortDate}/${region}/${service}/aws4_request`;
+  const host = `${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+  const keySegments = key.split('/').map(encodeRfc3986);
+  const canonicalUri = `/${[encodeRfc3986(bucketName), ...keySegments].join('/')}`;
+
+  const queryParams: Record<string, string> = {
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': `${R2_ACCESS_KEY_ID}/${credentialScope}`,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': String(safeExpiration),
+    'X-Amz-SignedHeaders': 'host',
+  };
+
+  const canonicalQuery = buildCanonicalQuery(queryParams);
+  const canonicalHeaders = `host:${host}\n`;
+  const signedHeaders = 'host';
+  const canonicalRequest = [
+    method.toUpperCase(),
+    canonicalUri,
+    canonicalQuery,
+    canonicalHeaders,
+    signedHeaders,
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+
+  const hashedCanonicalRequest = await sha256Hex(canonicalRequest);
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hashedCanonicalRequest].join('\n');
+
+  const kDate = await hmacSha256(`AWS4${R2_SECRET_ACCESS_KEY}`, shortDate);
+  const kRegion = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  const kSigning = await hmacSha256(kService, 'aws4_request');
+  const signature = bufferToHex(await hmacSha256(kSigning, stringToSign));
+
+  const signedQuery = buildCanonicalQuery({
+    ...queryParams,
+    'X-Amz-Signature': signature,
+  });
+
+  return `https://${host}${canonicalUri}?${signedQuery}`;
+}
+
 function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, init: JsonResponseInit = {}): Response {
   const { headers: initHeaders, ...rest } = init;
   const headers = new Headers(initHeaders);
@@ -220,6 +335,7 @@ async function ensureMapOwnership(env: Env, mapId: string, userId: string): Prom
 }
 
 async function createSignedUpload(
+  env: Env,
   bucket: R2Bucket,
   key: string,
   method: 'GET' | 'PUT' | 'POST' = 'PUT',
@@ -233,14 +349,17 @@ async function createSignedUpload(
   const typedBucket = bucket as unknown as SignedUrlBucket;
   const createSignedUrl = typedBucket.createSignedUrl;
   if (typeof createSignedUrl !== 'function') {
-    const availableKeys = Object.keys(typedBucket as Record<string, unknown>);
-    console.error('R2 bucket binding lacks createSignedUrl', {
-      type: typeof bucket,
-      availableKeys,
-      key,
-      method,
-    });
-    throw new Error('R2 bucket binding lacks createSignedUrl method');
+    try {
+      return await createR2PresignedUrl(env, typedBucket, key, method, expiration);
+    } catch (err) {
+      console.error('Failed to create fallback R2 presigned URL', {
+        key,
+        method,
+        expiration,
+        err,
+      });
+      throw err;
+    }
   }
 
   try {
@@ -440,8 +559,8 @@ export default {
           typeof body.height === 'number' ? body.height : null,
           body.metadata ? JSON.stringify(body.metadata) : null,
         ).run();
-        const originalUrl = await createSignedUpload(env.MAPS_BUCKET, originalKey, 'PUT', 900);
-        const displayUrl = await createSignedUpload(env.MAPS_BUCKET, displayKey, 'PUT', 900);
+        const originalUrl = await createSignedUpload(env, env.MAPS_BUCKET, originalKey, 'PUT', 900);
+        const displayUrl = await createSignedUpload(env, env.MAPS_BUCKET, displayKey, 'PUT', 900);
         return jsonResponse({
           map: {
             id: mapId,
@@ -747,7 +866,7 @@ export default {
         const body = await parseJSON<Record<string, unknown>>(request);
         const fileName = (body?.fileName as string) || `${crypto.randomUUID()}.png`;
         const key = `assets/${user.id}/${fileName}`;
-        const uploadUrl = await createSignedUpload(env.MAPS_BUCKET, key, 'PUT', 900);
+        const uploadUrl = await createSignedUpload(env, env.MAPS_BUCKET, key, 'PUT', 900);
         await env.MAPS_DB.prepare('INSERT INTO assets (id, owner_id, key, type) VALUES (?, ?, ?, ?)')
           .bind(crypto.randomUUID(), user.id, key, 'marker').run();
         return jsonResponse({ key, uploadUrl: uploadUrl.toString() }, { status: 201, headers: corsHeaders });

@@ -8,5 +8,8 @@ declare global {
     MAPS_BUCKET: R2Bucket;
     SESSION_SECRET: string;
     SESSION_HUB: DurableObjectNamespace;
+    R2_ACCESS_KEY_ID: string;
+    R2_SECRET_ACCESS_KEY: string;
+    R2_ACCOUNT_ID: string;
   }
 }
