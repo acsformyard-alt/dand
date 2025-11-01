@@ -50,6 +50,16 @@ interface MarkerRecord {
   data: unknown;
 }
 
+type R2SignedUrlMethod = (options: {
+  key: string;
+  method?: 'GET' | 'PUT' | 'POST';
+  expiration?: number;
+}) => Promise<URL | string>;
+
+type SignedUrlBucket = R2Bucket & {
+  createSignedUrl?: R2SignedUrlMethod;
+};
+
 function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, init: JsonResponseInit = {}): Response {
   const { headers: initHeaders, ...rest } = init;
   const headers = new Headers(initHeaders);
@@ -69,8 +79,13 @@ function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, in
   return new Response(JSON.stringify(data), responseInit);
 }
 
-function errorResponse(message: string, status = 400, init: JsonResponseInit = {}): Response {
-  return jsonResponse({ error: message }, { ...init, status });
+function errorResponse(
+  message: string,
+  status = 400,
+  init: JsonResponseInit = {},
+  extra: Record<string, unknown> = {},
+): Response {
+  return jsonResponse({ error: message, ...extra }, { ...init, status });
 }
 
 async function parseJSON<T = unknown>(request: Request): Promise<T | null> {
@@ -204,12 +219,40 @@ async function ensureMapOwnership(env: Env, mapId: string, userId: string): Prom
   return !!result;
 }
 
-async function createSignedUpload(bucket: R2Bucket, key: string, method: 'GET' | 'PUT' | 'POST' = 'PUT', expiration = 900): Promise<URL | string> {
-  return bucket.createSignedUrl({
-    key,
-    method,
-    expiration,
-  });
+async function createSignedUpload(
+  bucket: R2Bucket,
+  key: string,
+  method: 'GET' | 'PUT' | 'POST' = 'PUT',
+  expiration = 900,
+): Promise<URL | string> {
+  if (!bucket || typeof bucket !== 'object') {
+    console.error('R2 bucket binding missing or invalid', { type: typeof bucket, key });
+    throw new Error('R2 bucket binding missing or invalid');
+  }
+
+  const typedBucket = bucket as unknown as SignedUrlBucket;
+  const createSignedUrl = typedBucket.createSignedUrl;
+  if (typeof createSignedUrl !== 'function') {
+    const availableKeys = Object.keys(typedBucket as Record<string, unknown>);
+    console.error('R2 bucket binding lacks createSignedUrl', {
+      type: typeof bucket,
+      availableKeys,
+      key,
+      method,
+    });
+    throw new Error('R2 bucket binding lacks createSignedUrl method');
+  }
+
+  try {
+    return await createSignedUrl.call(typedBucket, {
+      key,
+      method,
+      expiration,
+    });
+  } catch (err) {
+    console.error('Failed to create signed URL', { key, method, expiration, err });
+    throw err;
+  }
 }
 
 async function getSessionStub(env: Env, sessionId: string): Promise<DurableObjectStub> {
@@ -838,8 +881,9 @@ export default {
 
       return new Response('Not found', { status: 404, headers: corsHeaders });
     } catch (err) {
-      console.error('API error', err);
-      return errorResponse('Internal Server Error', 500, { headers: corsHeaders });
+      const errorId = crypto.randomUUID();
+      console.error('API error', { errorId, err });
+      return errorResponse('Internal Server Error', 500, { headers: corsHeaders }, { errorId });
     }
   },
 };
