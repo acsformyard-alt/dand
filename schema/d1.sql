@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS markers (
     map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
     description TEXT,
+    region_id TEXT REFERENCES regions(id) ON DELETE SET NULL,
     icon_key TEXT,
     x REAL NOT NULL,
     y REAL NOT NULL,
