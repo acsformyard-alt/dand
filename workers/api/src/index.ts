@@ -41,12 +41,24 @@ interface MarkerRecord {
   mapId: string;
   label: string;
   description: string | null;
+  notes: string | null;
+  regionId: string | null;
   iconKey: string | null;
   x: number | null;
   y: number | null;
   color: string | null;
   data: unknown;
 }
+
+type R2SignedUrlMethod = (options: {
+  key: string;
+  method?: 'GET' | 'PUT' | 'POST';
+  expiration?: number;
+}) => Promise<URL | string>;
+
+type SignedUrlBucket = R2Bucket & {
+  createSignedUrl?: R2SignedUrlMethod;
+};
 
 function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, init: JsonResponseInit = {}): Response {
   const { headers: initHeaders, ...rest } = init;
@@ -67,8 +79,13 @@ function jsonResponse<T extends JsonValue | Record<string, unknown>>(data: T, in
   return new Response(JSON.stringify(data), responseInit);
 }
 
-function errorResponse(message: string, status = 400, init: JsonResponseInit = {}): Response {
-  return jsonResponse({ error: message }, { ...init, status });
+function errorResponse(
+  message: string,
+  status = 400,
+  init: JsonResponseInit = {},
+  extra: Record<string, unknown> = {},
+): Response {
+  return jsonResponse({ error: message, ...extra }, { ...init, status });
 }
 
 async function parseJSON<T = unknown>(request: Request): Promise<T | null> {
@@ -202,12 +219,40 @@ async function ensureMapOwnership(env: Env, mapId: string, userId: string): Prom
   return !!result;
 }
 
-async function createSignedUpload(bucket: R2Bucket, key: string, method: 'GET' | 'PUT' | 'POST' = 'PUT', expiration = 900): Promise<URL | string> {
-  return bucket.createSignedUrl({
-    key,
-    method,
-    expiration,
-  });
+async function createSignedUpload(
+  bucket: R2Bucket,
+  key: string,
+  method: 'GET' | 'PUT' | 'POST' = 'PUT',
+  expiration = 900,
+): Promise<URL | string> {
+  if (!bucket || typeof bucket !== 'object') {
+    console.error('R2 bucket binding missing or invalid', { type: typeof bucket, key });
+    throw new Error('R2 bucket binding missing or invalid');
+  }
+
+  const typedBucket = bucket as unknown as SignedUrlBucket;
+  const createSignedUrl = typedBucket.createSignedUrl;
+  if (typeof createSignedUrl !== 'function') {
+    const availableKeys = Object.keys(typedBucket as Record<string, unknown>);
+    console.error('R2 bucket binding lacks createSignedUrl', {
+      type: typeof bucket,
+      availableKeys,
+      key,
+      method,
+    });
+    throw new Error('R2 bucket binding lacks createSignedUrl method');
+  }
+
+  try {
+    return await createSignedUrl.call(typedBucket, {
+      key,
+      method,
+      expiration,
+    });
+  } catch (err) {
+    console.error('Failed to create signed URL', { key, method, expiration, err });
+    throw err;
+  }
 }
 
 async function getSessionStub(env: Env, sessionId: string): Promise<DurableObjectStub> {
@@ -552,13 +597,24 @@ export default {
         const mapId = url.pathname.split('/')[3];
         if (request.method === 'GET') {
           const result = await env.MAPS_DB.prepare(
-            'SELECT id, map_id as mapId, label, description, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC',
+            'SELECT id, map_id as mapId, label, description, description as notes, region_id as regionId, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC',
           ).bind(mapId).all();
           return jsonResponse({
-            markers: (result.results as MarkerRecord[]).map((m) => ({
-              ...m,
-              data: typeof m.data === 'string' ? JSON.parse(m.data) : m.data,
-            })),
+            markers: (result.results as MarkerRecord[]).map((m) => {
+              const rawData = typeof m.data === 'string' ? JSON.parse(m.data) : m.data;
+              let regionId = m.regionId && typeof m.regionId === 'string' ? m.regionId : null;
+              if (!regionId && rawData && typeof rawData === 'object' && 'regionId' in rawData && rawData.regionId != null) {
+                regionId = String((rawData as Record<string, unknown>).regionId);
+              }
+              const noteValue = m.notes ?? m.description ?? null;
+              return {
+                ...m,
+                description: noteValue,
+                notes: noteValue,
+                regionId,
+                data: rawData,
+              };
+            }),
           }, { headers: corsHeaders });
         }
         if (request.method === 'POST') {
@@ -570,30 +626,55 @@ export default {
             return errorResponse('Invalid marker', 400, { headers: corsHeaders });
           }
           const markerId = crypto.randomUUID();
+          const noteValue =
+            typeof body.notes === 'string'
+              ? body.notes
+              : (body.description as string | null) || null;
+          let regionId: string | null = null;
+          if (body.regionId !== undefined) {
+            if (body.regionId === null) {
+              regionId = null;
+            } else if (typeof body.regionId === 'string') {
+              regionId = body.regionId;
+            } else {
+              regionId = String(body.regionId);
+            }
+          }
+          if (regionId) {
+            const region = await env.MAPS_DB.prepare('SELECT id FROM regions WHERE id = ? AND map_id = ?')
+              .bind(regionId, mapId)
+              .first();
+            if (!region) {
+              return errorResponse('Invalid region', 400, { headers: corsHeaders });
+            }
+          }
           await env.MAPS_DB.prepare(
-            'INSERT INTO markers (id, map_id, label, description, icon_key, x, y, color, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO markers (id, map_id, label, description, icon_key, x, y, color, data, region_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           ).bind(
             markerId,
             mapId,
             body.label,
-            (body.description as string | null) || null,
+            noteValue,
             (body.iconKey as string | null) || null,
             body.x,
             body.y,
             (body.color as string | null) || null,
             body.data ? JSON.stringify(body.data) : null,
+            regionId,
           ).run();
           return jsonResponse({
             marker: {
               id: markerId,
               mapId,
               label: body.label,
-              description: (body.description as string | null) || null,
+              description: noteValue,
               iconKey: (body.iconKey as string | null) || null,
               x: body.x,
               y: body.y,
               color: (body.color as string | null) || null,
               data: body.data || null,
+              notes: noteValue,
+              regionId,
             },
           }, { status: 201, headers: corsHeaders });
         }
@@ -603,21 +684,49 @@ export default {
         const markerId = url.pathname.split('/')[3];
         if (request.method === 'PUT') {
           if (!user) return errorResponse('Unauthorized', 401, { headers: corsHeaders });
-          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId FROM markers WHERE id = ?').bind(markerId).first<{ mapId: string }>();
+          const existing = await env.MAPS_DB.prepare('SELECT map_id as mapId, description, region_id as regionId FROM markers WHERE id = ?')
+            .bind(markerId)
+            .first<{ mapId: string; description: string | null; regionId: string | null }>();
           if (!existing) return errorResponse('Marker not found', 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap) return errorResponse('Forbidden', 403, { headers: corsHeaders });
           const body = await parseJSON<Record<string, unknown>>(request);
+          const noteValue = (() => {
+            if (typeof body?.notes === 'string') return body.notes;
+            if (body?.notes === null) return null;
+            if (typeof body?.description === 'string') return body.description;
+            if (body?.description === null) return null;
+            return existing.description;
+          })();
+          let regionId = existing.regionId ?? null;
+          if (body?.regionId !== undefined) {
+            if (body.regionId === null) {
+              regionId = null;
+            } else if (typeof body.regionId === 'string') {
+              regionId = body.regionId;
+            } else {
+              regionId = String(body.regionId);
+            }
+          }
+          if (regionId) {
+            const region = await env.MAPS_DB.prepare('SELECT id FROM regions WHERE id = ? AND map_id = ?')
+              .bind(regionId, existing.mapId)
+              .first();
+            if (!region) {
+              return errorResponse('Invalid region', 400, { headers: corsHeaders });
+            }
+          }
           await env.MAPS_DB.prepare(
-            'UPDATE markers SET label = ?, description = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ? WHERE id = ?',
+            'UPDATE markers SET label = ?, description = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ?, region_id = ? WHERE id = ?',
           ).bind(
             (body?.label as string | null) || null,
-            (body?.description as string | null) || null,
+            noteValue,
             (body?.iconKey as string | null) || null,
             typeof body?.x === 'number' ? body.x : null,
             typeof body?.y === 'number' ? body.y : null,
             (body?.color as string | null) || null,
             body?.data ? JSON.stringify(body.data) : null,
+            regionId,
             markerId,
           ).run();
           return jsonResponse({ success: true }, { headers: corsHeaders });
@@ -772,8 +881,9 @@ export default {
 
       return new Response('Not found', { status: 404, headers: corsHeaders });
     } catch (err) {
-      console.error('API error', err);
-      return errorResponse('Internal Server Error', 500, { headers: corsHeaders });
+      const errorId = crypto.randomUUID();
+      console.error('API error', { errorId, err });
+      return errorResponse('Internal Server Error', 500, { headers: corsHeaders }, { errorId });
     }
   },
 };

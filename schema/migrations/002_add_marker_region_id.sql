@@ -1,0 +1,1 @@
+ALTER TABLE markers ADD COLUMN region_id TEXT REFERENCES regions(id) ON DELETE SET NULL;
