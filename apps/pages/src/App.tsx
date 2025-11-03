@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import SessionViewer from './components/SessionViewer';
+import DMSessionViewer from './components/DMSessionViewer';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
@@ -583,19 +583,22 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="rounded-3xl border border-white/60 bg-white/75 p-4 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              <SessionViewer
-                session={activeSession}
-                mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
-                mapWidth={selectedMap?.width}
-                mapHeight={selectedMap?.height}
-                regions={regions}
-                baseMarkers={markers}
-                mode={sessionMode}
-                user={user}
-                onLeave={handleLeaveSession}
-                onSaveSession={sessionMode === 'dm' ? handleSaveSession : undefined}
-                onEndSession={sessionMode === 'dm' ? handleEndSession : undefined}
-              />
+              {sessionMode === 'dm' ? (
+                <DMSessionViewer
+                  session={activeSession}
+                  mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
+                  mapWidth={selectedMap?.width}
+                  mapHeight={selectedMap?.height}
+                  regions={regions}
+                  markers={markers}
+                  onSaveSnapshot={handleSaveSession}
+                  onEndSession={handleEndSession}
+                />
+              ) : (
+                <div className="flex h-[78vh] min-h-[540px] items-center justify-center rounded-3xl border border-dashed border-white/70 bg-white/60 text-center text-xs font-semibold uppercase tracking-[0.4em] text-slate-500 dark:border-slate-800/60 dark:bg-slate-950/60 dark:text-slate-400">
+                  Player session viewer coming soon
+                </div>
+              )}
             </div>
           </div>
         </div>
