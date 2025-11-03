@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import SessionViewer from './components/SessionViewer';
+import DMSessionViewer from './components/DMSessionViewer';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
@@ -582,21 +582,29 @@ const App: React.FC = () => {
                 {statusMessage}
               </div>
             )}
-            <div className="rounded-3xl border border-white/60 bg-white/75 p-4 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              <SessionViewer
+            {sessionMode === 'dm' ? (
+              <DMSessionViewer
                 session={activeSession}
                 mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
                 mapWidth={selectedMap?.width}
                 mapHeight={selectedMap?.height}
                 regions={regions}
-                baseMarkers={markers}
-                mode={sessionMode}
-                user={user}
-                onLeave={handleLeaveSession}
-                onSaveSession={sessionMode === 'dm' ? handleSaveSession : undefined}
-                onEndSession={sessionMode === 'dm' ? handleEndSession : undefined}
+                markers={markers}
+                onSaveSnapshot={handleSaveSession}
+                onEndSession={handleEndSession}
               />
-            </div>
+            ) : (
+              <div className="rounded-3xl border border-white/60 bg-white/75 p-4 text-center text-sm text-slate-600 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:text-slate-300 dark:shadow-black/40">
+                Player session viewer coming soon.
+                <button
+                  type="button"
+                  onClick={handleLeaveSession}
+                  className="mt-6 inline-flex items-center justify-center rounded-full border border-white/70 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
+                >
+                  Leave Session
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
