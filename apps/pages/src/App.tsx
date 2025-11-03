@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import SessionViewer from './components/SessionViewer';
+import DMSessionViewer from './components/DMSessionViewer';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
@@ -583,17 +583,14 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="rounded-3xl border border-white/60 bg-white/75 p-4 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              <SessionViewer
+              <DMSessionViewer
                 session={activeSession}
                 mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
                 mapWidth={selectedMap?.width}
                 mapHeight={selectedMap?.height}
                 regions={regions}
-                baseMarkers={markers}
-                mode={sessionMode}
-                user={user}
-                onLeave={handleLeaveSession}
-                onSaveSession={sessionMode === 'dm' ? handleSaveSession : undefined}
+                markers={markers}
+                onSaveSnapshot={sessionMode === 'dm' ? handleSaveSession : undefined}
                 onEndSession={sessionMode === 'dm' ? handleEndSession : undefined}
               />
             </div>
