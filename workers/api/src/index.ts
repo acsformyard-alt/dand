@@ -144,6 +144,90 @@ function base64UrlDecode(str) {
   return buffer;
 }
 __name(base64UrlDecode, "base64UrlDecode");
+function decodeBase64DataUrl(dataUrl) {
+  if (typeof dataUrl !== "string")
+    return null;
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match)
+    return null;
+  try {
+    const [, mimeType, base64Data] = match;
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return { mimeType, bytes };
+  } catch (error) {
+    console.error("Failed to decode base64 data URL", error);
+    return null;
+  }
+}
+__name(decodeBase64DataUrl, "decodeBase64DataUrl");
+function normalizeBounds(bounds) {
+  if (!bounds || typeof bounds !== "object")
+    return null;
+  const minX = Number(bounds.minX);
+  const minY = Number(bounds.minY);
+  const maxX = Number(bounds.maxX);
+  const maxY = Number(bounds.maxY);
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY))
+    return null;
+  return { minX, minY, maxX, maxY };
+}
+__name(normalizeBounds, "normalizeBounds");
+function normalizeMaskManifest(regionId, maskPayload, manifestPayload) {
+  if (manifestPayload === null)
+    return null;
+  const source = typeof manifestPayload === "object" && manifestPayload ? manifestPayload : {};
+  const manifest = {
+    roomId: typeof source.roomId === "string" && source.roomId.length > 0 ? source.roomId : regionId,
+    key: typeof source.key === "string" && source.key.length > 0 ? source.key : `room-masks/${regionId}.png`
+  };
+  const widthSource = maskPayload && typeof maskPayload === "object" && maskPayload.width !== void 0 ? maskPayload.width : source.width;
+  const heightSource = maskPayload && typeof maskPayload === "object" && maskPayload.height !== void 0 ? maskPayload.height : source.height;
+  const width = Number(widthSource);
+  const height = Number(heightSource);
+  if (Number.isFinite(width)) {
+    manifest.width = width;
+  }
+  if (Number.isFinite(height)) {
+    manifest.height = height;
+  }
+  const bounds = normalizeBounds(maskPayload && typeof maskPayload === "object" && maskPayload.bounds ? maskPayload.bounds : source.bounds);
+  if (bounds) {
+    manifest.bounds = bounds;
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (key === "dataUrl" || key === "roomId" || key === "key" || key === "width" || key === "height" || key === "bounds")
+      continue;
+    if (value !== void 0) {
+      manifest[key] = value;
+    }
+  }
+  return manifest;
+}
+__name(normalizeMaskManifest, "normalizeMaskManifest");
+function prepareMaskManifest(regionId, maskPayload, manifestPayload) {
+  if (maskPayload === void 0 && manifestPayload === void 0)
+    return { manifest: void 0, pngBytes: null };
+  if (manifestPayload === null)
+    return { manifest: null, pngBytes: null };
+  const manifest = normalizeMaskManifest(regionId, maskPayload, manifestPayload);
+  if (!manifest)
+    return { manifest: void 0, pngBytes: null };
+  if (!maskPayload || typeof maskPayload !== "object" || typeof maskPayload.dataUrl !== "string") {
+    return { manifest, pngBytes: null };
+  }
+  const decoded = decodeBase64DataUrl(maskPayload.dataUrl);
+  if (!decoded)
+    return { error: "Invalid mask image data", manifest: void 0, pngBytes: null };
+  if (decoded.mimeType && decoded.mimeType !== "image/png") {
+    return { error: "Mask image must be a PNG", manifest: void 0, pngBytes: null };
+  }
+  return { manifest, pngBytes: decoded.bytes };
+}
+__name(prepareMaskManifest, "prepareMaskManifest");
 async function hashPassword(password, salt) {
   const saltBytes = salt ? base64UrlDecode(salt) : crypto.getRandomValues(new Uint8Array(16));
   const combined = new Uint8Array(saltBytes.length + password.length);
@@ -529,12 +613,13 @@ var src_default = {
         const mapId = url.pathname.split("/")[3];
         if (request.method === "GET") {
           const result = await env.MAPS_DB.prepare(
-            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
+            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
           return jsonResponse({
             regions: result.results.map((r) => ({
               ...r,
-              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon
+              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
+              maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null
             }))
           }, { headers: corsHeaders });
         }
@@ -551,15 +636,26 @@ var src_default = {
             return errorResponse("Invalid region", 400, { headers: corsHeaders });
           }
           const regionId = crypto.randomUUID();
+          const maskPreparation = prepareMaskManifest(regionId, body?.mask, body?.maskManifest);
+          if (maskPreparation.error) {
+            return errorResponse(maskPreparation.error, 400, { headers: corsHeaders });
+          }
+          if (maskPreparation.pngBytes && maskPreparation.manifest?.key) {
+            await env.MAPS_BUCKET.put(maskPreparation.manifest.key, maskPreparation.pngBytes, {
+              httpMetadata: { contentType: "image/png" }
+            });
+          }
+          const manifestObject = maskPreparation.manifest ?? null;
           await env.MAPS_DB.prepare(
-            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order, mask_manifest) VALUES (?, ?, ?, ?, ?, ?, ?)"
           ).bind(
             regionId,
             mapId,
             body.name,
             JSON.stringify(body.polygon),
             body.notes || null,
-            typeof body.revealOrder === "number" ? body.revealOrder : null
+            typeof body.revealOrder === "number" ? body.revealOrder : null,
+            manifestObject ? JSON.stringify(manifestObject) : null
           ).run();
           return jsonResponse({
             region: {
@@ -568,7 +664,8 @@ var src_default = {
               name: body.name,
               polygon: body.polygon,
               notes: body.notes || null,
-              revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null
+              revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null,
+              maskManifest: manifestObject
             }
           }, { status: 201, headers: corsHeaders });
         }
@@ -579,22 +676,47 @@ var src_default = {
           if (!user)
             return errorResponse("Unauthorized", 401, { headers: corsHeaders });
           const body = await parseJSON(request);
-          const existing = await env.MAPS_DB.prepare("SELECT map_id as mapId FROM regions WHERE id = ?").bind(regionId).first();
+          const existing = await env.MAPS_DB.prepare("SELECT map_id as mapId, mask_manifest as maskManifest FROM regions WHERE id = ?").bind(regionId).first();
           if (!existing)
             return errorResponse("Region not found", 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap)
             return errorResponse("Forbidden", 403, { headers: corsHeaders });
+          let parsedExistingManifest = null;
+          if (typeof existing.maskManifest === "string") {
+            try {
+              parsedExistingManifest = JSON.parse(existing.maskManifest);
+            } catch (err) {
+              console.error("Failed to parse existing mask manifest", err);
+              parsedExistingManifest = null;
+            }
+          }
+          const maskPreparation = prepareMaskManifest(regionId, body?.mask, body?.maskManifest);
+          if (maskPreparation.error) {
+            return errorResponse(maskPreparation.error, 400, { headers: corsHeaders });
+          }
+          let manifestObject = parsedExistingManifest;
+          let manifestJson = existing.maskManifest ?? null;
+          if (maskPreparation.manifest !== void 0) {
+            manifestObject = maskPreparation.manifest;
+            manifestJson = maskPreparation.manifest ? JSON.stringify(maskPreparation.manifest) : null;
+          }
+          if (maskPreparation.pngBytes && maskPreparation.manifest?.key) {
+            await env.MAPS_BUCKET.put(maskPreparation.manifest.key, maskPreparation.pngBytes, {
+              httpMetadata: { contentType: "image/png" }
+            });
+          }
           await env.MAPS_DB.prepare(
-            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ? WHERE id = ?"
+            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ?, mask_manifest = ? WHERE id = ?"
           ).bind(
             body?.name || null,
             body?.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
             body?.notes || null,
             typeof body?.revealOrder === "number" ? body.revealOrder : null,
+            manifestJson,
             regionId
           ).run();
-          return jsonResponse({ success: true }, { headers: corsHeaders });
+          return jsonResponse({ success: true, maskManifest: manifestObject ?? null }, { headers: corsHeaders });
         }
         if (request.method === "DELETE") {
           if (!user)
