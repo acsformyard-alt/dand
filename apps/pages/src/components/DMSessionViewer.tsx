@@ -19,6 +19,21 @@ type SidebarTab = 'rooms' | 'markers' | 'other';
 
 const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
+const ROOM_COLORS = [
+  '#ff6b6b',
+  '#4ecdc4',
+  '#ffd166',
+  '#9b5de5',
+  '#48cae4',
+  '#f72585',
+  '#06d6a0',
+  '#f8961e',
+  '#577590',
+  '#ff7f50',
+  '#2ec4b6',
+  '#c77dff',
+];
+
 const normalizeHexColor = (value: string | null | undefined): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -30,6 +45,53 @@ const normalizeHexColor = (value: string | null | undefined): string | null => {
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
   }
   return `#${hex.toLowerCase()}`;
+};
+
+const rgbFromHex = (hex: string) => {
+  const normalized = normalizeHexColor(hex);
+  const value = (normalized ?? '#000000').slice(1);
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  };
+};
+
+const rgbaFromHex = (hex: string, alpha: number) => {
+  const { r, g, b } = rgbFromHex(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getReadableTextColor = (hex: string) => {
+  const { r, g, b } = rgbFromHex(hex);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#0f172a' : '#f8fafc';
+};
+
+const getTextOutlineColor = (hex: string) => {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) {
+    return 'rgba(15, 23, 42, 0.85)';
+  }
+  return normalized === '#0f172a' ? 'rgba(248, 250, 252, 0.85)' : 'rgba(15, 23, 42, 0.75)';
+};
+
+const extractRegionColor = (region: Region): string | null => {
+  const candidate = (region as Region & { color?: string | null }).color;
+  const normalizedCandidate = normalizeHexColor(candidate);
+  if (normalizedCandidate) {
+    return normalizedCandidate;
+  }
+  if (typeof region.notes === 'string') {
+    const match = region.notes.match(/(?:^|\n)\s*Color\s*:\s*(#[0-9a-f]{3,6})/i);
+    if (match) {
+      const fromNotes = normalizeHexColor(match[1]);
+      if (fromNotes) {
+        return fromNotes;
+      }
+    }
+  }
+  return null;
 };
 
 const computeCentroid = (points: Array<{ x: number; y: number }>) => {
@@ -76,10 +138,24 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
+  const regionColorMap = useMemo(() => {
+    const assignments = new Map<string, string>();
+    regions.forEach((region, index) => {
+      const explicit = extractRegionColor(region);
+      if (explicit) {
+        assignments.set(region.id, explicit);
+        return;
+      }
+      const paletteColor = ROOM_COLORS[index % ROOM_COLORS.length];
+      assignments.set(region.id, paletteColor);
+    });
+    return assignments;
+  }, [regions]);
+
   const regionShapes = useMemo(
     () =>
       regions
-        .map((region) => {
+        .map((region, regionIndex) => {
           const polygon = roomMaskToPolygon(region.mask);
           if (polygon.length === 0) {
             return null;
@@ -92,6 +168,12 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               return `${index === 0 ? 'M' : 'L'}${x},${y}`;
             })
             .join(' ');
+          const baseColor =
+            regionColorMap.get(region.id) ?? ROOM_COLORS[regionIndex % ROOM_COLORS.length];
+          const fillColor = rgbaFromHex(baseColor, 0.22);
+          const strokeColor = rgbaFromHex(baseColor, 0.7);
+          const labelColor = getReadableTextColor(baseColor);
+          const labelOutline = getTextOutlineColor(labelColor);
           return {
             id: region.id,
             name: region.name,
@@ -100,10 +182,27 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               x: centroid.x * viewWidth,
               y: centroid.y * viewHeight,
             },
+            fillColor,
+            strokeColor,
+            labelColor,
+            labelOutline,
           };
         })
-        .filter((shape): shape is { id: string; name: string; path: string; centroid: { x: number; y: number } } => Boolean(shape)),
-    [regions, viewHeight, viewWidth],
+        .filter(
+          (
+            shape,
+          ): shape is {
+            id: string;
+            name: string;
+            path: string;
+            centroid: { x: number; y: number };
+            fillColor: string;
+            strokeColor: string;
+            labelColor: string;
+            labelOutline: string;
+          } => Boolean(shape),
+        ),
+    [regionColorMap, regions, viewHeight, viewWidth],
   );
 
   const markerShapes = useMemo(
@@ -203,23 +302,32 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             )}
             {viewMode === 'dm' &&
               regionShapes.map((shape) => (
-                <g key={shape.id}>
-                  <path d={shape.path} fill="rgba(253, 230, 138, 0.15)" stroke="rgba(217, 119, 6, 0.6)" strokeWidth={2} />
+                <g key={shape.id} className="pointer-events-none">
+                  <path
+                    d={shape.path}
+                    fill={shape.fillColor}
+                    stroke={shape.strokeColor}
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                   <text
                     x={shape.centroid.x}
                     y={shape.centroid.y}
                     textAnchor="middle"
+                    dominantBaseline="middle"
                     style={{
                       fontSize: 14,
-                      fontWeight: 600,
-                      fill: '#1f2937',
-                      stroke: 'rgba(255, 255, 255, 0.8)',
-                      strokeWidth: 3,
+                      fontWeight: 700,
+                      letterSpacing: '0.25em',
+                      fill: shape.labelColor,
+                      stroke: shape.labelOutline,
+                      strokeWidth: 4,
                       strokeLinejoin: 'round',
                       paintOrder: 'stroke',
                     }}
                   >
-                    {shape.name}
+                    {shape.name.toUpperCase()}
                   </text>
                 </g>
               ))}
