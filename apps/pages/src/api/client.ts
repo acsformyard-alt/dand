@@ -54,6 +54,7 @@ interface RegionPayload {
   maskManifest?: RoomMaskManifestEntry | null;
   notes?: string;
   revealOrder?: number;
+  color?: string;
 }
 
 interface MarkerPayload {
@@ -330,6 +331,25 @@ const ensureManifest = (
 ): RoomMaskManifestEntry =>
   manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
 
+const normalizeRegionColor = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!trimmed.startsWith('#')) {
+    return trimmed;
+  }
+  const hex = trimmed.toLowerCase();
+  if (hex.length === 4) {
+    const [hash, r, g, b] = hex;
+    return `${hash}${r}${r}${g}${g}${b}${b}`;
+  }
+  return hex;
+};
+
 const normalizeRegion = (raw: any): Region => {
   const polygon = polygonPointsFromRaw(raw?.polygon);
   let mask: RoomMask | null = null;
@@ -369,6 +389,7 @@ const normalizeRegion = (raw: any): Region => {
     maskManifest: manifest,
     notes: typeof raw?.notes === 'string' ? raw.notes : raw?.notes ?? null,
     revealOrder: raw?.revealOrder ?? null,
+    color: normalizeRegionColor(raw?.color ?? raw?.data?.color),
   };
 };
 
@@ -394,6 +415,9 @@ const serializeRegionPayload = (payload: Partial<RegionPayload>) => {
   }
   if (payload.maskManifest !== undefined) {
     body.maskManifest = payload.maskManifest;
+  }
+  if (payload.color !== undefined) {
+    body.color = payload.color === null ? null : String(payload.color);
   }
   return body;
 };

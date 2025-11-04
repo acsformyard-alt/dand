@@ -19,6 +19,21 @@ type SidebarTab = 'rooms' | 'markers' | 'other';
 
 const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
+const REGION_COLOR_PALETTE = [
+  '#ff6b6b',
+  '#4ecdc4',
+  '#ffd166',
+  '#9b5de5',
+  '#48cae4',
+  '#f72585',
+  '#06d6a0',
+  '#f8961e',
+  '#577590',
+  '#ff7f50',
+  '#2ec4b6',
+  '#c77dff',
+];
+
 const normalizeHexColor = (value: string | null | undefined): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -30,6 +45,37 @@ const normalizeHexColor = (value: string | null | undefined): string | null => {
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
   }
   return `#${hex.toLowerCase()}`;
+};
+
+const hexToRgba = (hex: string | null, alpha: number) => {
+  if (!hex) {
+    return null;
+  }
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) {
+    return null;
+  }
+  const value = normalized.slice(1);
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getReadableTextColor = (hex: string | null) => {
+  if (!hex) {
+    return '#1f2937';
+  }
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) {
+    return '#1f2937';
+  }
+  const value = normalized.slice(1);
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.65 ? '#0f172a' : '#f8fafc';
 };
 
 const computeCentroid = (points: Array<{ x: number; y: number }>) => {
@@ -76,6 +122,28 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
+  const regionColorAssignments = useMemo(() => {
+    const assignments = new Map<string, string>();
+    const sortedRegions = [...regions].sort((a, b) => {
+      const orderA = a.revealOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.revealOrder ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    sortedRegions.forEach((region, index) => {
+      const explicitColor = normalizeHexColor(region.color);
+      if (explicitColor) {
+        assignments.set(region.id, explicitColor);
+        return;
+      }
+      const fallbackColor = REGION_COLOR_PALETTE[index % REGION_COLOR_PALETTE.length];
+      assignments.set(region.id, fallbackColor);
+    });
+    return assignments;
+  }, [regions]);
+
   const regionShapes = useMemo(
     () =>
       regions
@@ -85,6 +153,10 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             return null;
           }
           const centroid = computeCentroid(polygon);
+          const baseColor = regionColorAssignments.get(region.id) ?? null;
+          const fillColor = hexToRgba(baseColor, 0.18) ?? 'rgba(253, 230, 138, 0.18)';
+          const strokeColor = hexToRgba(baseColor, 0.65) ?? 'rgba(217, 119, 6, 0.65)';
+          const labelColor = getReadableTextColor(baseColor);
           const scaledPath = polygon
             .map((point, index) => {
               const x = point.x * viewWidth;
@@ -100,10 +172,23 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               x: centroid.x * viewWidth,
               y: centroid.y * viewHeight,
             },
+            fillColor,
+            strokeColor,
+            labelColor,
           };
         })
-        .filter((shape): shape is { id: string; name: string; path: string; centroid: { x: number; y: number } } => Boolean(shape)),
-    [regions, viewHeight, viewWidth],
+        .filter(
+          (shape): shape is {
+            id: string;
+            name: string;
+            path: string;
+            centroid: { x: number; y: number };
+            fillColor: string;
+            strokeColor: string;
+            labelColor: string;
+          } => Boolean(shape),
+        ),
+    [regionColorAssignments, regions, viewHeight, viewWidth],
   );
 
   const markerShapes = useMemo(
@@ -204,7 +289,13 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             {viewMode === 'dm' &&
               regionShapes.map((shape) => (
                 <g key={shape.id}>
-                  <path d={shape.path} fill="rgba(253, 230, 138, 0.15)" stroke="rgba(217, 119, 6, 0.6)" strokeWidth={2} />
+                  <path
+                    d={shape.path}
+                    fill={shape.fillColor}
+                    stroke={shape.strokeColor}
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                  />
                   <text
                     x={shape.centroid.x}
                     y={shape.centroid.y}
@@ -212,7 +303,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                     style={{
                       fontSize: 14,
                       fontWeight: 600,
-                      fill: '#1f2937',
+                      fill: shape.labelColor,
                       stroke: 'rgba(255, 255, 255, 0.8)',
                       strokeWidth: 3,
                       strokeLinejoin: 'round',

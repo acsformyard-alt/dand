@@ -46,6 +46,7 @@ export interface Region {
   maskManifest?: RoomMaskManifestEntry | null;
   notes?: string | null;
   revealOrder?: number | null;
+  color?: string | null;
 }
 
 export type MarkerPoint = { x: number; y: number };
