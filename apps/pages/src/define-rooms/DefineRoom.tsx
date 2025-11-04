@@ -57,6 +57,20 @@ type TemporaryMarker = {
   linkedRoomId: string | null;
 };
 
+export type DefineRoomMarkerType = TemporaryMarkerType;
+
+export interface DefineRoomMarker {
+  id: string;
+  type: DefineRoomMarkerType;
+  name: string;
+  description: string;
+  tags: string;
+  visibleAtStart: boolean;
+  x: number;
+  y: number;
+  linkedRoomId: string | null;
+}
+
 type MarkerDisplayMetrics = {
   offsetX: number;
   offsetY: number;
@@ -1100,6 +1114,20 @@ export class DefineRoom {
       ...room,
       mask: room.mask.slice(),
       colorVector: [...room.colorVector] as [number, number, number],
+    }));
+  }
+
+  public getMarkers(): DefineRoomMarker[] {
+    return this.temporaryMarkers.map((marker) => ({
+      id: marker.id,
+      type: marker.type,
+      name: marker.name,
+      description: marker.description,
+      tags: marker.tags,
+      visibleAtStart: marker.visibleAtStart,
+      x: marker.x,
+      y: marker.y,
+      linkedRoomId: marker.linkedRoomId,
     }));
   }
 
