@@ -5,7 +5,11 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { DefineRoom, type DefineRoomData } from '../define-rooms/DefineRoom';
+import {
+  DefineRoom,
+  type DefineRoomData,
+  type DefineRoomMarker,
+} from '../define-rooms/DefineRoom';
 import '../define-rooms/styles.css';
 import { apiClient } from '../api/client';
 import {
@@ -457,6 +461,56 @@ const summariseRooms = (
     }));
 };
 
+const summariseMarkers = (
+  markers: DefineRoomMarker[],
+  dimensions: { width: number; height: number },
+): DraftMarker[] => {
+  const { width, height } = dimensions;
+  if (!width || !height) {
+    return [];
+  }
+
+  const widthDenominator = Math.max(1, width - 1);
+  const heightDenominator = Math.max(1, height - 1);
+
+  return markers.map((marker, index) => {
+    const definition = getMapMarkerIconDefinition(marker.type);
+    const trimmedName = marker.name.trim();
+    const label = trimmedName || definition?.label || `Marker ${index + 1}`;
+    const trimmedDescription = marker.description.trim();
+    const trimmedTags = marker.tags.trim();
+    const notesSections: string[] = [];
+    if (trimmedDescription) {
+      notesSections.push(trimmedDescription);
+    }
+    if (trimmedTags) {
+      notesSections.push(`Tags: ${trimmedTags}`);
+    }
+    if (marker.visibleAtStart) {
+      notesSections.push('Visible upon room entry');
+    }
+
+    const draft: DraftMarker = {
+      id: marker.id,
+      label,
+      color: definition?.defaultColor ?? '#facc15',
+      notes: notesSections.join('\n\n'),
+      x: clamp(marker.x / widthDenominator, 0, 1),
+      y: clamp(marker.y / heightDenominator, 0, 1),
+      iconKey: definition?.key ?? null,
+      kind: definition?.kind ?? 'point',
+      areaShape: null,
+      areaCenter: null,
+      areaRadius: null,
+      areaPoints: [],
+      linkedRoomId: marker.linkedRoomId,
+      linkedRoomIdSource: 'auto',
+    };
+
+    return draft;
+  });
+};
+
 const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   campaign,
   onClose,
@@ -593,6 +647,32 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setDefinedRooms(rooms);
   }, []);
 
+  const syncMarkersFromEditor = useCallback(
+    (options?: { updateState?: boolean }) => {
+      const shouldUpdateState = options?.updateState ?? true;
+      const instance = defineRoomRef.current;
+      if (!instance) {
+        if (shouldUpdateState) {
+          setMarkers([]);
+        }
+        return [] as DraftMarker[];
+      }
+      const dimensions = instance.getImageDimensions();
+      if (!dimensions.width || !dimensions.height) {
+        if (shouldUpdateState) {
+          setMarkers([]);
+        }
+        return [] as DraftMarker[];
+      }
+      const nextMarkers = summariseMarkers(instance.getMarkers(), dimensions);
+      if (shouldUpdateState) {
+        setMarkers(nextMarkers);
+      }
+      return nextMarkers;
+    },
+    [setMarkers],
+  );
+
   useEffect(() => {
     const editor = new DefineRoom({ mode: 'embedded' });
     defineRoomRef.current = editor;
@@ -601,6 +681,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     const originalClose = editor.close.bind(editor);
     (editor as unknown as { close: () => void }).close = () => {
       syncRoomsFromEditor();
+      syncMarkersFromEditor();
       originalClose();
     };
 
@@ -611,7 +692,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       defineRoomImageRef.current = null;
       setDefineRoomReady(false);
     };
-  }, [syncRoomsFromEditor]);
+  }, [syncMarkersFromEditor, syncRoomsFromEditor]);
 
   useEffect(() => {
     const editor = defineRoomRef.current;
@@ -1520,6 +1601,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
   const handleContinue = () => {
     if (step === 2) {
       syncRoomsFromEditor();
+      syncMarkersFromEditor();
     }
     if (step < steps.length - 1) {
       setStep((current) => (current + 1) as WizardStep);
@@ -1533,6 +1615,7 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     }
     if (step === 2) {
       syncRoomsFromEditor();
+      syncMarkersFromEditor();
     }
     setStep((current) => (current - 1) as WizardStep);
   };
@@ -1547,6 +1630,15 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       return;
     }
     syncRoomsFromEditor();
+    const editorMarkers = syncMarkersFromEditor({ updateState: false });
+    const markersById = new Map<string, DraftMarker>();
+    editorMarkers.forEach((marker) => {
+      markersById.set(marker.id, marker);
+    });
+    markers.forEach((marker) => {
+      markersById.set(marker.id, marker);
+    });
+    const markersForSubmission = Array.from(markersById.values());
     try {
       setCreating(true);
       setError(null);
@@ -1616,11 +1708,10 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         createdRegions.push(region);
       }
 
-      const resolvedMarkers = markers.map((marker) =>
+      const createdMarkers: Marker[] = [];
+      const resolvedMarkers = markersForSubmission.map((marker) =>
         marker.linkedRoomIdSource === 'auto' ? applyAutoAssociation(marker) : marker,
       );
-
-      const createdMarkers: Marker[] = [];
       for (const marker of resolvedMarkers) {
         let geometry: {
           kind: 'point' | 'area';
