@@ -101,7 +101,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             aria-label="Snap strength"
           />
           <span className="text-xs font-normal text-slate-600 dark:text-slate-400">
-            Controls how aggressively polygons snap to the cost pyramid edges.
+            Controls how aggressively mask edges snap to the cost pyramid boundaries.
           </span>
         </label>
         <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">

@@ -164,6 +164,14 @@ function decodeBase64DataUrl(dataUrl) {
   }
 }
 __name(decodeBase64DataUrl, "decodeBase64DataUrl");
+function encodeBytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+__name(encodeBytesToBase64, "encodeBytesToBase64");
 function normalizeBounds(bounds) {
   if (!bounds || typeof bounds !== "object")
     return null;
@@ -228,6 +236,32 @@ function prepareMaskManifest(regionId, maskPayload, manifestPayload) {
   return { manifest, pngBytes: decoded.bytes };
 }
 __name(prepareMaskManifest, "prepareMaskManifest");
+async function loadMaskData(env, manifest) {
+  if (!manifest || typeof manifest !== "object")
+    return null;
+  const key = typeof manifest.key === "string" ? manifest.key : null;
+  if (!key)
+    return null;
+  try {
+    const object = await env.MAPS_BUCKET.get(key);
+    if (!object)
+      return null;
+    const arrayBuffer = await object.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    const base64 = encodeBytesToBase64(bytes);
+    const mimeType = object.httpMetadata?.contentType || "image/png";
+    const response = {
+      dataUrl: `data:${mimeType};base64,${base64}`
+    };
+    if (manifest.bounds)
+      response.bounds = manifest.bounds;
+    return response;
+  } catch (error) {
+    console.error("Failed to load mask image from bucket", error);
+    return null;
+  }
+}
+__name(loadMaskData, "loadMaskData");
 function normalizeOptionalText(value) {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -666,24 +700,41 @@ var src_default = {
         const mapId = url.pathname.split("/")[3];
         if (request.method === "GET") {
           const result = await env.MAPS_DB.prepare(
-            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
+            "SELECT id, map_id as mapId, name, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
-          return jsonResponse({
-            regions: result.results.map((r) => ({
-              ...r,
-              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
-              maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null,
-              color:
-                typeof r.color === "string"
-                  ? r.color.trim().length > 0
-                    ? r.color.trim().toLowerCase()
-                    : null
-                  : r.color ?? null,
-              description: normalizeOptionalText(r.description ?? null),
-              tags: normalizeTagsValue(r.tags ?? null),
-              visibleAtStart: booleanFromStorage(r.visibleAtStart)
-            }))
-          }, { headers: corsHeaders });
+          const regions = await Promise.all(
+            result.results.map(async (r) => {
+              let manifest = r.maskManifest;
+              if (typeof manifest === "string") {
+                try {
+                  manifest = JSON.parse(manifest);
+                } catch (err) {
+                  console.error("Failed to parse region mask manifest", err);
+                  manifest = null;
+                }
+              }
+              const mask = await loadMaskData(env, manifest);
+              return {
+                id: r.id,
+                mapId: r.mapId,
+                name: r.name,
+                notes: r.notes,
+                revealOrder: r.revealOrder,
+                maskManifest: manifest ?? null,
+                mask,
+                color:
+                  typeof r.color === "string"
+                    ? r.color.trim().length > 0
+                      ? r.color.trim().toLowerCase()
+                      : null
+                    : r.color ?? null,
+                description: normalizeOptionalText(r.description ?? null),
+                tags: normalizeTagsValue(r.tags ?? null),
+                visibleAtStart: booleanFromStorage(r.visibleAtStart)
+              };
+            })
+          );
+          return jsonResponse({ regions }, { headers: corsHeaders });
         }
         if (request.method === "POST") {
           if (!user) {
@@ -694,7 +745,13 @@ var src_default = {
             return errorResponse("Map not found", 404, { headers: corsHeaders });
           }
           const body = await parseJSON(request);
-          if (!body || typeof body.name !== "string" || !Array.isArray(body.polygon)) {
+          if (
+            !body ||
+            typeof body.name !== "string" ||
+            !body.mask ||
+            typeof body.mask !== "object" ||
+            typeof body.mask.dataUrl !== "string"
+          ) {
             return errorResponse("Invalid region", 400, { headers: corsHeaders });
           }
           const regionId = crypto.randomUUID();
@@ -713,12 +770,11 @@ var src_default = {
           const normalizedTags = normalizeTagsValue(body?.tags);
           const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order, mask_manifest, color, description, tags, visible_at_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO regions (id, map_id, name, notes, reveal_order, mask_manifest, color, description, tags, visible_at_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           ).bind(
             regionId,
             mapId,
             body.name,
-            JSON.stringify(body.polygon),
             body.notes || null,
             typeof body.revealOrder === "number" ? body.revealOrder : null,
             manifestObject ? JSON.stringify(manifestObject) : null,
@@ -727,14 +783,18 @@ var src_default = {
             normalizedTags,
             visibleAtStartFlag
           ).run();
+          const maskBounds = maskPreparation.manifest?.bounds ?? (body.mask?.bounds ?? null);
           return jsonResponse({
             region: {
               id: regionId,
               mapId,
               name: body.name,
-              polygon: body.polygon,
               notes: body.notes || null,
               revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null,
+              mask: {
+                dataUrl: body.mask.dataUrl,
+                ...(maskBounds ? { bounds: maskBounds } : {}),
+              },
               maskManifest: manifestObject,
               color: normalizedColor,
               description: normalizedDescription,
@@ -785,10 +845,9 @@ var src_default = {
           const normalizedTags = normalizeTagsValue(body?.tags);
           const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ?, description = ?, tags = ?, visible_at_start = ? WHERE id = ?"
+            "UPDATE regions SET name = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ?, description = ?, tags = ?, visible_at_start = ? WHERE id = ?"
           ).bind(
             body?.name || null,
-            body?.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
             body?.notes || null,
             typeof body?.revealOrder === "number" ? body.revealOrder : null,
             manifestJson,
@@ -798,7 +857,15 @@ var src_default = {
             visibleAtStartFlag,
             regionId
           ).run();
-          return jsonResponse({ success: true, maskManifest: manifestObject ?? null }, { headers: corsHeaders });
+          const maskBounds = maskPreparation.manifest?.bounds ?? (body?.mask?.bounds ?? null);
+          const maskResponse =
+            body?.mask && typeof body.mask === "object" && typeof body.mask.dataUrl === "string"
+              ? {
+                  dataUrl: body.mask.dataUrl,
+                  ...(maskBounds ? { bounds: maskBounds } : {}),
+                }
+              : null;
+          return jsonResponse({ success: true, maskManifest: manifestObject ?? null, mask: maskResponse }, { headers: corsHeaders });
         }
         if (request.method === "DELETE") {
           if (!user)

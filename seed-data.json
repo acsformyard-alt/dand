@@ -23,49 +23,7 @@
       "height": 1800
     }
   ],
-  "regions": [
-    {
-      "mapName": "Warren Overview",
-      "name": "Entrance Tunnel",
-      "polygon": [
-        {"x": 0.12, "y": 0.18},
-        {"x": 0.18, "y": 0.17},
-        {"x": 0.21, "y": 0.26},
-        {"x": 0.15, "y": 0.28}
-      ],
-      "notes": "Crumbling stone stairs lead into the earth.",
-      "revealOrder": 1,
-      "color": "#facc15"
-    },
-    {
-      "mapName": "Warren Overview",
-      "name": "Goblin Market",
-      "polygon": [
-        {"x": 0.42, "y": 0.45},
-        {"x": 0.51, "y": 0.44},
-        {"x": 0.56, "y": 0.52},
-        {"x": 0.48, "y": 0.56},
-        {"x": 0.41, "y": 0.52}
-      ],
-      "notes": "Bartering goblins trade junk and trinkets.",
-      "revealOrder": 2,
-      "color": "#fb7185"
-    },
-    {
-      "mapName": "Warren Overview",
-      "name": "Boss Lair",
-      "polygon": [
-        {"x": 0.72, "y": 0.22},
-        {"x": 0.8, "y": 0.22},
-        {"x": 0.83, "y": 0.28},
-        {"x": 0.79, "y": 0.34},
-        {"x": 0.71, "y": 0.32}
-      ],
-      "notes": "The goblin boss plans his raids here.",
-      "revealOrder": 3,
-      "color": "#38bdf8"
-    }
-  ],
+  "regions": [],
   "markers": [
     {
       "mapName": "Warren Overview",

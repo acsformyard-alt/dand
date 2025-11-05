@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
-import { roomMaskToPolygon } from '../utils/roomMask';
+import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -44,33 +44,6 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const computeCentroid = (points: Array<{ x: number; y: number }>) => {
-  if (points.length === 0) {
-    return { x: 0.5, y: 0.5 };
-  }
-  let doubleArea = 0;
-  let centroidX = 0;
-  let centroidY = 0;
-  for (let i = 0; i < points.length; i += 1) {
-    const current = points[i];
-    const next = points[(i + 1) % points.length];
-    const factor = current.x * next.y - next.x * current.y;
-    doubleArea += factor;
-    centroidX += (current.x + next.x) * factor;
-    centroidY += (current.y + next.y) * factor;
-  }
-  if (Math.abs(doubleArea) < 1e-6) {
-    const avgX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
-    const avgY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-    return { x: avgX, y: avgY };
-  }
-  const area = doubleArea / 2;
-  return {
-    x: centroidX / (6 * area),
-    y: centroidY / (6 * area),
-  };
-};
-
 const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   session,
   mapImageUrl,
@@ -88,44 +61,38 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
-  const regionShapes = useMemo(
+  const regionOverlays = useMemo(
     () =>
       regions
         .map((region) => {
-          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
-          const polygon = roomMaskToPolygon(region.mask);
-          if (polygon.length === 0) {
+          if (!roomMaskHasCoverage(region.mask)) {
             return null;
           }
-          const centroid = computeCentroid(polygon);
-          const scaledPath = polygon
-            .map((point, index) => {
-              const x = point.x * viewWidth;
-              const y = point.y * viewHeight;
-              return `${index === 0 ? 'M' : 'L'}${x},${y}`;
-            })
-            .join(' ');
+          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
+          const centroid = computeRoomMaskCentroid(region.mask);
+          const bounds = region.mask.bounds;
+          const dataUrl = region.maskManifest?.dataUrl ?? encodeRoomMaskToDataUrl(region.mask);
           return {
             id: region.id,
             name: region.name,
-            path: `${scaledPath} Z`,
             centroid: {
               x: centroid.x * viewWidth,
               y: centroid.y * viewHeight,
             },
-            fillColor: hexToRgba(baseColor, 0.15),
-            strokeColor: hexToRgba(baseColor, 0.6),
+            bounds,
+            dataUrl,
+            fillColor: hexToRgba(baseColor, 0.2),
           };
         })
         .filter(
-          (shape): shape is {
+          (entry): entry is {
             id: string;
             name: string;
-            path: string;
             centroid: { x: number; y: number };
+            bounds: Region['mask']['bounds'];
+            dataUrl: string;
             fillColor: string;
-            strokeColor: string;
-          } => Boolean(shape),
+          } => Boolean(entry),
         ),
     [regions, viewHeight, viewWidth],
   );
@@ -214,6 +181,29 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             </button>
           </div>
           <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
+            <defs>
+              {regionOverlays.map((overlay) => {
+                const maskId = `region-mask-${overlay.id}`;
+                const { bounds } = overlay;
+                const maskX = bounds.minX * viewWidth;
+                const maskY = bounds.minY * viewHeight;
+                const maskWidth = Math.max(1, (bounds.maxX - bounds.minX) * viewWidth);
+                const maskHeight = Math.max(1, (bounds.maxY - bounds.minY) * viewHeight);
+                return (
+                  <mask id={maskId} key={maskId} maskUnits="userSpaceOnUse">
+                    <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="black" />
+                    <image
+                      href={overlay.dataUrl}
+                      x={maskX}
+                      y={maskY}
+                      width={maskWidth}
+                      height={maskHeight}
+                      preserveAspectRatio="none"
+                    />
+                  </mask>
+                );
+              })}
+            </defs>
             <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.85)" />
             {mapImageUrl && (
               <image
@@ -225,13 +215,18 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 preserveAspectRatio="xMidYMid meet"
               />
             )}
-            {viewMode === 'dm' &&
-              regionShapes.map((shape) => (
-                <g key={shape.id}>
-                  <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
+            {viewMode === 'dm' && (
+              <>
+                {regionOverlays.map((overlay) => (
+                  <g key={`overlay-${overlay.id}`} mask={`url(#region-mask-${overlay.id})`}>
+                    <rect x={0} y={0} width={viewWidth} height={viewHeight} fill={overlay.fillColor} />
+                  </g>
+                ))}
+                {regionOverlays.map((overlay) => (
                   <text
-                    x={shape.centroid.x}
-                    y={shape.centroid.y}
+                    key={`label-${overlay.id}`}
+                    x={overlay.centroid.x}
+                    y={overlay.centroid.y}
                     textAnchor="middle"
                     style={{
                       fontSize: 14,
@@ -243,10 +238,11 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                       paintOrder: 'stroke',
                     }}
                   >
-                    {shape.name}
+                    {overlay.name}
                   </text>
-                </g>
-              ))}
+                ))}
+              </>
+            )}
             {viewMode === 'dm' &&
               markerShapes.map((marker) => (
                 <g key={marker.id} transform={`translate(${marker.position.x}, ${marker.position.y})`}>
