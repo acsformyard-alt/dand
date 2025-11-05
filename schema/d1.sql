@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS regions (
     reveal_order INTEGER DEFAULT 0,
     mask_manifest TEXT,
     color TEXT,
+    description TEXT,
+    tags TEXT,
+    visible_at_start INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 

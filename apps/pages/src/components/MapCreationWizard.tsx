@@ -1702,6 +1702,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         const region = await apiClient.createRegion(map.id, {
           name: room.name.trim() || `Room ${index + 1}`,
           mask: room.mask,
+          description: trimmedDescription || undefined,
+          tags: trimmedTags || undefined,
+          visibleAtStart: room.visibleAtStart,
           notes: notesValue,
           revealOrder: room.visibleAtStart ? index : undefined,
           color: colorValue ? colorValue.toLowerCase() : undefined,

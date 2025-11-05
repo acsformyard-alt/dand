@@ -52,6 +52,9 @@ interface RegionPayload {
   name: string;
   mask: RoomMask;
   maskManifest?: RoomMaskManifestEntry | null;
+  description?: string | null;
+  tags?: string | null;
+  visibleAtStart?: boolean;
   notes?: string;
   revealOrder?: number;
   color?: string | null;
@@ -336,6 +339,28 @@ const ensureManifest = (
 ): RoomMaskManifestEntry =>
   manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
 
+const parseBooleanLike = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value > 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return undefined;
+    }
+    if (['true', '1', 'yes'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no'].includes(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
+};
+
 const normalizeRegion = (raw: any): Region => {
   const polygon = polygonPointsFromRaw(raw?.polygon);
   let mask: RoomMask | null = null;
@@ -373,6 +398,19 @@ const normalizeRegion = (raw: any): Region => {
     name: typeof raw?.name === 'string' ? raw.name : 'Room',
     mask,
     maskManifest: manifest,
+    description:
+      typeof raw?.description === 'string'
+        ? raw.description
+        : raw?.description === null
+          ? null
+          : undefined,
+    tags:
+      typeof raw?.tags === 'string'
+        ? raw.tags
+        : raw?.tags === null
+          ? null
+          : undefined,
+    visibleAtStart: parseBooleanLike(raw?.visibleAtStart),
     notes: typeof raw?.notes === 'string' ? raw.notes : raw?.notes ?? null,
     revealOrder: raw?.revealOrder ?? null,
     color:
@@ -391,6 +429,15 @@ const serializeRegionPayload = (payload: Partial<RegionPayload>) => {
   }
   if (payload.notes !== undefined) {
     body.notes = payload.notes;
+  }
+  if (payload.description !== undefined) {
+    body.description = payload.description;
+  }
+  if (payload.tags !== undefined) {
+    body.tags = payload.tags;
+  }
+  if (payload.visibleAtStart !== undefined) {
+    body.visibleAtStart = payload.visibleAtStart;
   }
   if (payload.color !== undefined) {
     if (payload.color === null) {

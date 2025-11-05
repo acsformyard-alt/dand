@@ -44,6 +44,9 @@ export interface Region {
   name: string;
   mask: RoomMask;
   maskManifest?: RoomMaskManifestEntry | null;
+  description?: string | null;
+  tags?: string | null;
+  visibleAtStart?: boolean;
   notes?: string | null;
   revealOrder?: number | null;
   color?: string | null;

@@ -228,6 +228,59 @@ function prepareMaskManifest(regionId, maskPayload, manifestPayload) {
   return { manifest, pngBytes: decoded.bytes };
 }
 __name(prepareMaskManifest, "prepareMaskManifest");
+function normalizeOptionalText(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (value === null)
+    return null;
+  return null;
+}
+__name(normalizeOptionalText, "normalizeOptionalText");
+function normalizeTagsValue(value) {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((entry) => typeof entry === "string" ? entry.trim() : String(entry ?? "").trim())
+      .filter((entry) => entry.length > 0);
+    if (!normalized.length)
+      return null;
+    return normalized.join(", ");
+  }
+  return normalizeOptionalText(value);
+}
+__name(normalizeTagsValue, "normalizeTagsValue");
+function parseBooleanFlag(value) {
+  if (value === true || value === 1)
+    return 1;
+  if (value === false || value === 0)
+    return 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized)
+      return 0;
+    if (["true", "1", "yes", "y"].includes(normalized))
+      return 1;
+    if (["false", "0", "no", "n"].includes(normalized))
+      return 0;
+  }
+  return 0;
+}
+__name(parseBooleanFlag, "parseBooleanFlag");
+function booleanFromStorage(value) {
+  if (value === true || value === false)
+    return value;
+  if (typeof value === "number")
+    return value > 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized)
+      return false;
+    return ["true", "1", "yes", "y"].includes(normalized);
+  }
+  return false;
+}
+__name(booleanFromStorage, "booleanFromStorage");
 async function hashPassword(password, salt) {
   const saltBytes = salt ? base64UrlDecode(salt) : crypto.getRandomValues(new Uint8Array(16));
   const combined = new Uint8Array(saltBytes.length + password.length);
@@ -613,7 +666,7 @@ var src_default = {
         const mapId = url.pathname.split("/")[3];
         if (request.method === "GET") {
           const result = await env.MAPS_DB.prepare(
-            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
+            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
           return jsonResponse({
             regions: result.results.map((r) => ({
@@ -625,7 +678,10 @@ var src_default = {
                   ? r.color.trim().length > 0
                     ? r.color.trim().toLowerCase()
                     : null
-                  : r.color ?? null
+                  : r.color ?? null,
+              description: normalizeOptionalText(r.description ?? null),
+              tags: normalizeTagsValue(r.tags ?? null),
+              visibleAtStart: booleanFromStorage(r.visibleAtStart)
             }))
           }, { headers: corsHeaders });
         }
@@ -653,8 +709,11 @@ var src_default = {
           }
           const manifestObject = maskPreparation.manifest ?? null;
           const normalizedColor = typeof body.color === "string" && body.color.trim().length > 0 ? body.color.trim().toLowerCase() : null;
+          const normalizedDescription = normalizeOptionalText(body?.description);
+          const normalizedTags = normalizeTagsValue(body?.tags);
+          const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order, mask_manifest, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order, mask_manifest, color, description, tags, visible_at_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           ).bind(
             regionId,
             mapId,
@@ -663,7 +722,10 @@ var src_default = {
             body.notes || null,
             typeof body.revealOrder === "number" ? body.revealOrder : null,
             manifestObject ? JSON.stringify(manifestObject) : null,
-            normalizedColor
+            normalizedColor,
+            normalizedDescription,
+            normalizedTags,
+            visibleAtStartFlag
           ).run();
           return jsonResponse({
             region: {
@@ -674,7 +736,10 @@ var src_default = {
               notes: body.notes || null,
               revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null,
               maskManifest: manifestObject,
-              color: normalizedColor
+              color: normalizedColor,
+              description: normalizedDescription,
+              tags: normalizedTags,
+              visibleAtStart: visibleAtStartFlag === 1
             }
           }, { status: 201, headers: corsHeaders });
         }
@@ -716,8 +781,11 @@ var src_default = {
             });
           }
           const normalizedColor = typeof body?.color === "string" && body.color.trim().length > 0 ? body.color.trim().toLowerCase() : null;
+          const normalizedDescription = normalizeOptionalText(body?.description);
+          const normalizedTags = normalizeTagsValue(body?.tags);
+          const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ? WHERE id = ?"
+            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ?, description = ?, tags = ?, visible_at_start = ? WHERE id = ?"
           ).bind(
             body?.name || null,
             body?.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
@@ -725,6 +793,9 @@ var src_default = {
             typeof body?.revealOrder === "number" ? body.revealOrder : null,
             manifestJson,
             normalizedColor,
+            normalizedDescription,
+            normalizedTags,
+            visibleAtStartFlag,
             regionId
           ).run();
           return jsonResponse({ success: true, maskManifest: manifestObject ?? null }, { headers: corsHeaders });
