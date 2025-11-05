@@ -428,6 +428,10 @@ __name(createSignedUpload, "createSignedUpload");
 async function attachMaskDownloadUrl(env, bucket, manifest, expiration = 900) {
   if (!manifest || typeof manifest !== "object")
     return manifest ?? null;
+  const regionId = typeof manifest.roomId === "string" && manifest.roomId.length > 0 ? manifest.roomId : null;
+  if (regionId) {
+    return { ...manifest, url: `/api/masks/${encodeURIComponent(regionId)}` };
+  }
   const key = typeof manifest.key === "string" && manifest.key.length > 0 ? manifest.key : null;
   if (!key)
     return manifest;
@@ -673,6 +677,48 @@ var src_default = {
           return errorResponse("Map image not found", 404, { headers: corsHeaders });
         }
         const object = await env.MAPS_BUCKET.get(map.displayKey);
+        if (!object) {
+          return new Response("Not found", { status: 404, headers: corsHeaders });
+        }
+        const headers = new Headers(corsHeaders);
+        if (object.httpMetadata?.contentType) {
+          headers.set("Content-Type", object.httpMetadata.contentType);
+        } else {
+          headers.set("Content-Type", "image/png");
+        }
+        return new Response(object.body, { status: 200, headers });
+      }
+      if (url.pathname.match(/^\/api\/masks\/[a-z0-9-]+$/) && request.method === "GET") {
+        const regionId = url.pathname.split("/")[3];
+        const record = await env.MAPS_DB.prepare(
+          "SELECT mask_manifest as maskManifest FROM regions WHERE id = ?"
+        )
+          .bind(regionId)
+          .first();
+        if (!record || record.maskManifest === void 0 || record.maskManifest === null) {
+          return new Response("Not found", { status: 404, headers: corsHeaders });
+        }
+        let manifestPayload = record.maskManifest;
+        if (typeof manifestPayload === "string") {
+          try {
+            manifestPayload = JSON.parse(manifestPayload);
+          } catch (error) {
+            console.error("Failed to parse mask manifest for mask request", {
+              regionId,
+              errorName: error?.name,
+              errorMessage: error?.message,
+            });
+            manifestPayload = null;
+          }
+        }
+        const manifest = normalizeMaskManifest(regionId, null, manifestPayload);
+        const key = manifest && typeof manifest.key === "string" && manifest.key.length > 0
+          ? manifest.key
+          : `room-masks/${regionId}.png`;
+        if (!key) {
+          return new Response("Not found", { status: 404, headers: corsHeaders });
+        }
+        const object = await env.MAPS_BUCKET.get(key);
         if (!object) {
           return new Response("Not found", { status: 404, headers: corsHeaders });
         }

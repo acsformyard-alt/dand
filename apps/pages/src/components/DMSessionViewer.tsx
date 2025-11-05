@@ -110,12 +110,15 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           x: (safeMinX + (safeMaxX - safeMinX) / 2) * viewWidth,
           y: (safeMinY + (safeMaxY - safeMinY) / 2) * viewHeight,
         };
+        const fallbackMaskUrl = `/api/masks/${encodeURIComponent(region.id)}`;
         const maskUrl =
           typeof region.maskManifest?.url === 'string' && region.maskManifest.url.length > 0
             ? region.maskManifest.url
-            : typeof region.maskManifest?.dataUrl === 'string'
-              ? region.maskManifest.dataUrl
-              : null;
+            : region.maskManifest
+              ? typeof region.maskManifest.dataUrl === 'string'
+                ? region.maskManifest.dataUrl
+                : fallbackMaskUrl
+              : fallbackMaskUrl;
         return {
           id: region.id,
           name: region.name,

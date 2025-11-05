@@ -389,7 +389,9 @@ const ensureManifest = (
         typeof manifest.roomId === 'string' && manifest.roomId.length > 0 ? manifest.roomId : roomId,
       key: typeof manifest.key === 'string' && manifest.key.length > 0 ? manifest.key : fallbackKey,
     };
-    if (!normalized.dataUrl && !normalized.url) {
+    const hadUrl = typeof normalized.url === 'string' && normalized.url.length > 0;
+    normalized.url = `/api/masks/${encodeURIComponent(normalized.roomId)}`;
+    if (!normalized.dataUrl && !hadUrl) {
       normalized.dataUrl = encodeRoomMaskToDataUrl(mask);
     }
     return normalized;
@@ -397,6 +399,7 @@ const ensureManifest = (
   return {
     roomId,
     key: fallbackKey,
+    url: `/api/masks/${encodeURIComponent(roomId)}`,
     dataUrl: encodeRoomMaskToDataUrl(mask),
   };
 };
