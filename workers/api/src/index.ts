@@ -668,22 +668,77 @@ var src_default = {
           const result = await env.MAPS_DB.prepare(
             "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
-          return jsonResponse({
-            regions: result.results.map((r) => ({
-              ...r,
-              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
-              maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null,
-              color:
-                typeof r.color === "string"
-                  ? r.color.trim().length > 0
-                    ? r.color.trim().toLowerCase()
-                    : null
-                  : r.color ?? null,
-              description: normalizeOptionalText(r.description ?? null),
-              tags: normalizeTagsValue(r.tags ?? null),
-              visibleAtStart: booleanFromStorage(r.visibleAtStart)
-            }))
-          }, { headers: corsHeaders });
+          const regions = await Promise.all(
+            result.results.map(async (r) => {
+              let polygon;
+              if (typeof r.polygon === "string") {
+                try {
+                  polygon = JSON.parse(r.polygon);
+                } catch (err) {
+                  console.error("Failed to parse stored polygon", {
+                    mapId,
+                    regionId: r.id,
+                    errorMessage: err?.message,
+                  });
+                  polygon = [];
+                }
+              } else {
+                polygon = r.polygon ?? [];
+              }
+              let rawManifest = r.maskManifest;
+              if (typeof r.maskManifest === "string") {
+                try {
+                  rawManifest = JSON.parse(r.maskManifest);
+                } catch (err) {
+                  console.error("Failed to parse stored mask manifest", {
+                    mapId,
+                    regionId: r.id,
+                    errorMessage: err?.message,
+                  });
+                  rawManifest = null;
+                }
+              }
+              let manifest = rawManifest && typeof rawManifest === "object" ? { ...rawManifest } : null;
+              if (manifest) {
+                if (typeof manifest.roomId !== "string" || !manifest.roomId) {
+                  manifest.roomId = r.id;
+                }
+                if (typeof manifest.key !== "string" || !manifest.key) {
+                  manifest.key = `room-masks/${r.id}.png`;
+                }
+                const manifestKey = typeof manifest.key === "string" ? manifest.key : null;
+                if (manifestKey) {
+                  try {
+                    const signedUrl = await createSignedUpload(env, env.MAPS_BUCKET, manifestKey, "GET", 300);
+                    manifest.url = signedUrl;
+                  } catch (error) {
+                    console.error("Failed to create signed mask URL", {
+                      mapId,
+                      regionId: r.id,
+                      key: manifestKey,
+                      errorName: error?.name,
+                      errorMessage: error?.message,
+                    });
+                  }
+                }
+              }
+              return {
+                ...r,
+                polygon,
+                maskManifest: manifest,
+                color:
+                  typeof r.color === "string"
+                    ? r.color.trim().length > 0
+                      ? r.color.trim().toLowerCase()
+                      : null
+                    : r.color ?? null,
+                description: normalizeOptionalText(r.description ?? null),
+                tags: normalizeTagsValue(r.tags ?? null),
+                visibleAtStart: booleanFromStorage(r.visibleAtStart)
+              };
+            })
+          );
+          return jsonResponse({ regions }, { headers: corsHeaders });
         }
         if (request.method === "POST") {
           if (!user) {

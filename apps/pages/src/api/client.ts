@@ -376,12 +376,75 @@ const normalizeMarker = (raw: any): Marker => {
   return base;
 };
 
+const parseMaskManifest = (
+  roomId: string,
+  manifest: unknown,
+): RoomMaskManifestEntry | null => {
+  if (!manifest) {
+    return null;
+  }
+  let source: unknown = manifest;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source);
+    } catch (_error) {
+      return null;
+    }
+  }
+  if (!source || typeof source !== 'object') {
+    return null;
+  }
+  const manifestObject = source as Record<string, unknown>;
+  return {
+    ...(manifestObject as RoomMaskManifestEntry),
+    roomId:
+      typeof manifestObject.roomId === 'string' && manifestObject.roomId
+        ? (manifestObject.roomId as string)
+        : roomId,
+    key:
+      typeof manifestObject.key === 'string' && manifestObject.key
+        ? (manifestObject.key as string)
+        : `room-masks/${roomId}.png`,
+  };
+};
+
 const ensureManifest = (
   roomId: string,
-  mask: RoomMask,
+  mask: RoomMask | null,
   manifest?: RoomMaskManifestEntry | null,
-): RoomMaskManifestEntry =>
-  manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
+): RoomMaskManifestEntry | null => {
+  if (manifest) {
+    const normalized: RoomMaskManifestEntry = {
+      ...manifest,
+      roomId: manifest.roomId && typeof manifest.roomId === 'string' ? manifest.roomId : roomId,
+      key: manifest.key && typeof manifest.key === 'string' ? manifest.key : `room-masks/${roomId}.png`,
+    };
+    if (!normalized.bounds && mask) {
+      normalized.bounds = mask.bounds;
+    }
+    if (normalized.width === undefined && mask) {
+      normalized.width = mask.width;
+    }
+    if (normalized.height === undefined && mask) {
+      normalized.height = mask.height;
+    }
+    if (!normalized.dataUrl && !normalized.url && mask) {
+      normalized.dataUrl = encodeRoomMaskToDataUrl(mask);
+    }
+    return normalized;
+  }
+  if (!mask) {
+    return null;
+  }
+  return {
+    roomId,
+    key: `room-masks/${roomId}.png`,
+    dataUrl: encodeRoomMaskToDataUrl(mask),
+    width: mask.width,
+    height: mask.height,
+    bounds: mask.bounds,
+  };
+};
 
 const parseBooleanLike = (value: unknown): boolean | undefined => {
   if (typeof value === 'boolean') {
@@ -405,43 +468,80 @@ const parseBooleanLike = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+const maskWithBounds = (mask: RoomMask, source: unknown): RoomMask => {
+  if (!source || typeof source !== 'object') {
+    return mask;
+  }
+  const candidate = (source as { bounds?: unknown }).bounds;
+  if (!candidate || typeof candidate !== 'object') {
+    return mask;
+  }
+  const bounds = candidate as { minX?: unknown; minY?: unknown; maxX?: unknown; maxY?: unknown };
+  const minX = Number(bounds.minX);
+  const minY = Number(bounds.minY);
+  const maxX = Number(bounds.maxX);
+  const maxY = Number(bounds.maxY);
+  if ([minX, minY, maxX, maxY].some((value) => !Number.isFinite(value))) {
+    return mask;
+  }
+  return {
+    ...mask,
+    bounds: {
+      minX,
+      minY,
+      maxX,
+      maxY,
+    },
+  };
+};
+
+const decodeMaskFromSource = (source: unknown): RoomMask | null => {
+  if (!source || typeof source !== 'object') {
+    return null;
+  }
+  const dataUrl = (source as { dataUrl?: unknown }).dataUrl;
+  if (typeof dataUrl !== 'string') {
+    return null;
+  }
+  try {
+    const decoded = decodeRoomMaskFromDataUrl(dataUrl);
+    return maskWithBounds(decoded, source);
+  } catch (_error) {
+    return null;
+  }
+};
+
 const normalizeRegion = (raw: any): Region => {
   const polygon = polygonPointsFromRaw(raw?.polygon);
+  const roomId = String(raw?.id ?? '');
+  const manifestPayload = parseMaskManifest(roomId, raw?.maskManifest);
   let mask: RoomMask | null = null;
-  const rawMask = raw?.mask;
-  if (rawMask && typeof rawMask === 'object') {
-    if (typeof rawMask.dataUrl === 'string') {
-      try {
-        mask = decodeRoomMaskFromDataUrl(rawMask.dataUrl);
-        if (rawMask.bounds) {
-          mask = {
-            ...mask,
-            bounds: {
-              minX: Number(rawMask.bounds.minX) || mask.bounds.minX,
-              minY: Number(rawMask.bounds.minY) || mask.bounds.minY,
-              maxX: Number(rawMask.bounds.maxX) || mask.bounds.maxX,
-              maxY: Number(rawMask.bounds.maxY) || mask.bounds.maxY,
-            },
-          };
-        }
-      } catch (_error) {
-        mask = null;
-      }
-    }
+
+  const decodedFromMask = decodeMaskFromSource(raw?.mask);
+  if (decodedFromMask) {
+    mask = decodedFromMask;
   }
-  if (!mask && polygon.length) {
+
+  if (!mask && manifestPayload) {
+    mask = decodeMaskFromSource(manifestPayload);
+  }
+
+  if (!mask && (!manifestPayload || (!manifestPayload.url && !manifestPayload.dataUrl)) && polygon.length) {
     mask = createRoomMaskFromPolygon(polygon, { resolution: 256 });
   }
+
   if (!mask) {
     mask = emptyRoomMask();
   }
-  const manifest = ensureManifest(String(raw?.id ?? ''), mask, raw?.maskManifest);
+
+  const manifest = ensureManifest(roomId, mask, manifestPayload ?? undefined);
   return {
-    id: String(raw?.id ?? ''),
+    id: roomId,
     mapId: String(raw?.mapId ?? ''),
     name: typeof raw?.name === 'string' ? raw.name : 'Room',
     mask,
-    maskManifest: manifest,
+    maskManifest: manifest ?? undefined,
+    polygon: polygon.length ? polygon : undefined,
     description:
       typeof raw?.description === 'string'
         ? raw.description
@@ -710,6 +810,41 @@ export class ApiClient {
   async getLobby(): Promise<LobbySessionSummary[]> {
     const { sessions } = await this.request<{ sessions: LobbySessionSummary[] }>('/api/lobby');
     return sessions;
+  }
+
+  async fetchRegionMask(manifest?: RoomMaskManifestEntry | null): Promise<RoomMask | null> {
+    if (!manifest) {
+      return null;
+    }
+    const cached = decodeMaskFromSource(manifest);
+    if (cached) {
+      return cached;
+    }
+    if (typeof manifest.url !== 'string' || !manifest.url) {
+      return null;
+    }
+    try {
+      const response = await fetch(manifest.url);
+      if (!response.ok) {
+        return null;
+      }
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 1) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      const dataUrl = `data:image/png;base64,${base64}`;
+      manifest.dataUrl = dataUrl;
+      const decoded = decodeMaskFromSource(manifest);
+      if (decoded) {
+        return decoded;
+      }
+    } catch (error) {
+      console.error('Failed to download region mask', error);
+    }
+    return null;
   }
 
   buildAssetUrl(key: string) {

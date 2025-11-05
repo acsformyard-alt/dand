@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
-import { roomMaskToPolygon } from '../utils/roomMask';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -43,6 +42,52 @@ const hexToRgba = (hex: string, alpha: number) => {
   const b = parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
+
+const buildSvgPath = (
+  points: Array<{ x: number; y: number }>,
+  width: number,
+  height: number,
+): string | null => {
+  if (points.length === 0) {
+    return null;
+  }
+  const commands = points
+    .map((point, index) => {
+      const x = point.x * width;
+      const y = point.y * height;
+      return `${index === 0 ? 'M' : 'L'}${x},${y}`;
+    })
+    .join(' ');
+  return `${commands} Z`;
+};
+
+type MaskRegionVisual = {
+  type: 'mask';
+  id: string;
+  name: string;
+  centroid: { x: number; y: number };
+  fillColor: string;
+  strokeColor: string;
+  maskId: string;
+  maskX: number;
+  maskY: number;
+  maskWidth: number;
+  maskHeight: number;
+  imageUrl: string;
+  outlinePath?: string;
+};
+
+type PolygonRegionVisual = {
+  type: 'polygon';
+  id: string;
+  name: string;
+  centroid: { x: number; y: number };
+  fillColor: string;
+  strokeColor: string;
+  path: string;
+};
+
+type RegionVisual = MaskRegionVisual | PolygonRegionVisual;
 
 const computeCentroid = (points: Array<{ x: number; y: number }>) => {
   if (points.length === 0) {
@@ -88,46 +133,84 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
-  const regionShapes = useMemo(
-    () =>
-      regions
-        .map((region) => {
-          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
-          const polygon = roomMaskToPolygon(region.mask);
-          if (polygon.length === 0) {
-            return null;
+  const regionVisuals = useMemo(() => {
+    return regions
+      .map<RegionVisual | null>((region) => {
+        const baseColor = normalizeHexColor(region.color) ?? '#facc15';
+        const polygonPoints = region.polygon ?? [];
+        const manifest = region.maskManifest ?? null;
+        const polygonPath = buildSvgPath(polygonPoints, viewWidth, viewHeight) ?? undefined;
+        const centroidSource = (() => {
+          if (polygonPoints.length > 0) {
+            return computeCentroid(polygonPoints);
           }
-          const centroid = computeCentroid(polygon);
-          const scaledPath = polygon
-            .map((point, index) => {
-              const x = point.x * viewWidth;
-              const y = point.y * viewHeight;
-              return `${index === 0 ? 'M' : 'L'}${x},${y}`;
-            })
-            .join(' ');
-          return {
-            id: region.id,
-            name: region.name,
-            path: `${scaledPath} Z`,
-            centroid: {
-              x: centroid.x * viewWidth,
-              y: centroid.y * viewHeight,
-            },
-            fillColor: hexToRgba(baseColor, 0.15),
-            strokeColor: hexToRgba(baseColor, 0.6),
-          };
-        })
-        .filter(
-          (shape): shape is {
-            id: string;
-            name: string;
-            path: string;
-            centroid: { x: number; y: number };
-            fillColor: string;
-            strokeColor: string;
-          } => Boolean(shape),
-        ),
-    [regions, viewHeight, viewWidth],
+          const bounds = manifest?.bounds;
+          if (bounds) {
+            const minX = Number(bounds.minX);
+            const minY = Number(bounds.minY);
+            const maxX = Number(bounds.maxX);
+            const maxY = Number(bounds.maxY);
+            if ([minX, minY, maxX, maxY].every((value) => Number.isFinite(value))) {
+              return {
+                x: (minX + maxX) / 2,
+                y: (minY + maxY) / 2,
+              };
+            }
+          }
+          return { x: 0.5, y: 0.5 };
+        })();
+        const centroid = {
+          x: centroidSource.x * viewWidth,
+          y: centroidSource.y * viewHeight,
+        };
+        const maskUrl = typeof manifest?.url === 'string' && manifest.url ? manifest.url : null;
+        const bounds = manifest?.bounds;
+        if (maskUrl && bounds) {
+          const minX = Number(bounds.minX);
+          const minY = Number(bounds.minY);
+          const maxX = Number(bounds.maxX);
+          const maxY = Number(bounds.maxY);
+          if ([minX, minY, maxX, maxY].every((value) => Number.isFinite(value))) {
+            const maskWidth = (maxX - minX) * viewWidth;
+            const maskHeight = (maxY - minY) * viewHeight;
+            if (maskWidth > 0 && maskHeight > 0) {
+              return {
+                type: 'mask' as const,
+                id: region.id,
+                name: region.name,
+                centroid,
+                fillColor: hexToRgba(baseColor, 0.18),
+                strokeColor: hexToRgba(baseColor, 0.6),
+                maskId: `region-mask-${region.id}`,
+                maskX: minX * viewWidth,
+                maskY: minY * viewHeight,
+                maskWidth,
+                maskHeight,
+                imageUrl: maskUrl,
+                outlinePath: polygonPath,
+              } satisfies MaskRegionVisual;
+            }
+          }
+        }
+        if (!polygonPath) {
+          return null;
+        }
+        return {
+          type: 'polygon' as const,
+          id: region.id,
+          name: region.name,
+          centroid,
+          fillColor: hexToRgba(baseColor, 0.15),
+          strokeColor: hexToRgba(baseColor, 0.6),
+          path: polygonPath,
+        } satisfies PolygonRegionVisual;
+      })
+      .filter((visual): visual is RegionVisual => Boolean(visual));
+  }, [regions, viewHeight, viewWidth]);
+
+  const maskVisuals = useMemo(
+    () => regionVisuals.filter((visual): visual is MaskRegionVisual => visual.type === 'mask'),
+    [regionVisuals],
   );
 
   const markerShapes = useMemo(
@@ -225,13 +308,48 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 preserveAspectRatio="xMidYMid meet"
               />
             )}
+            {maskVisuals.length > 0 && (
+              <defs>
+                {maskVisuals.map((visual) => (
+                  <mask key={visual.maskId} id={visual.maskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
+                    <image
+                      href={visual.imageUrl}
+                      x={visual.maskX}
+                      y={visual.maskY}
+                      width={visual.maskWidth}
+                      height={visual.maskHeight}
+                      preserveAspectRatio="none"
+                      crossOrigin="anonymous"
+                      style={{ imageRendering: 'pixelated' }}
+                    />
+                  </mask>
+                ))}
+              </defs>
+            )}
             {viewMode === 'dm' &&
-              regionShapes.map((shape) => (
-                <g key={shape.id}>
-                  <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
+              regionVisuals.map((visual) => (
+                <g key={visual.id}>
+                  {visual.type === 'mask' ? (
+                    <>
+                      <g mask={`url(#${visual.maskId})`}>
+                        <rect
+                          x={visual.maskX}
+                          y={visual.maskY}
+                          width={visual.maskWidth}
+                          height={visual.maskHeight}
+                          fill={visual.fillColor}
+                        />
+                      </g>
+                      {visual.outlinePath && (
+                        <path d={visual.outlinePath} fill="none" stroke={visual.strokeColor} strokeWidth={2} />
+                      )}
+                    </>
+                  ) : (
+                    <path d={visual.path} fill={visual.fillColor} stroke={visual.strokeColor} strokeWidth={2} />
+                  )}
                   <text
-                    x={shape.centroid.x}
-                    y={shape.centroid.y}
+                    x={visual.centroid.x}
+                    y={visual.centroid.y}
                     textAnchor="middle"
                     style={{
                       fontSize: 14,
@@ -243,7 +361,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                       paintOrder: 'stroke',
                     }}
                   >
-                    {shape.name}
+                    {visual.name}
                   </text>
                 </g>
               ))}

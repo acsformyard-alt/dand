@@ -35,7 +35,17 @@ export interface MapRecord {
 export interface RoomMaskManifestEntry {
   roomId: string;
   key: string;
-  dataUrl: string;
+  dataUrl?: string;
+  url?: string;
+  width?: number;
+  height?: number;
+  bounds?: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  };
+  [key: string]: unknown;
 }
 
 export interface Region {
@@ -44,6 +54,7 @@ export interface Region {
   name: string;
   mask: RoomMask;
   maskManifest?: RoomMaskManifestEntry | null;
+  polygon?: Array<{ x: number; y: number }>;
   description?: string | null;
   tags?: string | null;
   visibleAtStart?: boolean;
