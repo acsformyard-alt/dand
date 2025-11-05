@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS regions (
     notes TEXT,
     reveal_order INTEGER DEFAULT 0,
     mask_manifest TEXT,
+    color TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 

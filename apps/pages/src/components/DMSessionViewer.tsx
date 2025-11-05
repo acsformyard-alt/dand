@@ -32,6 +32,18 @@ const normalizeHexColor = (value: string | null | undefined): string | null => {
   return `#${hex.toLowerCase()}`;
 };
 
+const hexToRgba = (hex: string, alpha: number) => {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) {
+    return `rgba(250, 204, 21, ${alpha})`;
+  }
+  const value = normalized.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 const computeCentroid = (points: Array<{ x: number; y: number }>) => {
   if (points.length === 0) {
     return { x: 0.5, y: 0.5 };
@@ -80,6 +92,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
     () =>
       regions
         .map((region) => {
+          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
           const polygon = roomMaskToPolygon(region.mask);
           if (polygon.length === 0) {
             return null;
@@ -100,9 +113,20 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               x: centroid.x * viewWidth,
               y: centroid.y * viewHeight,
             },
+            fillColor: hexToRgba(baseColor, 0.15),
+            strokeColor: hexToRgba(baseColor, 0.6),
           };
         })
-        .filter((shape): shape is { id: string; name: string; path: string; centroid: { x: number; y: number } } => Boolean(shape)),
+        .filter(
+          (shape): shape is {
+            id: string;
+            name: string;
+            path: string;
+            centroid: { x: number; y: number };
+            fillColor: string;
+            strokeColor: string;
+          } => Boolean(shape),
+        ),
     [regions, viewHeight, viewWidth],
   );
 
@@ -204,7 +228,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             {viewMode === 'dm' &&
               regionShapes.map((shape) => (
                 <g key={shape.id}>
-                  <path d={shape.path} fill="rgba(253, 230, 138, 0.15)" stroke="rgba(217, 119, 6, 0.6)" strokeWidth={2} />
+                  <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
                   <text
                     x={shape.centroid.x}
                     y={shape.centroid.y}

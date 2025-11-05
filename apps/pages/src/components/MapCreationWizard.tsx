@@ -1698,11 +1698,13 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
           notesSections.push('Visible at start of session');
         }
         const notesValue = notesSections.length > 0 ? notesSections.join('\n\n') : undefined;
+        const colorValue = room.color.trim();
         const region = await apiClient.createRegion(map.id, {
           name: room.name.trim() || `Room ${index + 1}`,
           mask: room.mask,
           notes: notesValue,
           revealOrder: room.visibleAtStart ? index : undefined,
+          color: colorValue ? colorValue.toLowerCase() : undefined,
         });
         regionIdByDraftId.set(room.id, region.id);
         createdRegions.push(region);
