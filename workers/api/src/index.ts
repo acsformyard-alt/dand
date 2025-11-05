@@ -425,6 +425,28 @@ async function createSignedUpload(env, bucket, key, method = "PUT", expiration =
   }  
 }
 __name(createSignedUpload, "createSignedUpload");
+async function attachMaskDownloadUrl(env, bucket, manifest, expiration = 900) {
+  if (!manifest || typeof manifest !== "object")
+    return manifest ?? null;
+  const key = typeof manifest.key === "string" && manifest.key.length > 0 ? manifest.key : null;
+  if (!key)
+    return manifest;
+  try {
+    const signedUrl = await createSignedUpload(env, bucket, key, "GET", expiration);
+    if (!signedUrl)
+      return { ...manifest };
+    return { ...manifest, url: signedUrl.toString ? signedUrl.toString() : String(signedUrl) };
+  } catch (error) {
+    console.error("Failed to attach mask download URL", {
+      key,
+      errorName: error?.name,
+      errorMessage: error?.message,
+      errorStack: error?.stack,
+    });
+    return manifest;
+  }
+}
+__name(attachMaskDownloadUrl, "attachMaskDownloadUrl");
 async function getSessionStub(env, sessionId) {
   const id = env.SESSION_HUB.idFromName(sessionId);
   return env.SESSION_HUB.get(id);
@@ -668,11 +690,27 @@ var src_default = {
           const result = await env.MAPS_DB.prepare(
             "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
-          return jsonResponse({
-            regions: result.results.map((r) => ({
+          const regions = await Promise.all(result.results.map(async (r) => {
+            let parsedManifest = r.maskManifest;
+            if (typeof parsedManifest === "string") {
+              try {
+                parsedManifest = JSON.parse(parsedManifest);
+              } catch (error) {
+                console.error("Failed to parse mask manifest", {
+                  regionId: r.id,
+                  errorName: error?.name,
+                  errorMessage: error?.message,
+                });
+                parsedManifest = null;
+              }
+            }
+            const maskManifest = parsedManifest
+              ? await attachMaskDownloadUrl(env, env.MAPS_BUCKET, parsedManifest)
+              : null;
+            return {
               ...r,
               polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
-              maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null,
+              maskManifest,
               color:
                 typeof r.color === "string"
                   ? r.color.trim().length > 0
@@ -682,8 +720,9 @@ var src_default = {
               description: normalizeOptionalText(r.description ?? null),
               tags: normalizeTagsValue(r.tags ?? null),
               visibleAtStart: booleanFromStorage(r.visibleAtStart)
-            }))
-          }, { headers: corsHeaders });
+            };
+          }));
+          return jsonResponse({ regions }, { headers: corsHeaders });
         }
         if (request.method === "POST") {
           if (!user) {
@@ -708,6 +747,9 @@ var src_default = {
             });
           }
           const manifestObject = maskPreparation.manifest ?? null;
+          const manifestResponse = manifestObject
+            ? await attachMaskDownloadUrl(env, env.MAPS_BUCKET, manifestObject)
+            : null;
           const normalizedColor = typeof body.color === "string" && body.color.trim().length > 0 ? body.color.trim().toLowerCase() : null;
           const normalizedDescription = normalizeOptionalText(body?.description);
           const normalizedTags = normalizeTagsValue(body?.tags);
@@ -735,7 +777,7 @@ var src_default = {
               polygon: body.polygon,
               notes: body.notes || null,
               revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null,
-              maskManifest: manifestObject,
+              maskManifest: manifestResponse,
               color: normalizedColor,
               description: normalizedDescription,
               tags: normalizedTags,
@@ -798,7 +840,10 @@ var src_default = {
             visibleAtStartFlag,
             regionId
           ).run();
-          return jsonResponse({ success: true, maskManifest: manifestObject ?? null }, { headers: corsHeaders });
+          const manifestResponse = manifestObject
+            ? await attachMaskDownloadUrl(env, env.MAPS_BUCKET, manifestObject)
+            : null;
+          return jsonResponse({ success: true, maskManifest: manifestResponse ?? null }, { headers: corsHeaders });
         }
         if (request.method === "DELETE") {
           if (!user)

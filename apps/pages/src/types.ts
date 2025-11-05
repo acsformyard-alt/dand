@@ -1,3 +1,4 @@
+import type { Bounds } from './types/geometry';
 import type { RoomMask } from './utils/roomMask';
 
 export interface User {
@@ -35,7 +36,13 @@ export interface MapRecord {
 export interface RoomMaskManifestEntry {
   roomId: string;
   key: string;
-  dataUrl: string;
+  dataUrl?: string;
+  uploadUrl?: string;
+  url?: string;
+  width?: number;
+  height?: number;
+  bounds?: Bounds;
+  [key: string]: unknown;
 }
 
 export interface Region {

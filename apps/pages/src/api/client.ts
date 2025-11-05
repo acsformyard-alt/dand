@@ -379,9 +379,27 @@ const normalizeMarker = (raw: any): Marker => {
 const ensureManifest = (
   roomId: string,
   mask: RoomMask,
-  manifest?: RoomMaskManifestEntry | null,
-): RoomMaskManifestEntry =>
-  manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
+  manifest?: RoomMaskManifestEntry | Record<string, unknown> | null,
+): RoomMaskManifestEntry => {
+  const fallbackKey = `room-masks/${roomId}.png`;
+  if (manifest && typeof manifest === 'object') {
+    const normalized: RoomMaskManifestEntry = {
+      ...manifest,
+      roomId:
+        typeof manifest.roomId === 'string' && manifest.roomId.length > 0 ? manifest.roomId : roomId,
+      key: typeof manifest.key === 'string' && manifest.key.length > 0 ? manifest.key : fallbackKey,
+    };
+    if (!normalized.dataUrl && !normalized.url) {
+      normalized.dataUrl = encodeRoomMaskToDataUrl(mask);
+    }
+    return normalized;
+  }
+  return {
+    roomId,
+    key: fallbackKey,
+    dataUrl: encodeRoomMaskToDataUrl(mask),
+  };
+};
 
 const parseBooleanLike = (value: unknown): boolean | undefined => {
   if (typeof value === 'boolean') {
@@ -435,7 +453,15 @@ const normalizeRegion = (raw: any): Region => {
   if (!mask) {
     mask = emptyRoomMask();
   }
-  const manifest = ensureManifest(String(raw?.id ?? ''), mask, raw?.maskManifest);
+  let manifestPayload: RoomMaskManifestEntry | Record<string, unknown> | null | undefined = raw?.maskManifest;
+  if (typeof manifestPayload === 'string') {
+    try {
+      manifestPayload = JSON.parse(manifestPayload) as RoomMaskManifestEntry;
+    } catch (_error) {
+      manifestPayload = null;
+    }
+  }
+  const manifest = ensureManifest(String(raw?.id ?? ''), mask, manifestPayload ?? null);
   return {
     id: String(raw?.id ?? ''),
     mapId: String(raw?.mapId ?? ''),

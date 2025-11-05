@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
 import { roomMaskToPolygon } from '../utils/roomMask';
 
@@ -84,16 +84,89 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
+  const [failedMaskIds, setFailedMaskIds] = useState<Record<string, boolean>>({});
+  const maskUrlCache = useRef(new Map<string, string | null>());
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
-  const regionShapes = useMemo(
+  const regionOverlays = useMemo(
     () =>
-      regions
-        .map((region) => {
-          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
-          const polygon = roomMaskToPolygon(region.mask);
+      regions.map((region) => {
+        const baseColor = normalizeHexColor(region.color) ?? '#facc15';
+        const manifestBounds = region.maskManifest?.bounds;
+        const maskBounds = manifestBounds || region.mask.bounds;
+        const minX = Number.isFinite(maskBounds?.minX) ? maskBounds.minX : 0;
+        const minY = Number.isFinite(maskBounds?.minY) ? maskBounds.minY : 0;
+        const maxX = Number.isFinite(maskBounds?.maxX) ? maskBounds.maxX : 1;
+        const maxY = Number.isFinite(maskBounds?.maxY) ? maskBounds.maxY : 1;
+        const safeMinX = Math.max(0, Math.min(1, minX));
+        const safeMinY = Math.max(0, Math.min(1, minY));
+        const safeMaxX = Math.max(0, Math.min(1, maxX));
+        const safeMaxY = Math.max(0, Math.min(1, maxY));
+        const width = Math.max((safeMaxX - safeMinX) * viewWidth, 0);
+        const height = Math.max((safeMaxY - safeMinY) * viewHeight, 0);
+        const labelPosition = {
+          x: (safeMinX + (safeMaxX - safeMinX) / 2) * viewWidth,
+          y: (safeMinY + (safeMaxY - safeMinY) / 2) * viewHeight,
+        };
+        const maskUrl =
+          typeof region.maskManifest?.url === 'string' && region.maskManifest.url.length > 0
+            ? region.maskManifest.url
+            : typeof region.maskManifest?.dataUrl === 'string'
+              ? region.maskManifest.dataUrl
+              : null;
+        return {
+          id: region.id,
+          name: region.name,
+          maskUrl,
+          baseColor,
+          bounds: {
+            minX: safeMinX,
+            minY: safeMinY,
+            maxX: safeMaxX,
+            maxY: safeMaxY,
+          },
+          width,
+          height,
+          labelPosition,
+          mask: region.mask,
+        };
+      }),
+    [regions, viewHeight, viewWidth],
+  );
+
+  useEffect(() => {
+    const previousCache = new Map(maskUrlCache.current);
+    setFailedMaskIds((prev) => {
+      const next: Record<string, boolean> = {};
+      const activeIds = new Set(regionOverlays.map((overlay) => overlay.id));
+      Object.entries(prev).forEach(([id, value]) => {
+        if (activeIds.has(id) && value) {
+          next[id] = value;
+        }
+      });
+      regionOverlays.forEach((overlay) => {
+        const cached = previousCache.get(overlay.id);
+        if (cached !== overlay.maskUrl && overlay.maskUrl) {
+          delete next[overlay.id];
+        }
+      });
+      return next;
+    });
+    const nextCache = new Map<string, string | null>();
+    regionOverlays.forEach((overlay) => {
+      nextCache.set(overlay.id, overlay.maskUrl);
+    });
+    maskUrlCache.current = nextCache;
+  }, [regionOverlays]);
+
+  const fallbackShapes = useMemo(
+    () =>
+      regionOverlays
+        .filter((overlay) => !overlay.maskUrl || failedMaskIds[overlay.id])
+        .map((overlay) => {
+          const polygon = roomMaskToPolygon(overlay.mask);
           if (polygon.length === 0) {
             return null;
           }
@@ -106,15 +179,15 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             })
             .join(' ');
           return {
-            id: region.id,
-            name: region.name,
+            id: overlay.id,
+            name: overlay.name,
             path: `${scaledPath} Z`,
             centroid: {
               x: centroid.x * viewWidth,
               y: centroid.y * viewHeight,
             },
-            fillColor: hexToRgba(baseColor, 0.15),
-            strokeColor: hexToRgba(baseColor, 0.6),
+            fillColor: hexToRgba(overlay.baseColor, 0.15),
+            strokeColor: hexToRgba(overlay.baseColor, 0.6),
           };
         })
         .filter(
@@ -127,8 +200,28 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             strokeColor: string;
           } => Boolean(shape),
         ),
-    [regions, viewHeight, viewWidth],
+    [failedMaskIds, regionOverlays, viewHeight, viewWidth],
   );
+
+  const handleMaskError = useCallback((regionId: string) => {
+    setFailedMaskIds((prev) => {
+      if (prev[regionId]) {
+        return prev;
+      }
+      return { ...prev, [regionId]: true };
+    });
+  }, []);
+
+  const handleMaskLoad = useCallback((regionId: string) => {
+    setFailedMaskIds((prev) => {
+      if (!prev[regionId]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[regionId];
+      return next;
+    });
+  }, []);
 
   const markerShapes = useMemo(
     () =>
@@ -225,8 +318,59 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 preserveAspectRatio="xMidYMid meet"
               />
             )}
+            {viewMode === 'dm' && (
+              <defs>
+                {regionOverlays
+                  .filter((overlay) => overlay.maskUrl && !failedMaskIds[overlay.id])
+                  .map((overlay) => (
+                    <mask id={`region-mask-${overlay.id}`} key={`mask-${overlay.id}`}>
+                      <image
+                        href={overlay.maskUrl ?? undefined}
+                        x={overlay.bounds.minX * viewWidth}
+                        y={overlay.bounds.minY * viewHeight}
+                        width={overlay.width}
+                        height={overlay.height}
+                        preserveAspectRatio="none"
+                        onError={() => handleMaskError(overlay.id)}
+                        onLoad={() => handleMaskLoad(overlay.id)}
+                      />
+                    </mask>
+                  ))}
+              </defs>
+            )}
             {viewMode === 'dm' &&
-              regionShapes.map((shape) => (
+              regionOverlays
+                .filter((overlay) => overlay.maskUrl && !failedMaskIds[overlay.id])
+                .map((overlay) => (
+                  <g key={overlay.id}>
+                    <rect
+                      x={overlay.bounds.minX * viewWidth}
+                      y={overlay.bounds.minY * viewHeight}
+                      width={overlay.width}
+                      height={overlay.height}
+                      fill={hexToRgba(overlay.baseColor, 0.2)}
+                      mask={`url(#region-mask-${overlay.id})`}
+                    />
+                    <text
+                      x={overlay.labelPosition.x}
+                      y={overlay.labelPosition.y}
+                      textAnchor="middle"
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        fill: '#1f2937',
+                        stroke: 'rgba(255, 255, 255, 0.8)',
+                        strokeWidth: 3,
+                        strokeLinejoin: 'round',
+                        paintOrder: 'stroke',
+                      }}
+                    >
+                      {overlay.name}
+                    </text>
+                  </g>
+                ))}
+            {viewMode === 'dm' &&
+              fallbackShapes.map((shape) => (
                 <g key={shape.id}>
                   <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
                   <text
