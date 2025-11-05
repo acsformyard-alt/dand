@@ -88,44 +88,51 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
-  const regionShapes = useMemo(
+  const regionOverlays = useMemo(
     () =>
       regions
         .map((region) => {
           const baseColor = normalizeHexColor(region.color) ?? '#facc15';
-          const polygon = roomMaskToPolygon(region.mask);
-          if (polygon.length === 0) {
+          const maskUrl = typeof region.maskManifest?.url === 'string' ? region.maskManifest.url.trim() : '';
+          const polygon = region.polygon.length > 0 ? region.polygon : roomMaskToPolygon(region.mask);
+          if (!maskUrl && polygon.length === 0) {
             return null;
           }
           const centroid = computeCentroid(polygon);
-          const scaledPath = polygon
-            .map((point, index) => {
-              const x = point.x * viewWidth;
-              const y = point.y * viewHeight;
-              return `${index === 0 ? 'M' : 'L'}${x},${y}`;
-            })
-            .join(' ');
+          let fallbackPath: string | null = null;
+          if (!maskUrl && polygon.length) {
+            fallbackPath = `${
+              polygon
+                .map((point, index) => {
+                  const x = point.x * viewWidth;
+                  const y = point.y * viewHeight;
+                  return `${index === 0 ? 'M' : 'L'}${x},${y}`;
+                })
+                .join(' ')
+            } Z`;
+          }
           return {
             id: region.id,
             name: region.name,
-            path: `${scaledPath} Z`,
-            centroid: {
-              x: centroid.x * viewWidth,
-              y: centroid.y * viewHeight,
-            },
-            fillColor: hexToRgba(baseColor, 0.15),
-            strokeColor: hexToRgba(baseColor, 0.6),
+            maskUrl: maskUrl || null,
+            centroid,
+            polygon,
+            fillColor: hexToRgba(baseColor, 0.6),
+            strokeColor: hexToRgba(baseColor, 0.75),
+            fallbackPath,
           };
         })
         .filter(
-          (shape): shape is {
+          (entry): entry is {
             id: string;
             name: string;
-            path: string;
+            maskUrl: string | null;
             centroid: { x: number; y: number };
+            polygon: Array<{ x: number; y: number }>;
             fillColor: string;
             strokeColor: string;
-          } => Boolean(shape),
+            fallbackPath: string | null;
+          } => Boolean(entry),
         ),
     [regions, viewHeight, viewWidth],
   );
@@ -135,19 +142,17 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
       (markers ?? []).map((marker) => {
         const color = normalizeHexColor(marker.color) ?? '#facc15';
         const label = marker.label ?? 'Marker';
-        const labelWidth = Math.max(72, label.length * 8 + 24);
         return {
           id: marker.id,
           label,
           color,
-          labelWidth,
           position: {
-            x: (marker.x ?? 0) * viewWidth,
-            y: (marker.y ?? 0) * viewHeight,
+            x: Number(marker.x ?? 0),
+            y: Number(marker.y ?? 0),
           },
         };
       }),
-    [markers, viewHeight, viewWidth],
+    [markers],
   );
 
   const toggleViewMode = () => {
@@ -213,78 +218,97 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               {viewMode === 'dm' ? 'DM View' : 'Player Preview'}
             </button>
           </div>
-          <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
-            <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.85)" />
-            {mapImageUrl && (
-              <image
-                href={mapImageUrl}
-                x={0}
-                y={0}
-                width={viewWidth}
-                height={viewHeight}
-                preserveAspectRatio="xMidYMid meet"
-              />
-            )}
-            {viewMode === 'dm' &&
-              regionShapes.map((shape) => (
-                <g key={shape.id}>
-                  <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
-                  <text
-                    x={shape.centroid.x}
-                    y={shape.centroid.y}
-                    textAnchor="middle"
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      fill: '#1f2937',
-                      stroke: 'rgba(255, 255, 255, 0.8)',
-                      strokeWidth: 3,
-                      strokeLinejoin: 'round',
-                      paintOrder: 'stroke',
-                    }}
-                  >
-                    {shape.name}
-                  </text>
-                </g>
-              ))}
-            {viewMode === 'dm' &&
-              markerShapes.map((marker) => (
-                <g key={marker.id} transform={`translate(${marker.position.x}, ${marker.position.y})`}>
-                  <rect
-                    x={-marker.labelWidth / 2}
-                    y={-42}
-                    width={marker.labelWidth}
-                    height={26}
-                    rx={13}
-                    fill="rgba(15, 23, 42, 0.7)"
-                    stroke="rgba(203, 213, 225, 0.6)"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={0}
-                    y={-24}
-                    textAnchor="middle"
-                    style={{ fontSize: 12, fontWeight: 600, fill: '#e2e8f0', letterSpacing: '0.25em' }}
-                  >
-                    {marker.label.toUpperCase()}
-                  </text>
-                  <circle r={10} fill={marker.color} stroke="rgba(15, 23, 42, 0.85)" strokeWidth={2} />
-                </g>
-              ))}
-            {viewMode === 'playerPreview' && (
-              <g>
-                <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.7)" />
-                <text
-                  x={viewWidth / 2}
-                  y={viewHeight / 2}
-                  textAnchor="middle"
-                  style={{ fontSize: 18, fontWeight: 600, fill: '#f1f5f9', letterSpacing: '0.35em' }}
-                >
-                  PLAYER PREVIEW COMING SOON
-                </text>
-              </g>
-            )}
-          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="relative h-full max-h-full w-full max-w-full overflow-hidden"
+              style={{
+                aspectRatio: viewWidth && viewHeight ? `${viewWidth} / ${viewHeight}` : undefined,
+                backgroundColor: 'rgba(15, 23, 42, 0.85)',
+              }}
+            >
+              {mapImageUrl && (
+                <img
+                  src={mapImageUrl}
+                  alt="Map"
+                  className="h-full w-full object-contain"
+                />
+              )}
+              {viewMode === 'dm' && (
+                <>
+                  {regionOverlays.map((region) => (
+                    <React.Fragment key={region.id}>
+                      {region.maskUrl ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={{
+                            backgroundColor: region.fillColor,
+                            opacity: 1,
+                            maskImage: `url(${region.maskUrl})`,
+                            WebkitMaskImage: `url(${region.maskUrl})`,
+                            maskMode: 'alpha',
+                            WebkitMaskMode: 'alpha',
+                            maskRepeat: 'no-repeat',
+                            WebkitMaskRepeat: 'no-repeat',
+                            maskSize: 'contain',
+                            WebkitMaskSize: 'contain',
+                            maskPosition: 'center',
+                            WebkitMaskPosition: 'center',
+                          }}
+                        />
+                      ) : (
+                        region.fallbackPath && (
+                          <svg
+                            className="pointer-events-none absolute inset-0 h-full w-full"
+                            viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+                          >
+                            <path d={region.fallbackPath} fill={region.fillColor} stroke={region.strokeColor} strokeWidth={2} />
+                          </svg>
+                        )
+                      )}
+                      <div
+                        className="pointer-events-none absolute"
+                        style={{
+                          left: `${region.centroid.x * 100}%`,
+                          top: `${region.centroid.y * 100}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-slate-900 shadow-sm dark:bg-slate-900/80 dark:text-amber-100">
+                          {region.name}
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                  {markerShapes.map((marker) => (
+                    <div
+                      key={marker.id}
+                      className="pointer-events-none absolute flex flex-col items-center"
+                      style={{
+                        left: `${marker.position.x * 100}%`,
+                        top: `${marker.position.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="mb-2 rounded-full border border-white/50 bg-slate-900/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-100 shadow">
+                        {marker.label.toUpperCase()}
+                      </div>
+                      <div
+                        className="h-4 w-4 rounded-full border-2 border-slate-900/80 shadow"
+                        style={{ backgroundColor: marker.color }}
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+              {viewMode === 'playerPreview' && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/70">
+                  <span className="text-[18px] font-semibold tracking-[0.35em] text-slate-200">
+                    PLAYER PREVIEW COMING SOON
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <aside className="flex flex-[1] flex-col border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">

@@ -176,7 +176,7 @@ function normalizeBounds(bounds) {
   return { minX, minY, maxX, maxY };
 }
 __name(normalizeBounds, "normalizeBounds");
-function normalizeMaskManifest(regionId, maskPayload, manifestPayload) {
+function normalizeMaskManifest(regionId, maskPayload, manifestPayload, overrides = {}) {
   if (manifestPayload === null)
     return null;
   const source = typeof manifestPayload === "object" && manifestPayload ? manifestPayload : {};
@@ -199,11 +199,19 @@ function normalizeMaskManifest(regionId, maskPayload, manifestPayload) {
     manifest.bounds = bounds;
   }
   for (const [key, value] of Object.entries(source)) {
-    if (key === "dataUrl" || key === "roomId" || key === "key" || key === "width" || key === "height" || key === "bounds")
+    if (key === "dataUrl" || key === "roomId" || key === "key" || key === "width" || key === "height" || key === "bounds" || key === "url")
       continue;
     if (value !== void 0) {
       manifest[key] = value;
     }
+  }
+  const sourceUrl = typeof source.url === "string" ? source.url.trim() : "";
+  if (sourceUrl) {
+    manifest.url = sourceUrl;
+  }
+  const overrideUrl = overrides && typeof overrides.url === "string" ? overrides.url.trim() : "";
+  if (overrideUrl) {
+    manifest.url = overrideUrl;
   }
   return manifest;
 }
@@ -668,21 +676,77 @@ var src_default = {
           const result = await env.MAPS_DB.prepare(
             "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
+          const regions = await Promise.all(
+            result.results.map(async (r) => {
+              const regionId = typeof r.id === "string" && r.id.length > 0 ? r.id : String(r.id ?? "");
+              let polygon;
+              try {
+                polygon = typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon;
+              } catch (err) {
+                console.error("Failed to parse region polygon", {
+                  regionId,
+                  errorName: err?.name,
+                  errorMessage: err?.message,
+                  errorStack: err?.stack
+                });
+                polygon = [];
+              }
+              let manifestPayload = null;
+              if (typeof r.maskManifest === "string") {
+                try {
+                  manifestPayload = JSON.parse(r.maskManifest);
+                } catch (err) {
+                  console.error("Failed to parse region mask manifest", {
+                    regionId,
+                    errorName: err?.name,
+                    errorMessage: err?.message,
+                    errorStack: err?.stack
+                  });
+                  manifestPayload = null;
+                }
+              } else if (typeof r.maskManifest === "object" && r.maskManifest) {
+                manifestPayload = r.maskManifest;
+              }
+              let signedUrl = null;
+              const manifestKey = manifestPayload && typeof manifestPayload.key === "string" ? manifestPayload.key : null;
+              if (manifestKey) {
+                try {
+                  const presigned = await createSignedUpload(env, env.MAPS_BUCKET, manifestKey, "GET", 900);
+                  if (typeof presigned === "string") {
+                    signedUrl = presigned;
+                  } else if (presigned) {
+                    const maybeString = presigned.toString?.();
+                    signedUrl = typeof maybeString === "string" ? maybeString : null;
+                  }
+                } catch (err) {
+                  console.error("Failed to create signed URL for region mask", {
+                    regionId,
+                    key: manifestKey,
+                    errorName: err?.name,
+                    errorMessage: err?.message,
+                    errorStack: err?.stack
+                  });
+                }
+              }
+              const maskManifest = normalizeMaskManifest(regionId, void 0, manifestPayload, signedUrl ? { url: signedUrl } : {});
+              return {
+                ...r,
+                polygon,
+                maskManifest,
+                color:
+                  typeof r.color === "string"
+                    ? r.color.trim().length > 0
+                      ? r.color.trim().toLowerCase()
+                      : null
+                    : r.color ?? null,
+                description: normalizeOptionalText(r.description ?? null),
+                tags: normalizeTagsValue(r.tags ?? null),
+                visibleAtStart: booleanFromStorage(r.visibleAtStart)
+              };
+            })
+          );
           return jsonResponse({
-            regions: result.results.map((r) => ({
-              ...r,
-              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
-              maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null,
-              color:
-                typeof r.color === "string"
-                  ? r.color.trim().length > 0
-                    ? r.color.trim().toLowerCase()
-                    : null
-                  : r.color ?? null,
-              description: normalizeOptionalText(r.description ?? null),
-              tags: normalizeTagsValue(r.tags ?? null),
-              visibleAtStart: booleanFromStorage(r.visibleAtStart)
-            }))
+            regions
           }, { headers: corsHeaders });
         }
         if (request.method === "POST") {

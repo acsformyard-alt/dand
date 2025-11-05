@@ -112,7 +112,10 @@ const MapMaskCanvas: React.FC<MapMaskCanvasProps> = ({
     () =>
       regions.map((region) => ({
         region,
-        polygon: roomMaskToPolygon(region.mask),
+        polygon:
+          region.polygon && region.polygon.length >= 3
+            ? region.polygon
+            : roomMaskToPolygon(region.mask),
       })),
     [regions]
   );

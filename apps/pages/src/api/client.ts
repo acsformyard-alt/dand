@@ -378,10 +378,61 @@ const normalizeMarker = (raw: any): Marker => {
 
 const ensureManifest = (
   roomId: string,
-  mask: RoomMask,
+  mask: RoomMask | null,
   manifest?: RoomMaskManifestEntry | null,
-): RoomMaskManifestEntry =>
-  manifest ?? { roomId, key: `room-masks/${roomId}.png`, dataUrl: encodeRoomMaskToDataUrl(mask) };
+): RoomMaskManifestEntry | null => {
+  const normalizedRoomId = typeof roomId === 'string' && roomId.length > 0 ? roomId : '';
+  if (!manifest && !mask) {
+    return null;
+  }
+  const base: RoomMaskManifestEntry = {
+    roomId: normalizedRoomId,
+    key: `room-masks/${normalizedRoomId}.png`,
+  };
+  if (manifest && typeof manifest === 'object') {
+    const candidateRoomId = typeof manifest.roomId === 'string' ? manifest.roomId.trim() : '';
+    if (candidateRoomId) {
+      base.roomId = candidateRoomId;
+    }
+    const candidateKey = typeof manifest.key === 'string' ? manifest.key.trim() : '';
+    if (candidateKey) {
+      base.key = candidateKey;
+    }
+    const candidateUrl = typeof manifest.url === 'string' ? manifest.url.trim() : '';
+    if (candidateUrl) {
+      base.url = candidateUrl;
+    }
+    if (typeof manifest.dataUrl === 'string' && manifest.dataUrl.length > 0) {
+      base.dataUrl = manifest.dataUrl;
+    }
+    const width = Number((manifest as { width?: unknown }).width);
+    if (Number.isFinite(width)) {
+      base.width = width;
+    }
+    const height = Number((manifest as { height?: unknown }).height);
+    if (Number.isFinite(height)) {
+      base.height = height;
+    }
+    const boundsCandidate = (manifest as { bounds?: unknown }).bounds;
+    if (boundsCandidate && typeof boundsCandidate === 'object') {
+      const bounds = boundsCandidate as { minX?: unknown; minY?: unknown; maxX?: unknown; maxY?: unknown };
+      const minX = Number(bounds.minX);
+      const minY = Number(bounds.minY);
+      const maxX = Number(bounds.maxX);
+      const maxY = Number(bounds.maxY);
+      if ([minX, minY, maxX, maxY].every((value) => Number.isFinite(value))) {
+        base.bounds = { minX, minY, maxX, maxY };
+      }
+    }
+  }
+  if (!base.url && !base.dataUrl && mask) {
+    base.dataUrl = encodeRoomMaskToDataUrl(mask);
+  }
+  if (!base.url && !base.dataUrl) {
+    return null;
+  }
+  return base;
+};
 
 const parseBooleanLike = (value: unknown): boolean | undefined => {
   if (typeof value === 'boolean') {
@@ -406,40 +457,70 @@ const parseBooleanLike = (value: unknown): boolean | undefined => {
 };
 
 const normalizeRegion = (raw: any): Region => {
-  const polygon = polygonPointsFromRaw(raw?.polygon);
+  const polygonPoints = polygonPointsFromRaw(raw?.polygon);
   let mask: RoomMask | null = null;
   const rawMask = raw?.mask;
-  if (rawMask && typeof rawMask === 'object') {
-    if (typeof rawMask.dataUrl === 'string') {
-      try {
-        mask = decodeRoomMaskFromDataUrl(rawMask.dataUrl);
-        if (rawMask.bounds) {
-          mask = {
-            ...mask,
-            bounds: {
-              minX: Number(rawMask.bounds.minX) || mask.bounds.minX,
-              minY: Number(rawMask.bounds.minY) || mask.bounds.minY,
-              maxX: Number(rawMask.bounds.maxX) || mask.bounds.maxX,
-              maxY: Number(rawMask.bounds.maxY) || mask.bounds.maxY,
-            },
-          };
-        }
-      } catch (_error) {
-        mask = null;
+  if (rawMask && typeof rawMask === 'object' && typeof rawMask.dataUrl === 'string') {
+    try {
+      mask = decodeRoomMaskFromDataUrl(rawMask.dataUrl);
+      if (rawMask.bounds) {
+        mask = {
+          ...mask,
+          bounds: {
+            minX: Number(rawMask.bounds.minX) || mask.bounds.minX,
+            minY: Number(rawMask.bounds.minY) || mask.bounds.minY,
+            maxX: Number(rawMask.bounds.maxX) || mask.bounds.maxX,
+            maxY: Number(rawMask.bounds.maxY) || mask.bounds.maxY,
+          },
+        };
       }
+    } catch (_error) {
+      mask = null;
     }
   }
-  if (!mask && polygon.length) {
-    mask = createRoomMaskFromPolygon(polygon, { resolution: 256 });
+
+  let manifestInput: RoomMaskManifestEntry | null = null;
+  if (typeof raw?.maskManifest === 'string') {
+    try {
+      manifestInput = JSON.parse(raw.maskManifest) as RoomMaskManifestEntry;
+    } catch (_error) {
+      manifestInput = null;
+    }
+  } else if (raw?.maskManifest && typeof raw.maskManifest === 'object') {
+    manifestInput = raw.maskManifest as RoomMaskManifestEntry;
+  }
+
+  if (!mask && manifestInput && typeof manifestInput.dataUrl === 'string' && manifestInput.dataUrl.length > 0) {
+    try {
+      mask = decodeRoomMaskFromDataUrl(manifestInput.dataUrl);
+    } catch (_error) {
+      mask = null;
+    }
+  }
+
+  const manifestUrl = typeof manifestInput?.url === 'string' ? manifestInput.url.trim() : '';
+
+  if (!mask && !manifestUrl && polygonPoints.length) {
+    mask = createRoomMaskFromPolygon(polygonPoints, { resolution: 256 });
   }
   if (!mask) {
     mask = emptyRoomMask();
   }
-  const manifest = ensureManifest(String(raw?.id ?? ''), mask, raw?.maskManifest);
+
+  let polygon = polygonPoints;
+  if (polygon.length === 0 && mask) {
+    const fallbackPolygon = roomMaskToVector(mask);
+    if (fallbackPolygon.length >= 3) {
+      polygon = fallbackPolygon;
+    }
+  }
+
+  const manifest = ensureManifest(String(raw?.id ?? ''), manifestUrl ? null : mask, manifestInput);
   return {
     id: String(raw?.id ?? ''),
     mapId: String(raw?.mapId ?? ''),
     name: typeof raw?.name === 'string' ? raw.name : 'Room',
+    polygon,
     mask,
     maskManifest: manifest,
     description:
