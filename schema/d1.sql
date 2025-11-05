@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS regions (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    polygon TEXT NOT NULL,
     notes TEXT,
     reveal_order INTEGER DEFAULT 0,
     mask_manifest TEXT,

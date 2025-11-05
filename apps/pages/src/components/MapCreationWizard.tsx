@@ -16,7 +16,7 @@ import {
   computeDisplayMetrics,
   type ImageDisplayMetrics,
 } from '../utils/imageProcessing';
-import { roomMaskToPolygon, type RoomMask } from '../utils/roomMask';
+import { isPointInRoomMask, roomMaskHasCoverage, type RoomMask } from '../utils/roomMask';
 import type { Campaign, MapRecord, Marker, Region } from '../types';
 import {
   getMapMarkerIconDefinition,
@@ -297,31 +297,6 @@ const computePolygonCentroid = (points: Array<{ x: number; y: number }>) => {
   };
 };
 
-const isPointInPolygon = (
-  point: { x: number; y: number },
-  polygon: Array<{ x: number; y: number }>,
-) => {
-  if (polygon.length < 3) {
-    return false;
-  }
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i += 1) {
-    const xi = polygon[i].x;
-    const yi = polygon[i].y;
-    const xj = polygon[j].x;
-    const yj = polygon[j].y;
-    const intersects = yi > point.y !== yj > point.y;
-    if (intersects) {
-      const slope = (xj - xi) / (yj - yi + Number.EPSILON);
-      const xIntersection = slope * (point.y - yi) + xi;
-      if (point.x < xIntersection) {
-        inside = !inside;
-      }
-    }
-  }
-  return inside;
-};
-
 const deriveMarkerReferencePoint = (marker: DraftMarker) => {
   if (marker.kind === 'area') {
     if (marker.areaCenter) {
@@ -558,18 +533,17 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
     setDefineRoomContainer(node);
   }, []);
 
-  const roomPolygonById = useMemo(() => {
-    const polygons = new Map<string, Array<{ x: number; y: number }>>();
+  const roomMaskById = useMemo(() => {
+    const masks = new Map<string, RoomMask>();
     for (const room of definedRooms) {
       if (!room.mask) {
         continue;
       }
-      const polygon = roomMaskToPolygon(room.mask);
-      if (polygon.length >= 3) {
-        polygons.set(room.id, polygon);
+      if (roomMaskHasCoverage(room.mask)) {
+        masks.set(room.id, room.mask);
       }
     }
-    return polygons;
+    return masks;
   }, [definedRooms]);
 
   const findContainingRoomId = useCallback(
@@ -577,14 +551,14 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
       if (!point) {
         return null;
       }
-      for (const [roomId, polygon] of roomPolygonById) {
-        if (isPointInPolygon(point, polygon)) {
+      for (const [roomId, mask] of roomMaskById) {
+        if (isPointInRoomMask(mask, point)) {
           return roomId;
         }
       }
       return null;
     },
-    [roomPolygonById],
+    [roomMaskById],
   );
 
   const applyAutoAssociation = useCallback(
