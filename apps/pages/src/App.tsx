@@ -582,7 +582,7 @@ const App: React.FC = () => {
                 {statusMessage}
               </div>
             )}
-            <div className="rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+            <div className="flex min-h-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               {sessionMode === 'dm' ? (
                 <DMSessionViewer
                   session={activeSession}
