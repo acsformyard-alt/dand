@@ -66,13 +66,11 @@ type MaskRegionVisual = {
   id: string;
   name: string;
   centroid: { x: number; y: number };
-  fillColor: string;
   strokeColor: string;
-  maskId: string;
-  maskX: number;
-  maskY: number;
-  maskWidth: number;
-  maskHeight: number;
+  imageX: number;
+  imageY: number;
+  imageWidth: number;
+  imageHeight: number;
   imageUrl: string;
   outlinePath?: string;
 };
@@ -179,13 +177,11 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 id: region.id,
                 name: region.name,
                 centroid,
-                fillColor: hexToRgba(baseColor, 0.18),
                 strokeColor: hexToRgba(baseColor, 0.6),
-                maskId: `region-mask-${region.id}`,
-                maskX: minX * viewWidth,
-                maskY: minY * viewHeight,
-                maskWidth,
-                maskHeight,
+                imageX: minX * viewWidth,
+                imageY: minY * viewHeight,
+                imageWidth: maskWidth,
+                imageHeight: maskHeight,
                 imageUrl: maskUrl,
                 outlinePath: polygonPath,
               } satisfies MaskRegionVisual;
@@ -207,11 +203,6 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
       })
       .filter((visual): visual is RegionVisual => Boolean(visual));
   }, [regions, viewHeight, viewWidth]);
-
-  const maskVisuals = useMemo(
-    () => regionVisuals.filter((visual): visual is MaskRegionVisual => visual.type === 'mask'),
-    [regionVisuals],
-  );
 
   const markerShapes = useMemo(
     () =>
@@ -308,38 +299,21 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 preserveAspectRatio="xMidYMid meet"
               />
             )}
-            {maskVisuals.length > 0 && (
-              <defs>
-                {maskVisuals.map((visual) => (
-                  <mask key={visual.maskId} id={visual.maskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
-                    <image
-                      href={visual.imageUrl}
-                      x={visual.maskX}
-                      y={visual.maskY}
-                      width={visual.maskWidth}
-                      height={visual.maskHeight}
-                      preserveAspectRatio="none"
-                      crossOrigin="anonymous"
-                      style={{ imageRendering: 'pixelated' }}
-                    />
-                  </mask>
-                ))}
-              </defs>
-            )}
             {viewMode === 'dm' &&
               regionVisuals.map((visual) => (
                 <g key={visual.id}>
                   {visual.type === 'mask' ? (
                     <>
-                      <g mask={`url(#${visual.maskId})`}>
-                        <rect
-                          x={visual.maskX}
-                          y={visual.maskY}
-                          width={visual.maskWidth}
-                          height={visual.maskHeight}
-                          fill={visual.fillColor}
-                        />
-                      </g>
+                      <image
+                        href={visual.imageUrl}
+                        x={visual.imageX}
+                        y={visual.imageY}
+                        width={visual.imageWidth}
+                        height={visual.imageHeight}
+                        preserveAspectRatio="none"
+                        crossOrigin="anonymous"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
                       {visual.outlinePath && (
                         <path d={visual.outlinePath} fill="none" stroke={visual.strokeColor} strokeWidth={2} />
                       )}
