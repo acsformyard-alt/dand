@@ -39,6 +39,9 @@ interface DraftMarker {
   id: string;
   label: string;
   color: string;
+  description: string;
+  tags: string;
+  visibleAtStart: boolean;
   notes: string;
   x: number;
   y: number;
@@ -479,6 +482,7 @@ const summariseMarkers = (
     const label = trimmedName || definition?.label || `Marker ${index + 1}`;
     const trimmedDescription = marker.description.trim();
     const trimmedTags = marker.tags.trim();
+    const visibleAtStart = Boolean(marker.visibleAtStart);
     const notesSections: string[] = [];
     if (trimmedDescription) {
       notesSections.push(trimmedDescription);
@@ -486,7 +490,7 @@ const summariseMarkers = (
     if (trimmedTags) {
       notesSections.push(`Tags: ${trimmedTags}`);
     }
-    if (marker.visibleAtStart) {
+    if (visibleAtStart) {
       notesSections.push('Visible upon room entry');
     }
 
@@ -494,6 +498,9 @@ const summariseMarkers = (
       id: marker.id,
       label,
       color: definition?.defaultColor ?? '#facc15',
+      description: trimmedDescription,
+      tags: trimmedTags,
+      visibleAtStart,
       notes: notesSections.join('\n\n'),
       x: clamp(marker.x / widthDenominator, 0, 1),
       y: clamp(marker.y / heightDenominator, 0, 1),
@@ -1556,6 +1563,9 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         id,
         label,
         color: definition.defaultColor,
+        description: '',
+        tags: '',
+        visibleAtStart: false,
         notes: '',
         x: 0.5,
         y: 0.5,
@@ -1759,10 +1769,27 @@ const MapCreationWizard: React.FC<MapCreationWizardProps> = ({
         }
 
         const regionId = marker.linkedRoomId ? regionIdByDraftId.get(marker.linkedRoomId) : undefined;
+        const trimmedDescription = marker.description.trim();
+        const trimmedTags = marker.tags.trim();
+        const visibleAtStart = Boolean(marker.visibleAtStart);
+        const markerNotesSections: string[] = [];
+        if (trimmedDescription) {
+          markerNotesSections.push(trimmedDescription);
+        }
+        if (trimmedTags) {
+          markerNotesSections.push(`Tags: ${trimmedTags}`);
+        }
+        if (visibleAtStart) {
+          markerNotesSections.push('Visible upon room entry');
+        }
+        const markerNotes = markerNotesSections.length > 0 ? markerNotesSections.join('\n\n') : undefined;
 
         const payload = await apiClient.createMarker(map.id, {
           label: marker.label.trim() || 'Marker',
-          notes: marker.notes.trim() || undefined,
+          description: trimmedDescription || undefined,
+          tags: trimmedTags || undefined,
+          visibleAtStart,
+          notes: markerNotes,
           color: marker.color.trim() || undefined,
           x: clamp(marker.x, 0, 1),
           y: clamp(marker.y, 0, 1),

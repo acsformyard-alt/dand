@@ -70,6 +70,8 @@ export interface Marker {
   mapId?: string;
   label: string;
   description?: string | null;
+  tags?: string | null;
+  visibleAtStart?: boolean;
   iconKey?: string | null;
   x: number;
   y: number;

@@ -63,6 +63,8 @@ interface RegionPayload {
 interface MarkerPayload {
   label: string;
   description?: string;
+  tags?: string | null;
+  visibleAtStart?: boolean;
   iconKey?: string;
   x: number;
   y: number;
@@ -183,6 +185,17 @@ const serializeMarkerPayload = (payload: Partial<MarkerPayload>) => {
   if (payload.description !== undefined) {
     body.description = payload.description;
   }
+  if (payload.tags !== undefined) {
+    if (payload.tags === null) {
+      body.tags = null;
+    } else if (typeof payload.tags === 'string') {
+      const trimmed = payload.tags.trim();
+      body.tags = trimmed.length > 0 ? trimmed : null;
+    }
+  }
+  if (payload.visibleAtStart !== undefined) {
+    body.visibleAtStart = Boolean(payload.visibleAtStart);
+  }
   if (payload.iconKey !== undefined) {
     body.iconKey = payload.iconKey;
   }
@@ -297,10 +310,41 @@ const normalizeMarker = (raw: any): Marker => {
     regionId: normalizedRegionId,
   };
 
+  if (typeof raw?.tags === 'string') {
+    base.tags = raw.tags;
+  } else if (raw?.tags === null) {
+    base.tags = null;
+  }
+
+  const visibleAtStart = parseBooleanLike(raw?.visibleAtStart ?? raw?.visible_at_start);
+  if (visibleAtStart !== undefined) {
+    base.visibleAtStart = visibleAtStart;
+  }
+
   const data = raw?.data && typeof raw.data === 'object' ? (raw.data as Record<string, unknown>) : {};
   const kind = raw?.kind ?? data.kind;
   if (kind === 'area') {
     base.kind = 'area';
+  }
+
+  if (base.tags === undefined) {
+    if (typeof data.tags === 'string') {
+      base.tags = data.tags;
+    } else if (Array.isArray(data.tags)) {
+      const normalized = (data.tags as unknown[])
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : String(entry ?? '').trim()))
+        .filter((entry) => entry.length > 0);
+      base.tags = normalized.length > 0 ? normalized.join(', ') : null;
+    } else if (data.tags === null) {
+      base.tags = null;
+    }
+  }
+
+  if (base.visibleAtStart === undefined) {
+    const visibleFromData = parseBooleanLike((data as { visibleAtStart?: unknown }).visibleAtStart);
+    if (visibleFromData !== undefined) {
+      base.visibleAtStart = visibleFromData;
+    }
   }
 
   let shape = markerAreaShapeFromRaw(raw?.areaShape ?? data.areaShape);
