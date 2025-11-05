@@ -817,7 +817,7 @@ var src_default = {
         const mapId = url.pathname.split("/")[3];
         if (request.method === "GET") {
           const result = await env.MAPS_DB.prepare(
-            "SELECT id, map_id as mapId, label, description, description as notes, region_id as regionId, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC"
+            "SELECT id, map_id as mapId, label, description, tags, visible_at_start as visibleAtStart, notes, region_id as regionId, icon_key as iconKey, x, y, color, data FROM markers WHERE map_id = ? ORDER BY created_at ASC"
           ).bind(mapId).all();
           return jsonResponse({
             markers: result.results.map((m) => {
@@ -826,12 +826,42 @@ var src_default = {
               if (!regionId && rawData && typeof rawData === "object" && "regionId" in rawData && rawData.regionId != null) {
                 regionId = String(rawData.regionId);
               }
-              const noteValue = m.notes ?? m.description ?? null;
+              let description = typeof m.description === "string" ? m.description : m.description ?? null;
+              if ((!description || description.length === 0) && rawData && typeof rawData === "object" && typeof rawData.description === "string") {
+                description = rawData.description;
+              }
+              let tags = typeof m.tags === "string" ? m.tags : m.tags ?? null;
+              if ((tags === void 0 || tags === null || tags === "") && rawData && typeof rawData === "object") {
+                const dataTags = rawData.tags;
+                if (typeof dataTags === "string") {
+                  tags = dataTags;
+                } else if (Array.isArray(dataTags)) {
+                  const normalized = dataTags
+                    .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry ?? "").trim()))
+                    .filter((entry) => entry.length > 0);
+                  tags = normalized.length > 0 ? normalized.join(", ") : null;
+                } else if (dataTags === null) {
+                  tags = null;
+                }
+              }
+              const visibleAtStart = booleanFromStorage(
+                m.visibleAtStart ?? (rawData && typeof rawData === "object" ? rawData.visibleAtStart : void 0)
+              );
+              const notesValue = typeof m.notes === "string" ? m.notes : m.notes ?? null;
+              const fallbackNotes = notesValue ?? (description ?? null);
               return {
-                ...m,
-                description: noteValue,
-                notes: noteValue,
+                id: typeof m.id === "string" ? m.id : String(m.id ?? ""),
+                mapId: typeof m.mapId === "string" ? m.mapId : String(m.mapId ?? mapId),
+                label: typeof m.label === "string" ? m.label : String(m.label ?? "Marker"),
+                description,
+                tags,
+                visibleAtStart,
+                notes: fallbackNotes,
                 regionId,
+                iconKey: typeof m.iconKey === "string" ? m.iconKey : m.iconKey ?? null,
+                x: typeof m.x === "number" ? m.x : Number(m.x ?? 0),
+                y: typeof m.y === "number" ? m.y : Number(m.y ?? 0),
+                color: typeof m.color === "string" ? m.color : m.color ?? null,
                 data: rawData
               };
             })
@@ -848,7 +878,11 @@ var src_default = {
             return errorResponse("Invalid marker", 400, { headers: corsHeaders });
           }
           const markerId = crypto.randomUUID();
-          const noteValue = typeof body.notes === "string" ? body.notes : body.description || null;
+          const normalizedDescription = normalizeOptionalText(body.description);
+          const normalizedTags = normalizeTagsValue(body.tags);
+          const visibleAtStartFlag = parseBooleanFlag(body.visibleAtStart);
+          const normalizedNotesInput = normalizeOptionalText(body.notes);
+          const noteValue = normalizedNotesInput ?? normalizedDescription;
           let regionId = null;
           if (body.regionId !== void 0) {
             if (body.regionId === null) {
@@ -866,25 +900,30 @@ var src_default = {
             }
           }
           await env.MAPS_DB.prepare(
-            "INSERT INTO markers (id, map_id, label, description, icon_key, x, y, color, data, region_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO markers (id, map_id, label, description, tags, visible_at_start, notes, region_id, icon_key, x, y, color, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           ).bind(
             markerId,
             mapId,
             body.label,
+            normalizedDescription,
+            normalizedTags,
+            visibleAtStartFlag,
             noteValue,
+            regionId,
             body.iconKey || null,
             body.x,
             body.y,
             body.color || null,
-            body.data ? JSON.stringify(body.data) : null,
-            regionId
+            body.data ? JSON.stringify(body.data) : null
           ).run();
           return jsonResponse({
             marker: {
               id: markerId,
               mapId,
               label: body.label,
-              description: noteValue,
+              description: normalizedDescription,
+              tags: normalizedTags,
+              visibleAtStart: visibleAtStartFlag > 0,
               iconKey: body.iconKey || null,
               x: body.x,
               y: body.y,
@@ -901,24 +940,30 @@ var src_default = {
         if (request.method === "PUT") {
           if (!user)
             return errorResponse("Unauthorized", 401, { headers: corsHeaders });
-          const existing = await env.MAPS_DB.prepare("SELECT map_id as mapId, description, region_id as regionId FROM markers WHERE id = ?").bind(markerId).first();
+          const existing = await env.MAPS_DB.prepare(
+            "SELECT map_id as mapId, description, tags, visible_at_start as visibleAtStart, notes, region_id as regionId FROM markers WHERE id = ?"
+          ).bind(markerId).first();
           if (!existing)
             return errorResponse("Marker not found", 404, { headers: corsHeaders });
           const ownsMap = await ensureMapOwnership(env, existing.mapId, user.id);
           if (!ownsMap)
             return errorResponse("Forbidden", 403, { headers: corsHeaders });
           const body = await parseJSON(request);
-          const noteValue = (() => {
-            if (typeof body?.notes === "string")
-              return body.notes;
-            if (body?.notes === null)
-              return null;
-            if (typeof body?.description === "string")
-              return body.description;
-            if (body?.description === null)
-              return null;
-            return existing.description;
-          })();
+          const descriptionValue =
+            body?.description === void 0 ? existing.description ?? null : normalizeOptionalText(body.description);
+          const tagsValue =
+            body?.tags === void 0 ? existing.tags ?? null : normalizeTagsValue(body.tags);
+          const visibleAtStartFlag =
+            body?.visibleAtStart === void 0
+              ? parseBooleanFlag(existing.visibleAtStart)
+              : parseBooleanFlag(body.visibleAtStart);
+          const notesFromBody = body?.notes === void 0 ? null : normalizeOptionalText(body.notes);
+          const noteValue =
+            body?.notes !== void 0
+              ? notesFromBody
+              : body?.description !== void 0
+                ? descriptionValue
+                : existing.notes ?? existing.description ?? null;
           let regionId = existing.regionId ?? null;
           if (body?.regionId !== void 0) {
             if (body.regionId === null) {
@@ -936,9 +981,12 @@ var src_default = {
             }
           }
           await env.MAPS_DB.prepare(
-            "UPDATE markers SET label = ?, description = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ?, region_id = ? WHERE id = ?"
+            "UPDATE markers SET label = ?, description = ?, tags = ?, visible_at_start = ?, notes = ?, icon_key = ?, x = ?, y = ?, color = ?, data = ?, region_id = ? WHERE id = ?"
           ).bind(
             body?.label || null,
+            descriptionValue,
+            tagsValue,
+            visibleAtStartFlag,
             noteValue,
             body?.iconKey || null,
             typeof body?.x === "number" ? body.x : null,
