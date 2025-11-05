@@ -1,6 +1,14 @@
 import React from 'react';
 import type { Region } from '../types';
 
+const resolveRegionColor = (value?: string | null) => {
+  if (!value) {
+    return '#facc15';
+  }
+  const trimmed = value.trim();
+  return (trimmed ? trimmed.toLowerCase() : '') || '#facc15';
+};
+
 interface RegionListProps {
   regions: Region[];
   revealedRegionIds: string[];
@@ -23,12 +31,19 @@ const RegionList: React.FC<RegionListProps> = ({ regions, revealedRegionIds, onT
             }`}
           >
             <div>
-              <button
-                className="font-semibold text-slate-900 underline-offset-4 transition hover:text-amber-600 hover:underline dark:text-white dark:hover:text-amber-200"
-                onClick={() => onSelectRegion?.(region)}
-              >
-                {region.name}
-              </button>
+              <div className="flex items-center gap-2">
+                <span
+                  className="block h-3 w-3 rounded-full border border-white/40 shadow-sm"
+                  style={{ backgroundColor: resolveRegionColor(region.color) }}
+                  aria-hidden="true"
+                />
+                <button
+                  className="font-semibold text-slate-900 underline-offset-4 transition hover:text-amber-600 hover:underline dark:text-white dark:hover:text-amber-200"
+                  onClick={() => onSelectRegion?.(region)}
+                >
+                  {region.name}
+                </button>
+              </div>
               {region.notes && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{region.notes}</p>}
             </div>
             <button

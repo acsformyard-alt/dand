@@ -54,6 +54,7 @@ interface RegionPayload {
   maskManifest?: RoomMaskManifestEntry | null;
   notes?: string;
   revealOrder?: number;
+  color?: string | null;
 }
 
 interface MarkerPayload {
@@ -183,7 +184,12 @@ const serializeMarkerPayload = (payload: Partial<MarkerPayload>) => {
     body.iconKey = payload.iconKey;
   }
   if (payload.color !== undefined) {
-    body.color = payload.color;
+    if (payload.color === null) {
+      body.color = null;
+    } else if (typeof payload.color === 'string') {
+      const trimmed = payload.color.trim();
+      body.color = trimmed ? trimmed.toLowerCase() : null;
+    }
   }
   if (payload.notes !== undefined) {
     body.notes = payload.notes;
@@ -369,6 +375,12 @@ const normalizeRegion = (raw: any): Region => {
     maskManifest: manifest,
     notes: typeof raw?.notes === 'string' ? raw.notes : raw?.notes ?? null,
     revealOrder: raw?.revealOrder ?? null,
+    color:
+      typeof raw?.color === 'string'
+        ? raw.color.trim().length > 0
+          ? raw.color.trim().toLowerCase()
+          : null
+        : raw?.color ?? null,
   };
 };
 
@@ -379,6 +391,14 @@ const serializeRegionPayload = (payload: Partial<RegionPayload>) => {
   }
   if (payload.notes !== undefined) {
     body.notes = payload.notes;
+  }
+  if (payload.color !== undefined) {
+    if (payload.color === null) {
+      body.color = null;
+    } else if (typeof payload.color === 'string') {
+      const trimmed = payload.color.trim();
+      body.color = trimmed ? trimmed.toLowerCase() : null;
+    }
   }
   if (payload.revealOrder !== undefined) {
     body.revealOrder = payload.revealOrder;

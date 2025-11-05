@@ -34,7 +34,8 @@
         {"x": 0.15, "y": 0.28}
       ],
       "notes": "Crumbling stone stairs lead into the earth.",
-      "revealOrder": 1
+      "revealOrder": 1,
+      "color": "#facc15"
     },
     {
       "mapName": "Warren Overview",
@@ -47,7 +48,8 @@
         {"x": 0.41, "y": 0.52}
       ],
       "notes": "Bartering goblins trade junk and trinkets.",
-      "revealOrder": 2
+      "revealOrder": 2,
+      "color": "#fb7185"
     },
     {
       "mapName": "Warren Overview",
@@ -60,7 +62,8 @@
         {"x": 0.71, "y": 0.32}
       ],
       "notes": "The goblin boss plans his raids here.",
-      "revealOrder": 3
+      "revealOrder": 3,
+      "color": "#38bdf8"
     }
   ],
   "markers": [
