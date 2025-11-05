@@ -1,0 +1,3 @@
+ALTER TABLE regions ADD COLUMN description TEXT;
+ALTER TABLE regions ADD COLUMN tags TEXT;
+ALTER TABLE regions ADD COLUMN visible_at_start INTEGER NOT NULL DEFAULT 0;
