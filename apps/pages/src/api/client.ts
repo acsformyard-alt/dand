@@ -14,11 +14,9 @@ import type {
   User,
 } from '../types';
 import {
-  createRoomMaskFromPolygon,
   decodeRoomMaskFromDataUrl,
   encodeRoomMaskToDataUrl,
   emptyRoomMask,
-  roomMaskToVector,
   type RoomMask,
 } from '../utils/roomMask';
 
@@ -406,7 +404,6 @@ const parseBooleanLike = (value: unknown): boolean | undefined => {
 };
 
 const normalizeRegion = (raw: any): Region => {
-  const polygon = polygonPointsFromRaw(raw?.polygon);
   let mask: RoomMask | null = null;
   const rawMask = raw?.mask;
   if (rawMask && typeof rawMask === 'object') {
@@ -428,9 +425,6 @@ const normalizeRegion = (raw: any): Region => {
         mask = null;
       }
     }
-  }
-  if (!mask && polygon.length) {
-    mask = createRoomMaskFromPolygon(polygon, { resolution: 256 });
   }
   if (!mask) {
     mask = emptyRoomMask();
@@ -501,7 +495,6 @@ const serializeRegionPayload = (payload: Partial<RegionPayload>) => {
       height: payload.mask.height,
       bounds: payload.mask.bounds,
     };
-    body.polygon = roomMaskToVector(payload.mask);
   }
   if (payload.maskManifest !== undefined) {
     body.maskManifest = payload.maskManifest;

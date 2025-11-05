@@ -666,12 +666,11 @@ var src_default = {
         const mapId = url.pathname.split("/")[3];
         if (request.method === "GET") {
           const result = await env.MAPS_DB.prepare(
-            "SELECT id, map_id as mapId, name, polygon, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
+            "SELECT id, map_id as mapId, name, notes, reveal_order as revealOrder, mask_manifest as maskManifest, color, description, tags, visible_at_start as visibleAtStart FROM regions WHERE map_id = ? ORDER BY reveal_order ASC, created_at ASC"
           ).bind(mapId).all();
           return jsonResponse({
             regions: result.results.map((r) => ({
               ...r,
-              polygon: typeof r.polygon === "string" ? JSON.parse(r.polygon) : r.polygon,
               maskManifest: typeof r.maskManifest === "string" ? JSON.parse(r.maskManifest) : r.maskManifest ?? null,
               color:
                 typeof r.color === "string"
@@ -694,7 +693,7 @@ var src_default = {
             return errorResponse("Map not found", 404, { headers: corsHeaders });
           }
           const body = await parseJSON(request);
-          if (!body || typeof body.name !== "string" || !Array.isArray(body.polygon)) {
+          if (!body || typeof body.name !== "string") {
             return errorResponse("Invalid region", 400, { headers: corsHeaders });
           }
           const regionId = crypto.randomUUID();
@@ -713,12 +712,11 @@ var src_default = {
           const normalizedTags = normalizeTagsValue(body?.tags);
           const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "INSERT INTO regions (id, map_id, name, polygon, notes, reveal_order, mask_manifest, color, description, tags, visible_at_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO regions (id, map_id, name, notes, reveal_order, mask_manifest, color, description, tags, visible_at_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           ).bind(
             regionId,
             mapId,
             body.name,
-            JSON.stringify(body.polygon),
             body.notes || null,
             typeof body.revealOrder === "number" ? body.revealOrder : null,
             manifestObject ? JSON.stringify(manifestObject) : null,
@@ -732,7 +730,6 @@ var src_default = {
               id: regionId,
               mapId,
               name: body.name,
-              polygon: body.polygon,
               notes: body.notes || null,
               revealOrder: typeof body.revealOrder === "number" ? body.revealOrder : null,
               maskManifest: manifestObject,
@@ -785,10 +782,9 @@ var src_default = {
           const normalizedTags = normalizeTagsValue(body?.tags);
           const visibleAtStartFlag = parseBooleanFlag(body?.visibleAtStart);
           await env.MAPS_DB.prepare(
-            "UPDATE regions SET name = ?, polygon = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ?, description = ?, tags = ?, visible_at_start = ? WHERE id = ?"
+            "UPDATE regions SET name = ?, notes = ?, reveal_order = ?, mask_manifest = ?, color = ?, description = ?, tags = ?, visible_at_start = ? WHERE id = ?"
           ).bind(
             body?.name || null,
-            body?.polygon ? JSON.stringify(body.polygon) : JSON.stringify([]),
             body?.notes || null,
             typeof body?.revealOrder === "number" ? body.revealOrder : null,
             manifestJson,

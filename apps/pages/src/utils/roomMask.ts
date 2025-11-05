@@ -7,296 +7,65 @@ export interface RoomMask {
   data: Uint8ClampedArray;
 }
 
-export interface RoomMaskOptions {
-  resolution?: number;
-  bounds?: Bounds;
-  padding?: number;
-}
-
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-const nearlyEqual = (a: number, b: number, epsilon = 1e-6) => Math.abs(a - b) <= epsilon;
-
-const pointKey = (point: Point) => `${point.x.toFixed(6)}:${point.y.toFixed(6)}`;
-
-const dedupePoints = (points: Point[]) => {
-  const seen = new Set<string>();
-  const result: Point[] = [];
-  for (const point of points) {
-    const key = pointKey(point);
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(point);
-    }
+export const roomMaskContainsPoint = (mask: RoomMask, point: Point): boolean => {
+  const { bounds, width, height, data } = mask;
+  if (!width || !height) {
+    return false;
   }
-  return result;
+  if (point.x < bounds.minX || point.x > bounds.maxX || point.y < bounds.minY || point.y > bounds.maxY) {
+    return false;
+  }
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  if (spanX <= 0 || spanY <= 0) {
+    return false;
+  }
+  const relativeX = (point.x - bounds.minX) / spanX;
+  const relativeY = (point.y - bounds.minY) / spanY;
+  const pixelX = Math.min(width - 1, Math.max(0, Math.floor(relativeX * width)));
+  const pixelY = Math.min(height - 1, Math.max(0, Math.floor(relativeY * height)));
+  const index = pixelY * width + pixelX;
+  return data[index] > 0;
 };
 
-const simplifyDouglasPeucker = (points: Point[], tolerance: number) => {
-  if (points.length <= 2) {
-    return points.slice();
+export const roomMaskCentroid = (mask: RoomMask): Point => {
+  const { bounds, width, height, data } = mask;
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  if (width <= 0 || height <= 0 || spanX <= 0 || spanY <= 0) {
+    return {
+      x: clamp((bounds.minX + bounds.maxX) / 2, 0, 1),
+      y: clamp((bounds.minY + bounds.maxY) / 2, 0, 1),
+    };
   }
-
-  const sqTolerance = tolerance * tolerance;
-
-  const sqDistanceToSegment = (p: Point, a: Point, b: Point) => {
-    let x = a.x;
-    let y = a.y;
-    let dx = b.x - x;
-    let dy = b.y - y;
-
-    if (dx !== 0 || dy !== 0) {
-      const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
-      if (t > 1) {
-        x = b.x;
-        y = b.y;
-      } else if (t > 0) {
-        x += dx * t;
-        y += dy * t;
-      }
-    }
-
-    dx = p.x - x;
-    dy = p.y - y;
-    return dx * dx + dy * dy;
-  };
-
-  const simplifyDPStep = (pointsToSimplify: Point[], first: number, last: number, simplified: Point[]) => {
-    let maxSqDist = sqTolerance;
-    let index = -1;
-
-    for (let i = first + 1; i < last; i += 1) {
-      const sqDist = sqDistanceToSegment(pointsToSimplify[i], pointsToSimplify[first], pointsToSimplify[last]);
-      if (sqDist > maxSqDist) {
-        index = i;
-        maxSqDist = sqDist;
-      }
-    }
-
-    if (index !== -1) {
-      if (index - first > 1) {
-        simplifyDPStep(pointsToSimplify, first, index, simplified);
-      }
-      simplified.push(pointsToSimplify[index]);
-      if (last - index > 1) {
-        simplifyDPStep(pointsToSimplify, index, last, simplified);
-      }
-    }
-  };
-
-  const last = points.length - 1;
-  const result = [points[0]];
-  simplifyDPStep(points, 0, last, result);
-  result.push(points[last]);
-  return result;
-};
-
-const pointInPolygon = (point: Point, polygon: Point[]) => {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i += 1) {
-    const xi = polygon[i].x;
-    const yi = polygon[i].y;
-    const xj = polygon[j].x;
-    const yj = polygon[j].y;
-    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-};
-
-const ensureBounds = (polygon: Point[]): Bounds => {
-  if (polygon.length === 0) {
-    return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
-  }
-  let minX = polygon[0].x;
-  let minY = polygon[0].y;
-  let maxX = polygon[0].x;
-  let maxY = polygon[0].y;
-  for (const point of polygon) {
-    if (point.x < minX) minX = point.x;
-    if (point.y < minY) minY = point.y;
-    if (point.x > maxX) maxX = point.x;
-    if (point.y > maxY) maxY = point.y;
-  }
-  const width = maxX - minX || 1;
-  const height = maxY - minY || 1;
-  const padding = Math.max(width, height) * 0.05;
-  return {
-    minX: clamp(minX - padding, 0, 1),
-    minY: clamp(minY - padding, 0, 1),
-    maxX: clamp(maxX + padding, 0, 1),
-    maxY: clamp(maxY + padding, 0, 1),
-  };
-};
-
-const rasterizePolygon = (polygon: Point[], width: number, height: number, bounds: Bounds) => {
-  const mask = new Uint8ClampedArray(width * height);
-  if (polygon.length === 0) {
-    return mask;
-  }
-  const scaleX = bounds.maxX - bounds.minX || 1;
-  const scaleY = bounds.maxY - bounds.minY || 1;
+  let total = 0;
+  let sumX = 0;
+  let sumY = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const worldPoint = {
-        x: bounds.minX + ((x + 0.5) / width) * scaleX,
-        y: bounds.minY + ((y + 0.5) / height) * scaleY,
-      };
-      if (pointInPolygon(worldPoint, polygon)) {
-        mask[y * width + x] = 255;
+      const index = y * width + x;
+      if (data[index] > 0) {
+        const worldX = bounds.minX + ((x + 0.5) / width) * spanX;
+        const worldY = bounds.minY + ((y + 0.5) / height) * spanY;
+        sumX += worldX;
+        sumY += worldY;
+        total += 1;
       }
     }
   }
-  return mask;
-};
-
-const marchingSquares = (mask: Uint8ClampedArray, width: number, height: number) => {
-  const segments: Array<{ start: Point; end: Point }> = [];
-
-  const edgePoint = (x: number, y: number, edge: 'top' | 'bottom' | 'left' | 'right'): Point => {
-    switch (edge) {
-      case 'top':
-        return { x: x + 0.5, y };
-      case 'bottom':
-        return { x: x + 0.5, y: y + 1 };
-      case 'left':
-        return { x, y: y + 0.5 };
-      case 'right':
-        return { x: x + 1, y: y + 0.5 };
-    }
-  };
-
-  const cases: Record<number, Array<[Point, Point]>> = {
-    0: [],
-    1: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'top')]],
-    2: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')]],
-    3: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'right')]],
-    4: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'bottom')]],
-    5: [
-      [edgePoint(0, 0, 'left'), edgePoint(0, 0, 'bottom')],
-      [edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')],
-    ],
-    6: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'bottom')]],
-    7: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'bottom')]],
-    8: [[edgePoint(0, 0, 'bottom'), edgePoint(0, 0, 'left')]],
-    9: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'bottom')]],
-    10: [
-      [edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')],
-      [edgePoint(0, 0, 'bottom'), edgePoint(0, 0, 'left')],
-    ],
-    11: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'bottom')]],
-    12: [[edgePoint(0, 0, 'right'), edgePoint(0, 0, 'left')]],
-    13: [[edgePoint(0, 0, 'top'), edgePoint(0, 0, 'right')]],
-    14: [[edgePoint(0, 0, 'left'), edgePoint(0, 0, 'top')]],
-    15: [],
-  };
-
-  for (let y = 0; y < height - 1; y += 1) {
-    for (let x = 0; x < width - 1; x += 1) {
-      const topLeft = mask[y * width + x] > 0;
-      const topRight = mask[y * width + x + 1] > 0;
-      const bottomRight = mask[(y + 1) * width + x + 1] > 0;
-      const bottomLeft = mask[(y + 1) * width + x] > 0;
-      let key = 0;
-      if (topLeft) key |= 1;
-      if (topRight) key |= 2;
-      if (bottomRight) key |= 4;
-      if (bottomLeft) key |= 8;
-      if (key === 0 || key === 15) {
-        continue;
-      }
-      const template = cases[key];
-      for (const [start, end] of template) {
-        segments.push({
-          start: { x: start.x + x, y: start.y + y },
-          end: { x: end.x + x, y: end.y + y },
-        });
-      }
-    }
+  if (total === 0) {
+    return {
+      x: clamp((bounds.minX + bounds.maxX) / 2, 0, 1),
+      y: clamp((bounds.minY + bounds.maxY) / 2, 0, 1),
+    };
   }
-
-  if (segments.length === 0) {
-    return [] as Point[];
-  }
-
-  const polygon: Point[] = [];
-  const used = new Array(segments.length).fill(false);
-  polygon.push(segments[0].start);
-  polygon.push(segments[0].end);
-  used[0] = true;
-
-  const equals = (a: Point, b: Point) => nearlyEqual(a.x, b.x, 1e-4) && nearlyEqual(a.y, b.y, 1e-4);
-
-  while (polygon.length < 5000) {
-    const current = polygon[polygon.length - 1];
-    let advanced = false;
-    for (let i = 0; i < segments.length; i += 1) {
-      if (used[i]) continue;
-      const segment = segments[i];
-      if (equals(segment.start, current)) {
-        polygon.push(segment.end);
-        used[i] = true;
-        advanced = true;
-        break;
-      }
-      if (equals(segment.end, current)) {
-        polygon.push(segment.start);
-        used[i] = true;
-        advanced = true;
-        break;
-      }
-    }
-    if (!advanced) {
-      break;
-    }
-    if (equals(polygon[polygon.length - 1], polygon[0])) {
-      polygon.pop();
-      break;
-    }
-  }
-
-  return polygon;
-};
-
-export const createRoomMaskFromPolygon = (polygon: Point[], options?: RoomMaskOptions): RoomMask => {
-  const resolution = clamp(options?.resolution ?? 256, 16, 1024);
-  const padding = options?.padding ?? 0;
-  const baseBounds = options?.bounds ?? ensureBounds(polygon);
-  const bounds: Bounds = {
-    minX: clamp(baseBounds.minX - padding, 0, 1),
-    minY: clamp(baseBounds.minY - padding, 0, 1),
-    maxX: clamp(baseBounds.maxX + padding, 0, 1),
-    maxY: clamp(baseBounds.maxY + padding, 0, 1),
-  };
-  const width = Math.max(8, Math.round((bounds.maxX - bounds.minX) * resolution));
-  const height = Math.max(8, Math.round((bounds.maxY - bounds.minY) * resolution));
-  const mask = rasterizePolygon(polygon, width, height, bounds);
   return {
-    width,
-    height,
-    bounds,
-    data: mask,
+    x: clamp(sumX / total, 0, 1),
+    y: clamp(sumY / total, 0, 1),
   };
 };
-
-export const roomMaskToPolygon = (mask: RoomMask, tolerance = 0.001): Point[] => {
-  const raw = marchingSquares(mask.data, mask.width, mask.height);
-  if (raw.length === 0) {
-    return [];
-  }
-  const { bounds } = mask;
-  const scaleX = bounds.maxX - bounds.minX || 1;
-  const scaleY = bounds.maxY - bounds.minY || 1;
-  const widthDenominator = mask.width - 1 || 1;
-  const heightDenominator = mask.height - 1 || 1;
-  const polygon = raw.map((point) => ({
-    x: bounds.minX + (point.x / widthDenominator) * scaleX,
-    y: bounds.minY + (point.y / heightDenominator) * scaleY,
-  }));
-  return simplifyDouglasPeucker(dedupePoints(polygon), tolerance);
-};
-
-export const roomMaskToVector = roomMaskToPolygon;
 
 const crcTable = (() => {
   const table = new Uint32Array(256);

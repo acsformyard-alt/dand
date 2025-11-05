@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
-import { roomMaskToPolygon } from '../utils/roomMask';
+import { encodeRoomMaskToDataUrl, roomMaskCentroid } from '../utils/roomMask';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -44,33 +44,6 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const computeCentroid = (points: Array<{ x: number; y: number }>) => {
-  if (points.length === 0) {
-    return { x: 0.5, y: 0.5 };
-  }
-  let doubleArea = 0;
-  let centroidX = 0;
-  let centroidY = 0;
-  for (let i = 0; i < points.length; i += 1) {
-    const current = points[i];
-    const next = points[(i + 1) % points.length];
-    const factor = current.x * next.y - next.x * current.y;
-    doubleArea += factor;
-    centroidX += (current.x + next.x) * factor;
-    centroidY += (current.y + next.y) * factor;
-  }
-  if (Math.abs(doubleArea) < 1e-6) {
-    const avgX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
-    const avgY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-    return { x: avgX, y: avgY };
-  }
-  const area = doubleArea / 2;
-  return {
-    x: centroidX / (6 * area),
-    y: centroidY / (6 * area),
-  };
-};
-
 const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   session,
   mapImageUrl,
@@ -88,45 +61,30 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
 
-  const regionShapes = useMemo(
+  const regionDisplays = useMemo(
     () =>
-      regions
-        .map((region) => {
-          const baseColor = normalizeHexColor(region.color) ?? '#facc15';
-          const polygon = roomMaskToPolygon(region.mask);
-          if (polygon.length === 0) {
-            return null;
-          }
-          const centroid = computeCentroid(polygon);
-          const scaledPath = polygon
-            .map((point, index) => {
-              const x = point.x * viewWidth;
-              const y = point.y * viewHeight;
-              return `${index === 0 ? 'M' : 'L'}${x},${y}`;
-            })
-            .join(' ');
-          return {
-            id: region.id,
-            name: region.name,
-            path: `${scaledPath} Z`,
-            centroid: {
-              x: centroid.x * viewWidth,
-              y: centroid.y * viewHeight,
-            },
-            fillColor: hexToRgba(baseColor, 0.15),
-            strokeColor: hexToRgba(baseColor, 0.6),
-          };
-        })
-        .filter(
-          (shape): shape is {
-            id: string;
-            name: string;
-            path: string;
-            centroid: { x: number; y: number };
-            fillColor: string;
-            strokeColor: string;
-          } => Boolean(shape),
-        ),
+      regions.map((region) => {
+        const baseColor = normalizeHexColor(region.color) ?? '#facc15';
+        const centroid = roomMaskCentroid(region.mask);
+        const bounds = region.mask.bounds;
+        const rect = {
+          x: bounds.minX * viewWidth,
+          y: bounds.minY * viewHeight,
+          width: Math.max(1, (bounds.maxX - bounds.minX) * viewWidth),
+          height: Math.max(1, (bounds.maxY - bounds.minY) * viewHeight),
+        };
+        return {
+          id: region.id,
+          name: region.name,
+          maskUrl: encodeRoomMaskToDataUrl(region.mask),
+          rect,
+          centroid: {
+            x: centroid.x * viewWidth,
+            y: centroid.y * viewHeight,
+          },
+          fillColor: hexToRgba(baseColor, 0.15),
+        };
+      }),
     [regions, viewHeight, viewWidth],
   );
 
@@ -215,6 +173,29 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           </div>
           <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
             <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.85)" />
+            <defs>
+              {regionDisplays.map((shape) => (
+                <mask
+                  key={`mask-${shape.id}`}
+                  id={`region-mask-${shape.id}`}
+                  maskUnits="userSpaceOnUse"
+                  x={shape.rect.x}
+                  y={shape.rect.y}
+                  width={shape.rect.width}
+                  height={shape.rect.height}
+                >
+                  <rect x={shape.rect.x} y={shape.rect.y} width={shape.rect.width} height={shape.rect.height} fill="black" />
+                  <image
+                    href={shape.maskUrl}
+                    x={shape.rect.x}
+                    y={shape.rect.y}
+                    width={shape.rect.width}
+                    height={shape.rect.height}
+                    preserveAspectRatio="none"
+                  />
+                </mask>
+              ))}
+            </defs>
             {mapImageUrl && (
               <image
                 href={mapImageUrl}
@@ -226,9 +207,17 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               />
             )}
             {viewMode === 'dm' &&
-              regionShapes.map((shape) => (
+              regionDisplays.map((shape) => (
                 <g key={shape.id}>
-                  <path d={shape.path} fill={shape.fillColor} stroke={shape.strokeColor} strokeWidth={2} />
+                  <g mask={`url(#region-mask-${shape.id})`}>
+                    <rect
+                      x={shape.rect.x}
+                      y={shape.rect.y}
+                      width={shape.rect.width}
+                      height={shape.rect.height}
+                      fill={shape.fillColor}
+                    />
+                  </g>
                   <text
                     x={shape.centroid.x}
                     y={shape.centroid.y}
