@@ -605,6 +605,7 @@ const App: React.FC = () => {
                 mapWidth={activeSessionMap?.width}
                 mapHeight={activeSessionMap?.height}
                 regions={regions}
+                markers={markers}
                 onLeave={handleLeaveSession}
               />
             </div>
