@@ -79,13 +79,15 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
       </header>
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950/70 p-3 sm:p-4">
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-white/20 bg-slate-900/80 shadow-inner shadow-black/30 dark:border-slate-800/70">
-          <PlayerView
-            mapImageUrl={mapImageUrl ?? undefined}
-            width={mapWidth ?? map?.width ?? undefined}
-            height={mapHeight ?? map?.height ?? undefined}
-            regions={regions}
-            revealedRegionIds={playerRevealedRegionIds}
-          />
+          <div className="flex max-h-full max-w-full flex-1 overflow-hidden object-contain">
+            <PlayerView
+              mapImageUrl={mapImageUrl ?? undefined}
+              width={mapWidth ?? map?.width ?? undefined}
+              height={mapHeight ?? map?.height ?? undefined}
+              regions={regions}
+              revealedRegionIds={playerRevealedRegionIds}
+            />
+          </div>
         </div>
       </div>
     </div>
