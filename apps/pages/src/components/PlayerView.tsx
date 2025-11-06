@@ -28,7 +28,10 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   const maskPrefix = useId();
   const maskFilterId = `${maskPrefix}-mask-filter`;
   const fogMaskId = `${maskPrefix}-fog-mask`;
-  const featherRadius = Math.max(viewWidth, viewHeight) * 0.01;
+  const largestDimension = Math.max(viewWidth, viewHeight);
+  const featherRadius = largestDimension * 0.003;
+  const maskPadding = largestDimension * 0.01;
+  const filterPadding = maskPadding + featherRadius;
 
   const revealedMasks = useMemo<RevealedMask[]>(() => {
     const revealedSet = new Set(revealedRegionIds ?? []);
@@ -40,26 +43,32 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
         const dataUrl = region.maskManifest?.dataUrl ?? encodeRoomMaskToDataUrl(region.mask);
         const maskWidth = Math.max(1, (bounds.maxX - bounds.minX) * viewWidth);
         const maskHeight = Math.max(1, (bounds.maxY - bounds.minY) * viewHeight);
+        const maskX = bounds.minX * viewWidth;
+        const maskY = bounds.minY * viewHeight;
+        const leftExpansion = Math.min(maskPadding, maskX);
+        const rightExpansion = Math.min(maskPadding, Math.max(0, viewWidth - (maskX + maskWidth)));
+        const topExpansion = Math.min(maskPadding, maskY);
+        const bottomExpansion = Math.min(maskPadding, Math.max(0, viewHeight - (maskY + maskHeight)));
         return {
           id: region.id,
           dataUrl,
-          x: bounds.minX * viewWidth,
-          y: bounds.minY * viewHeight,
-          width: maskWidth,
-          height: maskHeight,
+          x: maskX - leftExpansion,
+          y: maskY - topExpansion,
+          width: maskWidth + leftExpansion + rightExpansion,
+          height: maskHeight + topExpansion + bottomExpansion,
         };
       });
-  }, [regions, revealedRegionIds, viewHeight, viewWidth]);
+  }, [maskPadding, regions, revealedRegionIds, viewHeight, viewWidth]);
 
   return (
     <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="block h-full w-full">
       <defs>
         <filter
           id={maskFilterId}
-          x={-featherRadius}
-          y={-featherRadius}
-          width={viewWidth + featherRadius * 2}
-          height={viewHeight + featherRadius * 2}
+          x={-filterPadding}
+          y={-filterPadding}
+          width={viewWidth + filterPadding * 2}
+          height={viewHeight + filterPadding * 2}
           filterUnits="userSpaceOnUse"
           colorInterpolationFilters="sRGB"
         >
