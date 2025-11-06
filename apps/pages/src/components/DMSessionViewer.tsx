@@ -1,6 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
+import {
+  getReadableTextColor,
+  normalizeHexColor,
+  normaliseMarkers,
+  resolveMarkerBaseColor,
+  rgbaFromNormalizedHex,
+} from '../utils/markerUtils';
+import { getMapMarkerIconDefinition } from './mapMarkerIcons';
 import PlayerView from './PlayerView';
 
 interface DMSessionViewerProps {
@@ -9,7 +17,8 @@ interface DMSessionViewerProps {
   mapWidth?: number | null;
   mapHeight?: number | null;
   regions: Region[];
-  markers?: Marker[];
+  markers?: Record<string, Marker> | Marker[];
+  sessionMarkers?: Record<string, Marker> | Marker[];
   revealedRegionIds?: string[];
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
@@ -18,21 +27,6 @@ interface DMSessionViewerProps {
 
 type ViewMode = 'dm' | 'player';
 type SidebarTab = 'rooms' | 'markers' | 'other';
-
-const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-const normalizeHexColor = (value: string | null | undefined): string | null => {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const match = HEX_COLOR_REGEX.exec(trimmed);
-  if (!match) return null;
-  const hex = match[1];
-  if (hex.length === 3) {
-    const [r, g, b] = hex.split('');
-    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-  }
-  return `#${hex.toLowerCase()}`;
-};
 
 const hexToRgba = (hex: string, alpha: number) => {
   const normalized = normalizeHexColor(hex);
@@ -53,6 +47,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   mapHeight,
   regions,
   markers,
+  sessionMarkers,
   revealedRegionIds,
   onSaveSnapshot,
   onEndSession,
@@ -110,19 +105,32 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   const markerShapes = useMemo(
     () =>
-      (markers ?? []).map((marker) => {
-        const color = normalizeHexColor(marker.color) ?? '#facc15';
-        const label = marker.label ?? 'Marker';
-        const labelWidth = Math.max(72, label.length * 8 + 24);
+      normaliseMarkers(markers).map((marker) => {
+        const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
+        const label = (marker.label && marker.label.trim().length > 0 ? marker.label : 'Marker').toUpperCase();
+        const labelWidth = Math.max(72, label.length * 7.5 + 28);
+        const textColor = getReadableTextColor(baseColor);
+        const iconElement = iconDefinition
+          ? React.cloneElement(iconDefinition.icon, {
+              width: 18,
+              height: 18,
+              x: -9,
+              y: -9,
+              style: { display: 'block', color: textColor },
+            })
+          : null;
         return {
           id: marker.id,
           label,
-          color,
           labelWidth,
           position: {
             x: (marker.x ?? 0) * viewWidth,
             y: (marker.y ?? 0) * viewHeight,
           },
+          baseColor,
+          borderColor: rgbaFromNormalizedHex(baseColor, 0.85),
+          icon: iconElement,
         };
       }),
     [markers, viewHeight, viewWidth],
@@ -271,9 +279,10 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                     textAnchor="middle"
                     style={{ fontSize: 12, fontWeight: 600, fill: '#e2e8f0', letterSpacing: '0.25em' }}
                   >
-                    {marker.label.toUpperCase()}
+                    {marker.label}
                   </text>
-                  <circle r={10} fill={marker.color} stroke="rgba(15, 23, 42, 0.85)" strokeWidth={2} />
+                  <circle r={11} fill={marker.baseColor} stroke={marker.borderColor} strokeWidth={2} />
+                  {marker.icon}
                 </g>
               ))}
             </svg>
@@ -284,6 +293,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               height={viewHeight}
               regions={regions}
               revealedRegionIds={playerRevealedRegionIds}
+              markers={markers}
+              sessionMarkers={sessionMarkers}
             />
           )}
         </div>

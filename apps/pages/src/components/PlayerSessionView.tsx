@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { MapRecord, Region, SessionRecord } from '../types';
+import type { MapRecord, Marker, Region, SessionRecord } from '../types';
 import PlayerView from './PlayerView';
 
 interface PlayerSessionViewProps {
@@ -12,6 +12,8 @@ interface PlayerSessionViewProps {
   mapHeight?: number | null;
   regions: Region[];
   revealedRegionIds?: string[] | null;
+  markers?: Record<string, Marker> | Marker[];
+  sessionMarkers?: Record<string, Marker> | Marker[];
   onLeave?: () => void;
 }
 
@@ -25,6 +27,8 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
   mapHeight,
   regions,
   revealedRegionIds,
+  markers,
+  sessionMarkers,
   onLeave,
 }) => {
   const playerRevealedRegionIds = useMemo(
@@ -85,6 +89,8 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
             height={mapHeight ?? map?.height ?? undefined}
             regions={regions}
             revealedRegionIds={playerRevealedRegionIds}
+            markers={markers}
+            sessionMarkers={sessionMarkers}
           />
         </div>
       </div>
