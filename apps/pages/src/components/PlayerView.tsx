@@ -58,8 +58,8 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
           id={maskFilterId}
           x={-featherRadius}
           y={-featherRadius}
-          width={viewWidth + featherRadius * 2}
-          height={viewHeight + featherRadius * 2}
+          width={viewWidth + featherRadius * 1.4}
+          height={viewHeight + featherRadius * 1.4}
           filterUnits="userSpaceOnUse"
           colorInterpolationFilters="sRGB"
         >
