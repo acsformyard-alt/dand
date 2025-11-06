@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MapRecord, Region, SessionRecord } from '../types';
 import PlayerView from './PlayerView';
 
@@ -27,6 +27,52 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
   revealedRegionIds,
   onLeave,
 }) => {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!container) {
+      return undefined;
+    }
+
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect();
+      setContainerSize((previous) => {
+        const width = rect.width;
+        const height = rect.height;
+        if (previous.width === width && previous.height === height) {
+          return previous;
+        }
+        return { width, height };
+      });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const resizeObserver = new ResizeObserver(() => {
+        updateSize();
+      });
+      resizeObserver.observe(container);
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', updateSize);
+      return () => {
+        window.removeEventListener('resize', updateSize);
+      };
+    }
+
+    return undefined;
+  }, [container]);
+
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    setContainer(node);
+  }, []);
+
   const playerRevealedRegionIds = useMemo(
     () =>
       revealedRegionIds && revealedRegionIds.length > 0
@@ -78,13 +124,18 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
         )}
       </header>
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950/70 p-3 sm:p-4">
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-white/20 bg-slate-900/80 shadow-inner shadow-black/30 dark:border-slate-800/70">
+        <div
+          ref={containerRef}
+          className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-white/20 bg-slate-900/80 shadow-inner shadow-black/30 dark:border-slate-800/70"
+        >
           <PlayerView
             mapImageUrl={mapImageUrl ?? undefined}
             width={mapWidth ?? map?.width ?? undefined}
             height={mapHeight ?? map?.height ?? undefined}
             regions={regions}
             revealedRegionIds={playerRevealedRegionIds}
+            availableWidth={containerSize.width}
+            availableHeight={containerSize.height}
           />
         </div>
       </div>
