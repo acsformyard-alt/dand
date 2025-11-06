@@ -192,7 +192,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
           {revealedMasks.map((mask) => {
             const isAnimating = animatingMaskIdSet.has(mask.id);
             const isComplete = completedMaskIdSet.has(mask.id);
-            const maskOpacity = isComplete ? 1 : isAnimating ? 1 - revealOpacity : 0;
+            const maskOpacity = isComplete ? 0 : isAnimating ? revealOpacity : 1;
 
             return (
               <image
@@ -206,6 +206,9 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
                 filter={`url(#${maskFilterId})`}
                 opacity={maskOpacity}
                 onLoad={() => {
+                  setLoadedMaskIds((prev) => (prev.includes(mask.id) ? prev : [...prev, mask.id]));
+                }}
+                onError={() => {
                   setLoadedMaskIds((prev) => (prev.includes(mask.id) ? prev : [...prev, mask.id]));
                 }}
               />
