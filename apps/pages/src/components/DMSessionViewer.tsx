@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
+import { getMapMarkerIconDefinition, type MapMarkerIconDefinition } from './mapMarkerIcons';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -44,6 +45,32 @@ const hexToRgba = (hex: string, alpha: number) => {
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const rgbFromNormalizedHex = (hex: string) => {
+  const value = hex.slice(1);
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  };
+};
+
+const getReadableMarkerColor = (hex: string) => {
+  const { r, g, b } = rgbFromNormalizedHex(hex);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.65 ? '#0f172a' : '#f8fafc';
+};
+
+const resolveMarkerBaseColor = (marker: Marker, definition?: MapMarkerIconDefinition) => {
+  const candidates: Array<string | null | undefined> = [marker.color, definition?.defaultColor, '#facc15'];
+  for (const candidate of candidates) {
+    const normalized = normalizeHexColor(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return '#facc15';
 };
 
 const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
@@ -111,14 +138,18 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const markerShapes = useMemo(
     () =>
       (markers ?? []).map((marker) => {
-        const color = normalizeHexColor(marker.color) ?? '#facc15';
+        const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+        const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
         const label = marker.label ?? 'Marker';
-        const labelWidth = Math.max(72, label.length * 8 + 24);
+        const labelWidth = Math.max(80, label.length * 8 + 40);
+        const accent = getReadableMarkerColor(baseColor);
         return {
           id: marker.id,
           label,
-          color,
+          color: baseColor,
           labelWidth,
+          icon: iconDefinition,
+          accent,
           position: {
             x: (marker.x ?? 0) * viewWidth,
             y: (marker.y ?? 0) * viewHeight,
@@ -253,29 +284,44 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                   {overlay.name}
                 </text>
               ))}
-              {markerShapes.map((marker) => (
-                <g key={marker.id} transform={`translate(${marker.position.x}, ${marker.position.y})`}>
-                  <rect
-                    x={-marker.labelWidth / 2}
-                    y={-42}
-                    width={marker.labelWidth}
-                    height={26}
-                    rx={13}
-                    fill="rgba(15, 23, 42, 0.7)"
-                    stroke="rgba(203, 213, 225, 0.6)"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={0}
-                    y={-24}
-                    textAnchor="middle"
-                    style={{ fontSize: 12, fontWeight: 600, fill: '#e2e8f0', letterSpacing: '0.25em' }}
-                  >
-                    {marker.label.toUpperCase()}
-                  </text>
-                  <circle r={10} fill={marker.color} stroke="rgba(15, 23, 42, 0.85)" strokeWidth={2} />
-                </g>
-              ))}
+              {markerShapes.map((marker) => {
+                const iconElement =
+                  marker.icon &&
+                  React.cloneElement(marker.icon.icon, {
+                    className: undefined,
+                    width: 20,
+                    height: 20,
+                    style: { color: marker.accent },
+                  });
+                return (
+                  <g key={marker.id} transform={`translate(${marker.position.x}, ${marker.position.y})`}>
+                    <rect
+                      x={-marker.labelWidth / 2}
+                      y={-44}
+                      width={marker.labelWidth}
+                      height={28}
+                      rx={14}
+                      fill="rgba(15, 23, 42, 0.75)"
+                      stroke="rgba(203, 213, 225, 0.65)"
+                      strokeWidth={1.5}
+                    />
+                    <text
+                      x={0}
+                      y={-26}
+                      textAnchor="middle"
+                      style={{ fontSize: 12, fontWeight: 600, fill: '#e2e8f0', letterSpacing: '0.25em' }}
+                    >
+                      {marker.label.toUpperCase()}
+                    </text>
+                    <circle r={12} fill={marker.color} stroke="rgba(15, 23, 42, 0.85)" strokeWidth={2} />
+                    {iconElement ? (
+                      <g transform="translate(-10, -10)">{iconElement}</g>
+                    ) : (
+                      <circle r={4} fill={marker.accent} />
+                    )}
+                  </g>
+                );
+              })}
             </svg>
           ) : (
             <PlayerView
@@ -284,6 +330,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               height={viewHeight}
               regions={regions}
               revealedRegionIds={playerRevealedRegionIds}
+              markers={markers}
             />
           )}
         </div>
