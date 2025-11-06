@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DMSessionViewer from './components/DMSessionViewer';
+import PlayerSessionView from './components/PlayerSessionView';
 import MapMaskCanvas from './components/MapMaskCanvas';
 import { apiClient } from './api/client';
 import MapCreationWizard from './components/MapCreationWizard';
@@ -442,6 +443,45 @@ const App: React.FC = () => {
   }, [selectedMap]);
   const mapTags = useMemo(() => getMapMetadataStringArray(selectedMap, 'tags'), [selectedMap]);
 
+  const activeSessionCampaignName = useMemo(() => {
+    if (!activeSession) {
+      return null;
+    }
+    if (activeSession.campaignName && activeSession.campaignName.trim().length > 0) {
+      return activeSession.campaignName;
+    }
+    if (selectedCampaign && selectedCampaign.id === activeSession.campaignId) {
+      return selectedCampaign.name;
+    }
+    const campaign = campaigns.find((entry) => entry.id === activeSession.campaignId);
+    return campaign ? campaign.name : null;
+  }, [activeSession, campaigns, selectedCampaign]);
+
+  const activeSessionMapName = useMemo(() => {
+    if (!activeSession) {
+      return null;
+    }
+    if (activeSession.mapName && activeSession.mapName.trim().length > 0) {
+      return activeSession.mapName;
+    }
+    if (selectedMap && selectedMap.id === activeSession.mapId) {
+      return selectedMap.name;
+    }
+    const mapRecord = maps.find((entry) => entry.id === activeSession.mapId);
+    return mapRecord ? mapRecord.name : null;
+  }, [activeSession, maps, selectedMap]);
+
+  const activeSessionMap = useMemo(() => {
+    if (!activeSession) {
+      return selectedMap;
+    }
+    if (selectedMap && selectedMap.id === activeSession.mapId) {
+      return selectedMap;
+    }
+    const mapRecord = maps.find((entry) => entry.id === activeSession.mapId);
+    return mapRecord ?? selectedMap ?? null;
+  }, [activeSession, maps, selectedMap]);
+
   const handleStartSession = async () => {
     if (!selectedCampaign || !selectedMap) {
       window.alert('Select a campaign and map first.');
@@ -611,15 +651,17 @@ const App: React.FC = () => {
             )}
             <div className="rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               {sessionMode === 'player' ? (
-                <div className="flex h-[78vh] min-h-[540px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/40 bg-white/40 text-center text-xs uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                  <span>Player session viewer coming soon</span>
-                  <button
-                    className="rounded-full border border-white/60 bg-white/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
-                    onClick={handleLeaveSession}
-                  >
-                    Leave Session
-                  </button>
-                </div>
+                <PlayerSessionView
+                  session={activeSession}
+                  campaignName={activeSessionCampaignName}
+                  map={activeSessionMap}
+                  mapName={activeSessionMapName}
+                  mapImageUrl={apiClient.buildMapDisplayUrl(activeSession.mapId)}
+                  mapWidth={activeSessionMap?.width}
+                  mapHeight={activeSessionMap?.height}
+                  regions={regions}
+                  onLeave={handleLeaveSession}
+                />
               ) : (
                 <DMSessionViewer
                   session={activeSession}
