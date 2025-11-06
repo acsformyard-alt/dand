@@ -130,41 +130,45 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   return (
     <div className="relative flex min-h-[540px] w-full flex-1 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 p-4">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-2xl border border-white/50 bg-white/70 px-4 py-3 text-[10px] uppercase tracking-[0.4em] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/70">
-          <span className="font-semibold text-slate-700 dark:text-slate-300">DM Session</span>
+      <header className="flex h-12 items-center justify-between border-b border-white/30 bg-white/40 px-4 text-[11px] uppercase tracking-[0.35em] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60">
+        <div className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+          <span className="text-[10px] font-semibold tracking-[0.4em] text-slate-600 dark:text-slate-400">DM SESSION</span>
           <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-bold tracking-[0.45em] text-slate-900 shadow-sm dark:bg-slate-800/70 dark:text-amber-200">
             {session.name}
           </span>
           <button
             type="button"
             onClick={toggleViewMode}
-            className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
+            className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
           >
             {viewMode === 'dm' ? 'DM View' : 'Player Preview'}
           </button>
         </div>
-        <div className="pointer-events-auto flex flex-wrap justify-end gap-2 rounded-2xl border border-white/50 bg-white/70 px-4 py-3 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/70">
-          <button
-            type="button"
-            onClick={onSaveSnapshot}
-            className="rounded-full border border-amber-400/70 bg-amber-300/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-          >
-            Save Snapshot
-          </button>
+        <div className="flex items-center gap-2">
+          {onSaveSnapshot && (
+            <button
+              type="button"
+              onClick={onSaveSnapshot}
+              className="rounded-full border border-amber-400/70 bg-amber-300/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+            >
+              Save Snapshot
+            </button>
+          )}
           <button
             type="button"
             className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
           >
             Players
           </button>
-          <button
-            type="button"
-            onClick={onEndSession}
-            className="rounded-full border border-rose-500/80 bg-rose-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-600 transition hover:bg-rose-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/70 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
-          >
-            End Session
-          </button>
+          {onEndSession && (
+            <button
+              type="button"
+              onClick={onEndSession}
+              className="rounded-full border border-rose-500/80 bg-rose-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-600 transition hover:bg-rose-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/70 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
+            >
+              End Session
+            </button>
+          )}
           {onLeave && (
             <button
               type="button"
@@ -175,8 +179,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             </button>
           )}
         </div>
-      </div>
-      <div className="flex min-h-0 flex-1 overflow-hidden pt-12">
+      </header>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-h-0 flex-[4] bg-slate-950/25">
           <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
             <defs>
