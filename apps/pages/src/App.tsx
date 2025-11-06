@@ -554,24 +554,6 @@ const App: React.FC = () => {
         <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
         <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
         <div className="relative isolate min-h-screen">
-          <div className="pointer-events-none absolute top-6 right-6 z-20 flex gap-2">
-            <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
-              <button
-                className="inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-200/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                aria-pressed={theme === 'dark'}
-              >
-                <span aria-hidden>{theme === 'dark' ? '🌙' : '🌞'}</span>
-                {themeLabel}
-              </button>
-              <button
-                className="inline-flex items-center gap-2 rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          </div>
           <div className="flex min-h-full flex-col gap-6">
             <div className="flex min-h-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               <DMSessionViewer
