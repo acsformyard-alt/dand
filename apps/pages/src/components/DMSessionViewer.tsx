@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Marker, Region, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
+import PlayerView from './PlayerView';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -9,12 +10,13 @@ interface DMSessionViewerProps {
   mapHeight?: number | null;
   regions: Region[];
   markers?: Marker[];
+  revealedRegionIds?: string[];
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
   onLeave?: () => void;
 }
 
-type ViewMode = 'dm' | 'playerPreview';
+type ViewMode = 'dm' | 'player';
 type SidebarTab = 'rooms' | 'markers' | 'other';
 
 const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -51,6 +53,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   mapHeight,
   regions,
   markers,
+  revealedRegionIds,
   onSaveSnapshot,
   onEndSession,
   onLeave,
@@ -60,6 +63,14 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
+
+  const playerRevealedRegionIds = useMemo(
+    () =>
+      (revealedRegionIds && revealedRegionIds.length > 0
+        ? revealedRegionIds
+        : regions.filter((region) => region.visibleAtStart).map((region) => region.id)),
+    [regions, revealedRegionIds],
+  );
 
   const regionOverlays = useMemo(
     () =>
@@ -118,7 +129,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   );
 
   const toggleViewMode = () => {
-    setViewMode((current) => (current === 'dm' ? 'playerPreview' : 'dm'));
+    setViewMode((current) => (current === 'dm' ? 'player' : 'dm'));
   };
 
   const tabButtonClasses = (tab: SidebarTab) =>
@@ -141,7 +152,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             onClick={toggleViewMode}
             className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
           >
-            {viewMode === 'dm' ? 'DM View' : 'Player Preview'}
+            {viewMode === 'dm' ? 'DM View' : 'Player View'}
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -182,71 +193,67 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
       </header>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-h-0 flex-[4] bg-slate-950/25">
-          <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
-            <defs>
-              {regionOverlays.map((overlay) => {
-                const maskId = `region-mask-${overlay.id}`;
-                const { bounds } = overlay;
-                const maskX = bounds.minX * viewWidth;
-                const maskY = bounds.minY * viewHeight;
-                const maskWidth = Math.max(1, (bounds.maxX - bounds.minX) * viewWidth);
-                const maskHeight = Math.max(1, (bounds.maxY - bounds.minY) * viewHeight);
-                return (
-                  <mask id={maskId} key={maskId} maskUnits="userSpaceOnUse">
-                    <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="black" />
-                    <image
-                      href={overlay.dataUrl}
-                      x={maskX}
-                      y={maskY}
-                      width={maskWidth}
-                      height={maskHeight}
-                      preserveAspectRatio="none"
-                    />
-                  </mask>
-                );
-              })}
-            </defs>
-            <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.85)" />
-            {mapImageUrl && (
-              <image
-                href={mapImageUrl}
-                x={0}
-                y={0}
-                width={viewWidth}
-                height={viewHeight}
-                preserveAspectRatio="xMidYMid meet"
-              />
-            )}
-            {viewMode === 'dm' && (
-              <>
-                {regionOverlays.map((overlay) => (
-                  <g key={`overlay-${overlay.id}`} mask={`url(#region-mask-${overlay.id})`}>
-                    <rect x={0} y={0} width={viewWidth} height={viewHeight} fill={overlay.fillColor} />
-                  </g>
-                ))}
-                {regionOverlays.map((overlay) => (
-                  <text
-                    key={`label-${overlay.id}`}
-                    x={overlay.centroid.x}
-                    y={overlay.centroid.y}
-                    textAnchor="middle"
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      fill: '#1f2937',
-                      stroke: 'rgba(255, 255, 255, 0.8)',
-                      strokeWidth: 3,
-                      strokeLinejoin: 'round',
-                      paintOrder: 'stroke',
-                    }}
-                  >
-                    {overlay.name}
-                  </text>
-                ))}
-              </>
-            )}
-            {viewMode === 'dm' &&
-              markerShapes.map((marker) => (
+          {viewMode === 'dm' ? (
+            <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
+              <defs>
+                {regionOverlays.map((overlay) => {
+                  const maskId = `region-mask-${overlay.id}`;
+                  const { bounds } = overlay;
+                  const maskX = bounds.minX * viewWidth;
+                  const maskY = bounds.minY * viewHeight;
+                  const maskWidth = Math.max(1, (bounds.maxX - bounds.minX) * viewWidth);
+                  const maskHeight = Math.max(1, (bounds.maxY - bounds.minY) * viewHeight);
+                  return (
+                    <mask id={maskId} key={maskId} maskUnits="userSpaceOnUse">
+                      <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="black" />
+                      <image
+                        href={overlay.dataUrl}
+                        x={maskX}
+                        y={maskY}
+                        width={maskWidth}
+                        height={maskHeight}
+                        preserveAspectRatio="none"
+                      />
+                    </mask>
+                  );
+                })}
+              </defs>
+              <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.85)" />
+              {mapImageUrl && (
+                <image
+                  href={mapImageUrl}
+                  x={0}
+                  y={0}
+                  width={viewWidth}
+                  height={viewHeight}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              )}
+              {regionOverlays.map((overlay) => (
+                <g key={`overlay-${overlay.id}`} mask={`url(#region-mask-${overlay.id})`}>
+                  <rect x={0} y={0} width={viewWidth} height={viewHeight} fill={overlay.fillColor} />
+                </g>
+              ))}
+              {regionOverlays.map((overlay) => (
+                <text
+                  key={`label-${overlay.id}`}
+                  x={overlay.centroid.x}
+                  y={overlay.centroid.y}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    fill: '#1f2937',
+                    stroke: 'rgba(255, 255, 255, 0.8)',
+                    strokeWidth: 3,
+                    strokeLinejoin: 'round',
+                    paintOrder: 'stroke',
+                  }}
+                >
+                  {overlay.name}
+                </text>
+              ))}
+              {markerShapes.map((marker) => (
                 <g key={marker.id} transform={`translate(${marker.position.x}, ${marker.position.y})`}>
                   <rect
                     x={-marker.labelWidth / 2}
@@ -269,20 +276,16 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                   <circle r={10} fill={marker.color} stroke="rgba(15, 23, 42, 0.85)" strokeWidth={2} />
                 </g>
               ))}
-            {viewMode === 'playerPreview' && (
-              <g>
-                <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.7)" />
-                <text
-                  x={viewWidth / 2}
-                  y={viewHeight / 2}
-                  textAnchor="middle"
-                  style={{ fontSize: 18, fontWeight: 600, fill: '#f1f5f9', letterSpacing: '0.35em' }}
-                >
-                  PLAYER PREVIEW COMING SOON
-                </text>
-              </g>
-            )}
-          </svg>
+            </svg>
+          ) : (
+            <PlayerView
+              mapImageUrl={mapImageUrl}
+              width={viewWidth}
+              height={viewHeight}
+              regions={regions}
+              revealedRegionIds={playerRevealedRegionIds}
+            />
+          )}
         </div>
         <aside className="flex min-h-0 flex-[1] flex-col border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">
