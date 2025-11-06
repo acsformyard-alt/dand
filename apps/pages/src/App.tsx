@@ -587,6 +587,36 @@ const App: React.FC = () => {
     return <LandingPage theme={theme} setTheme={setTheme} onAuthenticate={handleAuthenticated} />;
   }
 
+  if (activeSession && sessionMode === 'player') {
+    return (
+      <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
+        <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
+        <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
+        <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
+        <div className="relative isolate min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6">
+            {statusMessage && (
+              <div className="rounded-3xl border border-amber-300/60 bg-amber-200/40 px-5 py-3 text-sm text-amber-900 shadow-lg shadow-amber-500/20 backdrop-blur-xl dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100">
+                {statusMessage}
+              </div>
+            )}
+            <PlayerSessionView
+              session={activeSession}
+              campaignName={activeSessionCampaignName}
+              map={activeSessionMap}
+              mapName={activeSessionMapName}
+              mapImageUrl={apiClient.buildMapDisplayUrl(activeSession.mapId)}
+              mapWidth={activeSessionMap?.width}
+              mapHeight={activeSessionMap?.height}
+              regions={regions}
+              onLeave={handleLeaveSession}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeSession && sessionMode === 'dm') {
     return (
       <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
@@ -607,74 +637,6 @@ const App: React.FC = () => {
                 onEndSession={handleEndSession}
                 onLeave={handleLeaveSession}
               />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (activeSession) {
-    return (
-      <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
-        <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
-        <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
-        <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
-        <div className="relative isolate min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6">
-            <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/60 bg-white/70 px-6 py-4 shadow-lg shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">TableTorch</h1>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Logged in as {user.displayName}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-200/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  aria-pressed={theme === 'dark'}
-                >
-                  <span aria-hidden>{theme === 'dark' ? '🌙' : '🌞'}</span>
-                  {themeLabel}
-                </button>
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
-                  onClick={handleLogout}
-                >
-                  Logout
-                </button>
-              </div>
-            </header>
-            {statusMessage && (
-              <div className="rounded-3xl border border-amber-300/60 bg-amber-200/40 px-5 py-3 text-sm text-amber-900 shadow-lg shadow-amber-500/20 backdrop-blur-xl dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100">
-                {statusMessage}
-              </div>
-            )}
-            <div className="rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              {sessionMode === 'player' ? (
-                <PlayerSessionView
-                  session={activeSession}
-                  campaignName={activeSessionCampaignName}
-                  map={activeSessionMap}
-                  mapName={activeSessionMapName}
-                  mapImageUrl={apiClient.buildMapDisplayUrl(activeSession.mapId)}
-                  mapWidth={activeSessionMap?.width}
-                  mapHeight={activeSessionMap?.height}
-                  regions={regions}
-                  onLeave={handleLeaveSession}
-                />
-              ) : (
-                <DMSessionViewer
-                  session={activeSession}
-                  mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
-                  mapWidth={selectedMap?.width}
-                  mapHeight={selectedMap?.height}
-                  regions={regions}
-                  markers={markers}
-                  onSaveSnapshot={handleSaveSession}
-                  onEndSession={handleEndSession}
-                  onLeave={handleLeaveSession}
-                />
-              )}
             </div>
           </div>
         </div>
