@@ -26,8 +26,9 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   const viewWidth = width ?? 1000;
   const viewHeight = height ?? 1000;
   const maskPrefix = useId();
-  const invertFilterId = `${maskPrefix}-invert-filter`;
+  const maskFilterId = `${maskPrefix}-mask-filter`;
   const fogMaskId = `${maskPrefix}-fog-mask`;
+  const featherRadius = Math.max(viewWidth, viewHeight) * 0.02;
 
   const revealedMasks = useMemo<RevealedMask[]>(() => {
     const revealedSet = new Set(revealedRegionIds ?? []);
@@ -53,11 +54,26 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   return (
     <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
       <defs>
-        <filter id={invertFilterId} colorInterpolationFilters="sRGB">
-          <feComponentTransfer>
+        <filter
+          id={maskFilterId}
+          x={-featherRadius}
+          y={-featherRadius}
+          width={viewWidth + featherRadius * 2}
+          height={viewHeight + featherRadius * 2}
+          filterUnits="userSpaceOnUse"
+          colorInterpolationFilters="sRGB"
+        >
+          <feComponentTransfer result="inverted">
             <feFuncR type="table" tableValues="1 0" />
             <feFuncG type="table" tableValues="1 0" />
             <feFuncB type="table" tableValues="1 0" />
+            <feFuncA type="table" tableValues="1 1" />
+          </feComponentTransfer>
+          <feGaussianBlur in="inverted" stdDeviation={featherRadius} result="feathered" />
+          <feComponentTransfer in="feathered">
+            <feFuncR type="identity" />
+            <feFuncG type="identity" />
+            <feFuncB type="identity" />
             <feFuncA type="table" tableValues="1 1" />
           </feComponentTransfer>
         </filter>
@@ -72,7 +88,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
               width={mask.width}
               height={mask.height}
               preserveAspectRatio="none"
-              filter={`url(#${invertFilterId})`}
+              filter={`url(#${maskFilterId})`}
             />
           ))}
         </mask>
@@ -88,7 +104,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
         />
       )}
       <g mask={`url(#${fogMaskId})`}>
-        <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="rgba(15, 23, 42, 0.78)" />
+        <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="#0f172a" />
         <image
           href={fogTextureUrl}
           x={0}
@@ -96,7 +112,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
           width={viewWidth}
           height={viewHeight}
           preserveAspectRatio="xMidYMid slice"
-          opacity={0.4}
+          opacity={1}
         />
       </g>
     </svg>
