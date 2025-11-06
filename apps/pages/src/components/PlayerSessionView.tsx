@@ -39,8 +39,8 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
   const resolvedMapName = mapName ?? session.mapName ?? map?.name ?? 'Unknown Map';
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/50 bg-white/60 shadow-xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-      <header className="flex flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-white/40 bg-white/50 px-5 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+    <div className="flex h-screen max-h-screen min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-white/50 bg-white/60 shadow-xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+      <header className="flex flex-none flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-white/40 bg-white/50 px-5 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex flex-col">
             <span className="text-[10px] font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
