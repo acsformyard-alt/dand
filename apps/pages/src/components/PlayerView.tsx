@@ -52,7 +52,11 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   }, [regions, revealedRegionIds, viewHeight, viewWidth]);
 
   return (
-    <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
+    <svg
+      viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+      className="block h-auto max-h-full w-auto max-w-full"
+      preserveAspectRatio="xMidYMid meet"
+    >
       <defs>
         <filter
           id={maskFilterId}
