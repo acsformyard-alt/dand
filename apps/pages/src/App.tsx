@@ -594,8 +594,8 @@ const App: React.FC = () => {
         <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
         <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
         <div className="relative isolate min-h-screen">
-          <div className="flex min-h-full flex-col gap-6">
-            <div className="flex min-h-0 w-full flex-1 overflow-hidden rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <div className="flex min-h-full min-w-0 flex-1 flex-col gap-6 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-hidden rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               <PlayerSessionView
                 session={activeSession}
                 campaignName={activeSessionCampaignName}
@@ -621,8 +621,8 @@ const App: React.FC = () => {
         <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
         <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
         <div className="relative isolate min-h-screen">
-          <div className="flex min-h-full flex-col gap-6">
-            <div className="flex min-h-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          <div className="flex min-h-full min-w-0 flex-1 flex-col gap-6">
+            <div className="flex min-h-0 min-w-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               <DMSessionViewer
                 session={activeSession}
                 mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
