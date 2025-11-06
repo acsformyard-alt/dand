@@ -27,58 +27,58 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
   revealedRegionIds,
   onLeave,
 }) => {
+  // Fall back to regions visible at start if no revealed list was supplied
   const playerRevealedRegionIds = useMemo(
     () =>
       revealedRegionIds && revealedRegionIds.length > 0
         ? revealedRegionIds
-        : regions.filter((region) => region.visibleAtStart).map((region) => region.id),
+        : regions.filter((r) => r.visibleAtStart).map((r) => r.id),
     [regions, revealedRegionIds],
   );
 
-  const resolvedCampaignName = campaignName ?? session.campaignName ?? 'Unknown Campaign';
-  const resolvedMapName = mapName ?? session.mapName ?? map?.name ?? 'Unknown Map';
+  const resolvedCampaignName = (campaignName ?? session.campaignName) || undefined;
+  const resolvedMapName = (mapName ?? map?.name) || undefined;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/50 bg-white/60 shadow-xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-      <header className="flex flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-white/40 bg-white/50 px-5 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
-        <div className="flex flex-wrap items-center gap-6">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
-              Campaign
-            </span>
-            <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
-              {resolvedCampaignName}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
-              Map
-            </span>
-            <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
-              {resolvedMapName}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
-              Session
-            </span>
-            <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
-              {session.name}
-            </span>
-          </div>
+    // VIEWPORT-LOCKED ROOT: two-row grid -> header (auto) + content (1fr)
+    <div className="grid h-[100svh] min-h-[100svh] max-h-[100svh] w-full flex-1 grid-rows-[auto,1fr] overflow-hidden rounded-2xl border border-white/50 bg-white/60 shadow-xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+      {/* HEADER: non-flexing */}
+      <header className="flex flex-none flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-white/40 bg-white/50 px-5 py-3 text-[11px] uppercase tracking-[0.35em] text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+        <div className="flex min-w-0 items-center gap-3">
+          {resolvedCampaignName && (
+            <span className="truncate opacity-80">{resolvedCampaignName}</span>
+          )}
+          <span className="opacity-40">{'—'}</span>
+          <span className="truncate font-medium text-slate-800 dark:text-slate-100">
+            {session?.name}
+          </span>
+          {resolvedMapName && (
+            <>
+              <span className="opacity-40">{'/'}</span>
+              <span className="truncate opacity-80">{resolvedMapName}</span>
+            </>
+          )}
         </div>
         {onLeave && (
           <button
-            type="button"
             onClick={onLeave}
-            className="rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-rose-700 transition hover:bg-rose-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/50 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
+            className="rounded-md border border-white/40 bg-white/80 px-3 py-1 text-[10px] font-semibold tracking-widest text-slate-700 shadow-sm backdrop-blur hover:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"
           >
-            Leave Session
+            LEAVE SESSION
           </button>
         )}
       </header>
-      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950/70 p-3 sm:p-4">
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-white/20 bg-slate-900/80 shadow-inner shadow-black/30 dark:border-slate-800/70">
+
+      {/* CONTENT WRAPPER: center content; no vertical overflow */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-slate-950/70 p-3 sm:p-4">
+        {/* LETTERBOXED FRAME: respects map aspect ratio if provided */}
+        <div
+          className="relative max-h-full max-w-full overflow-hidden rounded-xl border border-white/20 bg-slate-900/80 shadow-inner shadow-black/30 dark:border-slate-800/70"
+          style={{
+            aspectRatio:
+              mapWidth && mapHeight ? `${mapWidth} / ${mapHeight}` : undefined,
+          }}
+        >
           <PlayerView
             mapImageUrl={mapImageUrl ?? undefined}
             width={mapWidth ?? map?.width ?? undefined}
@@ -93,4 +93,3 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
 };
 
 export default PlayerSessionView;
-
