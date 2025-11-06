@@ -593,24 +593,21 @@ const App: React.FC = () => {
         <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
         <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
         <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
-        <div className="relative isolate min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6">
-            {statusMessage && (
-              <div className="rounded-3xl border border-amber-300/60 bg-amber-200/40 px-5 py-3 text-sm text-amber-900 shadow-lg shadow-amber-500/20 backdrop-blur-xl dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100">
-                {statusMessage}
-              </div>
-            )}
-            <PlayerSessionView
-              session={activeSession}
-              campaignName={activeSessionCampaignName}
-              map={activeSessionMap}
-              mapName={activeSessionMapName}
-              mapImageUrl={apiClient.buildMapDisplayUrl(activeSession.mapId)}
-              mapWidth={activeSessionMap?.width}
-              mapHeight={activeSessionMap?.height}
-              regions={regions}
-              onLeave={handleLeaveSession}
-            />
+        <div className="relative isolate min-h-screen">
+          <div className="flex min-h-full flex-col gap-6">
+            <div className="flex min-h-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+              <PlayerSessionView
+                session={activeSession}
+                campaignName={activeSessionCampaignName}
+                map={activeSessionMap}
+                mapName={activeSessionMapName}
+                mapImageUrl={apiClient.buildMapDisplayUrl(activeSession.mapId)}
+                mapWidth={activeSessionMap?.width}
+                mapHeight={activeSessionMap?.height}
+                regions={regions}
+                onLeave={handleLeaveSession}
+              />
+            </div>
           </div>
         </div>
       </div>
