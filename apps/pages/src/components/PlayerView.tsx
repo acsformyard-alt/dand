@@ -70,12 +70,11 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
             <feFuncA type="table" tableValues="1 1" />
           </feComponentTransfer>
           <feGaussianBlur in="inverted" stdDeviation={featherRadius} result="feathered" />
-          <feComponentTransfer in="feathered">
-            <feFuncR type="identity" />
-            <feFuncG type="identity" />
-            <feFuncB type="identity" />
-            <feFuncA type="table" tableValues="1 1" />
-          </feComponentTransfer>
+          <feColorMatrix
+            in="feathered"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1 0 0 0 1"
+          />
         </filter>
         <mask id={fogMaskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" maskType="luminance">
           <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="white" />
