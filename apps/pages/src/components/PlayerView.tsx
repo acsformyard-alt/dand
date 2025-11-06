@@ -29,7 +29,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   const maskFilterId = `${maskPrefix}-mask-filter`;
   const fogMaskId = `${maskPrefix}-fog-mask`;
   const largestDimension = Math.max(viewWidth, viewHeight);
-  const featherRadius = largestDimension * 0.006;
+  const featherRadius = largestDimension * 0.004;
   const maskPadding = largestDimension * 0.01;
   const filterPadding = maskPadding + featherRadius;
 
