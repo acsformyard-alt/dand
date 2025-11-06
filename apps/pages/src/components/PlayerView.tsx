@@ -28,7 +28,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
   const maskPrefix = useId();
   const maskFilterId = `${maskPrefix}-mask-filter`;
   const fogMaskId = `${maskPrefix}-fog-mask`;
-  const featherRadius = Math.max(viewWidth, viewHeight) * 0.02;
+  const featherRadius = Math.max(viewWidth, viewHeight) * 0.01;
 
   const revealedMasks = useMemo<RevealedMask[]>(() => {
     const revealedSet = new Set(revealedRegionIds ?? []);
