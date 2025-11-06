@@ -547,6 +547,33 @@ const App: React.FC = () => {
     return <LandingPage theme={theme} setTheme={setTheme} onAuthenticate={handleAuthenticated} />;
   }
 
+  if (activeSession && sessionMode === 'dm') {
+    return (
+      <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
+        <div aria-hidden className="absolute inset-0 bg-grid-mask opacity-60 mix-blend-soft-light dark:opacity-40" />
+        <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
+        <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
+        <div className="relative isolate min-h-screen">
+          <div className="flex min-h-full flex-col gap-6">
+            <div className="flex min-h-0 w-full flex-1 rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+              <DMSessionViewer
+                session={activeSession}
+                mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
+                mapWidth={selectedMap?.width}
+                mapHeight={selectedMap?.height}
+                regions={regions}
+                markers={markers}
+                onSaveSnapshot={handleSaveSession}
+                onEndSession={handleEndSession}
+                onLeave={handleLeaveSession}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeSession) {
     return (
       <div className="bg-landing relative min-h-screen overflow-hidden text-slate-900 transition-colors dark:text-slate-100">
@@ -583,7 +610,17 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="rounded-3xl border border-white/60 bg-white/75 p-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              {sessionMode === 'dm' ? (
+              {sessionMode === 'player' ? (
+                <div className="flex h-[78vh] min-h-[540px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/40 bg-white/40 text-center text-xs uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                  <span>Player session viewer coming soon</span>
+                  <button
+                    className="rounded-full border border-white/60 bg-white/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
+                    onClick={handleLeaveSession}
+                  >
+                    Leave Session
+                  </button>
+                </div>
+              ) : (
                 <DMSessionViewer
                   session={activeSession}
                   mapImageUrl={selectedMap ? apiClient.buildMapDisplayUrl(selectedMap.id) : undefined}
@@ -595,16 +632,6 @@ const App: React.FC = () => {
                   onEndSession={handleEndSession}
                   onLeave={handleLeaveSession}
                 />
-              ) : (
-                <div className="flex h-[78vh] min-h-[540px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/40 bg-white/40 text-center text-xs uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                  <span>Player session viewer coming soon</span>
-                  <button
-                    className="rounded-full border border-white/60 bg-white/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
-                    onClick={handleLeaveSession}
-                  >
-                    Leave Session
-                  </button>
-                </div>
               )}
             </div>
           </div>

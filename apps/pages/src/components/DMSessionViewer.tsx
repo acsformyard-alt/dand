@@ -129,35 +129,46 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
     }`;
 
   return (
-    <div className="flex h-[78vh] min-h-[540px] flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+    <div className="relative flex min-h-[540px] w-full flex-1 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
       <header className="flex h-12 items-center justify-between border-b border-white/30 bg-white/40 px-4 text-[11px] uppercase tracking-[0.35em] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60">
         <div className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
           <span className="text-[10px] font-semibold tracking-[0.4em] text-slate-600 dark:text-slate-400">DM SESSION</span>
           <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-bold tracking-[0.45em] text-slate-900 shadow-sm dark:bg-slate-800/70 dark:text-amber-200">
             {session.name}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onSaveSnapshot}
-            className="rounded-full border border-amber-400/70 bg-amber-300/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+            onClick={toggleViewMode}
+            className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
           >
-            Save Snapshot
+            {viewMode === 'dm' ? 'DM View' : 'Player Preview'}
           </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {onSaveSnapshot && (
+            <button
+              type="button"
+              onClick={onSaveSnapshot}
+              className="rounded-full border border-amber-400/70 bg-amber-300/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+            >
+              Save Snapshot
+            </button>
+          )}
           <button
             type="button"
             className="rounded-full border border-white/60 bg-white/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200"
           >
             Players
           </button>
-          <button
-            type="button"
-            onClick={onEndSession}
-            className="rounded-full border border-rose-500/80 bg-rose-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-600 transition hover:bg-rose-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/70 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
-          >
-            End Session
-          </button>
+          {onEndSession && (
+            <button
+              type="button"
+              onClick={onEndSession}
+              className="rounded-full border border-rose-500/80 bg-rose-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-600 transition hover:bg-rose-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/70 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
+            >
+              End Session
+            </button>
+          )}
           {onLeave && (
             <button
               type="button"
@@ -169,17 +180,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           )}
         </div>
       </header>
-      <div className="flex flex-1 overflow-hidden">
-        <div className="relative flex-[4] bg-slate-950/25" style={{ minHeight: 0 }}>
-          <div className="absolute left-4 top-4 z-10">
-            <button
-              type="button"
-              onClick={toggleViewMode}
-              className="rounded-full bg-slate-900/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-amber-200 shadow-lg backdrop-blur transition hover:bg-slate-900/70 dark:bg-slate-900/80"
-            >
-              {viewMode === 'dm' ? 'DM View' : 'Player Preview'}
-            </button>
-          </div>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-[4] bg-slate-950/25">
           <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
             <defs>
               {regionOverlays.map((overlay) => {
@@ -282,7 +284,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             )}
           </svg>
         </div>
-        <aside className="flex flex-[1] flex-col border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
+        <aside className="flex min-h-0 flex-[1] flex-col border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">
             <button type="button" className={tabButtonClasses('rooms')} onClick={() => setActiveTab('rooms')}>
               Rooms
@@ -294,7 +296,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               Other
             </button>
           </div>
-          <div className="flex flex-1 flex-col" />
+          <div className="flex min-h-0 flex-1 flex-col" />
         </aside>
       </div>
     </div>
