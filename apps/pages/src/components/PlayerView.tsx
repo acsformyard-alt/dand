@@ -67,14 +67,14 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
             <feFuncR type="table" tableValues="1 0" />
             <feFuncG type="table" tableValues="1 0" />
             <feFuncB type="table" tableValues="1 0" />
-            <feFuncA type="table" tableValues="1 1" />
+            <feFuncA type="table" tableValues="0 1" />
           </feComponentTransfer>
           <feGaussianBlur in="inverted" stdDeviation={featherRadius} result="feathered" />
           <feComponentTransfer in="feathered">
             <feFuncR type="identity" />
             <feFuncG type="identity" />
             <feFuncB type="identity" />
-            <feFuncA type="table" tableValues="1 1" />
+            <feFuncA type="identity" />
           </feComponentTransfer>
         </filter>
         <mask id={fogMaskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" maskType="luminance">
