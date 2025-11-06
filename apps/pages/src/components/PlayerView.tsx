@@ -189,12 +189,14 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
         </filter>
         <mask id={fogMaskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" maskType="luminance">
           <rect x={0} y={0} width={viewWidth} height={viewHeight} fill="white" />
-          {revealedMasks.map((mask) => (
-            <g
-              key={mask.id}
-              style={{ opacity: completedMaskIdSet.has(mask.id) ? 1 : animatingMaskIdSet.has(mask.id) ? 1 - revealOpacity : 0 }}
-            >
+          {revealedMasks.map((mask) => {
+            const isAnimating = animatingMaskIdSet.has(mask.id);
+            const isComplete = completedMaskIdSet.has(mask.id);
+            const maskOpacity = isComplete ? 1 : isAnimating ? 1 - revealOpacity : 0;
+
+            return (
               <image
+                key={mask.id}
                 href={mask.dataUrl}
                 x={mask.x}
                 y={mask.y}
@@ -202,12 +204,13 @@ const PlayerView: React.FC<PlayerViewProps> = ({ mapImageUrl, width, height, reg
                 height={mask.height}
                 preserveAspectRatio="none"
                 filter={`url(#${maskFilterId})`}
+                opacity={maskOpacity}
                 onLoad={() => {
                   setLoadedMaskIds((prev) => (prev.includes(mask.id) ? prev : [...prev, mask.id]));
                 }}
               />
-            </g>
-          ))}
+            );
+          })}
         </mask>
       </defs>
       {mapImageUrl && (
