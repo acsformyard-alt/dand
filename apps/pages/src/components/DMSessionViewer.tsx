@@ -482,14 +482,15 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === 'rooms' && (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {sortedRegions.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                    No rooms defined for this map.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {sortedRegions.map((region) => {
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  {sortedRegions.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                      No rooms defined for this map.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {sortedRegions.map((region) => {
                       const isExpanded = expandedRegionIds.has(region.id);
                       const tags = parseTagList(region.tags);
                       const revealed = revealedRegionsSet.has(region.id);
@@ -617,20 +618,22 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                           )}
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {activeTab === 'markers' && (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {sortedMarkers.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                    No markers placed on this map.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {sortedMarkers.map((marker) => {
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  {sortedMarkers.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                      No markers placed on this map.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {sortedMarkers.map((marker) => {
                       const tags = parseTagList(marker.tags);
                       const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
                       const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
@@ -711,9 +714,10 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                           )}
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {activeTab === 'other' && (
