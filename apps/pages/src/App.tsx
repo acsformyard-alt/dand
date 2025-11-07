@@ -634,6 +634,14 @@ const App: React.FC = () => {
     setActiveView('manage');
   };
 
+  const handleEditMap = () => {
+    if (!selectedMap) {
+      window.alert('Select a map to edit first.');
+      return;
+    }
+    handleOpenMapWizard();
+  };
+
   const handleDeleteCampaign = async () => {
     if (!selectedCampaign) return;
     const confirmDelete = window.confirm(
@@ -1280,6 +1288,13 @@ const App: React.FC = () => {
                       onClick={handleDeleteCampaign}
                     >
                       Delete Campaign
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-emerald-400/70 bg-emerald-300/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-emerald-300/80 dark:border-emerald-400/50 dark:bg-emerald-400/20 dark:text-emerald-100 dark:hover:bg-emerald-400/30"
+                      onClick={handleEditMap}
+                    >
+                      Edit Map
                     </button>
                     <button
                       type="button"
