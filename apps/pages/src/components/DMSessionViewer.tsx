@@ -480,81 +480,200 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               Other
             </button>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col">
             {activeTab === 'rooms' && (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {sortedRegions.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                    No rooms defined for this map.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {sortedRegions.map((region) => {
-                      const isExpanded = expandedRegionIds.has(region.id);
-                      const tags = parseTagList(region.tags);
-                      const revealed = revealedRegionsSet.has(region.id);
-                      const revealLabel = revealed
-                        ? 'Revealed'
-                        : region.visibleAtStart
-                          ? 'Visible at Start'
-                          : 'Hidden';
-                      const statusColor = revealed
-                        ? 'text-emerald-500 dark:text-emerald-300'
-                        : region.visibleAtStart
-                          ? 'text-amber-500 dark:text-amber-300'
-                          : 'text-slate-500 dark:text-slate-400';
-                      const regionColor = normalizeHexColor(region.color);
-                      const canReveal = Boolean(onRevealRegions) && !revealed;
-                      const canHide = Boolean(onHideRegions) && revealed;
-                      const revealButtonLabel = revealed
-                        ? canHide
-                          ? 'Hide from Players'
-                          : 'Already Revealed'
-                        : 'Reveal to Players';
-                      const revealButtonClasses = revealed
-                        ? canHide
-                          ? 'w-full rounded-full border border-rose-400/70 bg-rose-200/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-700 transition hover:bg-rose-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/60 dark:bg-rose-400/20 dark:text-rose-100 dark:hover:bg-rose-400/30'
-                          : 'w-full cursor-not-allowed rounded-full border border-emerald-400/50 bg-emerald-300/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200'
-                        : canReveal
-                          ? 'w-full rounded-full border border-amber-400/70 bg-amber-300/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30'
-                          : 'w-full cursor-not-allowed rounded-full border border-slate-300/60 bg-slate-200/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500';
-                      const handleRegionAction = revealed
-                        ? () => handleHideRegion(region)
-                        : () => handleRevealRegion(region);
-                      return (
-                        <div
-                          key={region.id}
-                          className="overflow-hidden rounded-2xl border border-white/60 bg-white/60 shadow-sm transition dark:border-slate-800/60 dark:bg-slate-900/50"
-                        >
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/70 dark:hover:bg-slate-900/70"
-                            onClick={() => toggleRegionExpanded(region.id)}
-                            aria-expanded={isExpanded}
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex-1 overflow-y-auto p-4">
+                  {sortedRegions.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                      No rooms defined for this map.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {sortedRegions.map((region) => {
+                        const isExpanded = expandedRegionIds.has(region.id);
+                        const tags = parseTagList(region.tags);
+                        const revealed = revealedRegionsSet.has(region.id);
+                        const revealLabel = revealed
+                          ? 'Revealed'
+                          : region.visibleAtStart
+                            ? 'Visible at Start'
+                            : 'Hidden';
+                        const statusColor = revealed
+                          ? 'text-emerald-500 dark:text-emerald-300'
+                          : region.visibleAtStart
+                            ? 'text-amber-500 dark:text-amber-300'
+                            : 'text-slate-500 dark:text-slate-400';
+                        const regionColor = normalizeHexColor(region.color);
+                        const canReveal = Boolean(onRevealRegions) && !revealed;
+                        const canHide = Boolean(onHideRegions) && revealed;
+                        const revealButtonLabel = revealed
+                          ? canHide
+                            ? 'Hide from Players'
+                            : 'Already Revealed'
+                          : 'Reveal to Players';
+                        const revealButtonClasses = revealed
+                          ? canHide
+                            ? 'w-full rounded-full border border-rose-400/70 bg-rose-200/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-700 transition hover:bg-rose-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/60 dark:bg-rose-400/20 dark:text-rose-100 dark:hover:bg-rose-400/30'
+                            : 'w-full cursor-not-allowed rounded-full border border-emerald-400/50 bg-emerald-300/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200'
+                          : canReveal
+                            ? 'w-full rounded-full border border-amber-400/70 bg-amber-300/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30'
+                            : 'w-full cursor-not-allowed rounded-full border border-slate-300/60 bg-slate-200/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500';
+                        const handleRegionAction = revealed
+                          ? () => handleHideRegion(region)
+                          : () => handleRevealRegion(region);
+                        return (
+                          <div
+                            key={region.id}
+                            className="overflow-hidden rounded-2xl border border-white/60 bg-white/60 shadow-sm transition dark:border-slate-800/60 dark:bg-slate-900/50"
                           >
-                            <div>
-                              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-800 dark:text-slate-100">
-                                {region.name}
-                              </p>
-                              <p className={`text-[10px] font-semibold uppercase tracking-[0.4em] ${statusColor}`}>
-                                {revealLabel}
-                              </p>
-                            </div>
-                            <span className="text-lg text-slate-500 transition dark:text-slate-400" aria-hidden>
-                              {isExpanded ? '−' : '+'}
-                            </span>
-                          </button>
-                          {isExpanded && (
-                            <div className="space-y-4 border-t border-white/60 px-4 py-4 text-sm text-slate-700 dark:border-slate-800/60 dark:text-slate-200">
-                              {region.description && (
-                                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{region.description}</p>
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/70 dark:hover:bg-slate-900/70"
+                              onClick={() => toggleRegionExpanded(region.id)}
+                              aria-expanded={isExpanded}
+                            >
+                              <div>
+                                <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-800 dark:text-slate-100">
+                                  {region.name}
+                                </p>
+                                <p className={`text-[10px] font-semibold uppercase tracking-[0.4em] ${statusColor}`}>
+                                  {revealLabel}
+                                </p>
+                              </div>
+                              <span className="text-lg text-slate-500 transition dark:text-slate-400" aria-hidden>
+                                {isExpanded ? '−' : '+'}
+                              </span>
+                            </button>
+                            {isExpanded && (
+                              <div className="space-y-4 border-t border-white/60 px-4 py-4 text-sm text-slate-700 dark:border-slate-800/60 dark:text-slate-200">
+                                {region.description && (
+                                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{region.description}</p>
+                                )}
+                                {tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {tags.map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="rounded-full bg-amber-200/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-700 dark:bg-amber-400/20 dark:text-amber-200"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-[10px] uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
+                                  <div className="flex flex-col gap-1">
+                                    <dt>Visible at Start</dt>
+                                    <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                      {region.visibleAtStart ? 'Yes' : 'No'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <dt>Reveal Order</dt>
+                                    <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                      {region.revealOrder ?? '—'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <dt>Currently Revealed</dt>
+                                    <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                      {revealed ? 'Yes' : 'No'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <dt>Region Color</dt>
+                                    <dd className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                      {regionColor ? (
+                                        <>
+                                          <span
+                                            className="h-3 w-3 rounded-full border border-white/60 shadow-sm dark:border-slate-700"
+                                            style={{ backgroundColor: regionColor }}
+                                          />
+                                          <span>{regionColor.toUpperCase()}</span>
+                                        </>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </dd>
+                                  </div>
+                                </dl>
+                                {region.notes && (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">DM Notes</p>
+                                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                                      {region.notes}
+                                    </p>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  className={revealButtonClasses}
+                                  onClick={handleRegionAction}
+                                  disabled={!canReveal && !canHide}
+                                >
+                                  {revealButtonLabel}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  </div>
+                </div>
+              )}
+              {activeTab === 'markers' && (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {sortedMarkers.length === 0 ? (
+                      <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                        No markers placed on this map.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {sortedMarkers.map((marker) => {
+                          const tags = parseTagList(marker.tags);
+                          const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
+                          const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
+                          const accent = getReadableMarkerColor(baseColor);
+                          const iconElement =
+                            iconDefinition &&
+                            React.cloneElement(iconDefinition.icon, {
+                              className: 'h-5 w-5',
+                              style: { color: accent },
+                            });
+                          return (
+                            <div
+                              key={marker.id}
+                              className="space-y-3 rounded-2xl border border-white/60 bg-white/60 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-900/50"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-800 dark:text-slate-100">
+                                    {marker.label}
+                                  </p>
+                                  <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+                                    {describeMarkerKind(marker)}
+                                  </p>
+                                </div>
+                                <span
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-900/10 text-lg shadow-inner dark:border-slate-700"
+                                  style={{ backgroundColor: baseColor, color: accent }}
+                                >
+                                  {iconElement ?? '•'}
+                                </span>
+                              </div>
+                              {marker.description && (
+                                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{marker.description}</p>
                               )}
                               {tags.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
                                   {tags.map((tag) => (
                                     <span
                                       key={tag}
-                                      className="rounded-full bg-amber-200/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-700 dark:bg-amber-400/20 dark:text-amber-200"
+                                      className="rounded-full bg-slate-200/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-slate-700 dark:bg-slate-800/70 dark:text-slate-200"
                                     >
                                       {tag}
                                     </span>
@@ -565,157 +684,42 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                                 <div className="flex flex-col gap-1">
                                   <dt>Visible at Start</dt>
                                   <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                    {region.visibleAtStart ? 'Yes' : 'No'}
+                                    {marker.visibleAtStart ? 'Yes' : 'No'}
                                   </dd>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                  <dt>Reveal Order</dt>
+                                  <dt>Linked Region</dt>
                                   <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                    {region.revealOrder ?? '—'}
+                                    {marker.regionId ? regionNamesById.get(marker.regionId) ?? marker.regionId : '—'}
                                   </dd>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                  <dt>Currently Revealed</dt>
+                                  <dt>Horizontal</dt>
                                   <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                    {revealed ? 'Yes' : 'No'}
+                                    {formatPercent(marker.x)}
                                   </dd>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                  <dt>Region Color</dt>
-                                  <dd className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                    {regionColor ? (
-                                      <>
-                                        <span
-                                          className="h-3 w-3 rounded-full border border-white/60 shadow-sm dark:border-slate-700"
-                                          style={{ backgroundColor: regionColor }}
-                                        />
-                                        <span>{regionColor.toUpperCase()}</span>
-                                      </>
-                                    ) : (
-                                      '—'
-                                    )}
+                                  <dt>Vertical</dt>
+                                  <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                    {formatPercent(marker.y)}
                                   </dd>
                                 </div>
                               </dl>
-                              {region.notes && (
+                              {marker.notes && (
                                 <div className="space-y-1">
                                   <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">DM Notes</p>
-                                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                                    {region.notes}
-                                  </p>
+                                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600 dark:text-slate-300">{marker.notes}</p>
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                className={revealButtonClasses}
-                                onClick={handleRegionAction}
-                                disabled={!canReveal && !canHide}
-                              >
-                                {revealButtonLabel}
-                              </button>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-            {activeTab === 'markers' && (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {sortedMarkers.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-white/60 bg-white/40 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                    No markers placed on this map.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {sortedMarkers.map((marker) => {
-                      const tags = parseTagList(marker.tags);
-                      const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
-                      const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
-                      const accent = getReadableMarkerColor(baseColor);
-                      const iconElement =
-                        iconDefinition &&
-                        React.cloneElement(iconDefinition.icon, {
-                          className: 'h-5 w-5',
-                          style: { color: accent },
-                        });
-                      return (
-                        <div
-                          key={marker.id}
-                          className="space-y-3 rounded-2xl border border-white/60 bg-white/60 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-900/50"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-800 dark:text-slate-100">
-                                {marker.label}
-                              </p>
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
-                                {describeMarkerKind(marker)}
-                              </p>
-                            </div>
-                            <span
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-900/10 text-lg shadow-inner dark:border-slate-700"
-                              style={{ backgroundColor: baseColor, color: accent }}
-                            >
-                              {iconElement ?? '•'}
-                            </span>
-                          </div>
-                          {marker.description && (
-                            <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{marker.description}</p>
-                          )}
-                          {tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-full bg-slate-200/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-slate-700 dark:bg-slate-800/70 dark:text-slate-200"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-[10px] uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
-                            <div className="flex flex-col gap-1">
-                              <dt>Visible at Start</dt>
-                              <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                {marker.visibleAtStart ? 'Yes' : 'No'}
-                              </dd>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <dt>Linked Region</dt>
-                              <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                {marker.regionId ? regionNamesById.get(marker.regionId) ?? marker.regionId : '—'}
-                              </dd>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <dt>Horizontal</dt>
-                              <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                {formatPercent(marker.x)}
-                              </dd>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <dt>Vertical</dt>
-                              <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
-                                {formatPercent(marker.y)}
-                              </dd>
-                            </div>
-                          </dl>
-                          {marker.notes && (
-                            <div className="space-y-1">
-                              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">DM Notes</p>
-                              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600 dark:text-slate-300">{marker.notes}</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
             {activeTab === 'other' && (
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 <div className="space-y-4">
