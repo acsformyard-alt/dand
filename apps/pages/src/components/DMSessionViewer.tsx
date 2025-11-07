@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import type { Marker, Region, SessionRecord } from '../types';
+import type { Marker, Region, SessionLiveMarker, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
 import { getMapMarkerIconDefinition, type MapMarkerIconDefinition } from './mapMarkerIcons';
@@ -12,7 +12,9 @@ interface DMSessionViewerProps {
   regions: Region[];
   markers?: Marker[];
   revealedRegionIds?: string[];
-  onRevealRegion?: (region: Region) => void;
+  liveMarkers?: SessionLiveMarker[];
+  onRevealRegions?: (regionIds: string[]) => void;
+  onHideRegions?: (regionIds: string[]) => void;
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
   onLeave?: () => void;
@@ -119,7 +121,9 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   regions,
   markers,
   revealedRegionIds,
-  onRevealRegion,
+  liveMarkers,
+  onRevealRegions,
+  onHideRegions,
   onSaveSnapshot,
   onEndSession,
   onLeave,
@@ -137,6 +141,32 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
         : regions.filter((region) => region.visibleAtStart).map((region) => region.id)),
     [regions, revealedRegionIds],
   );
+
+  const sessionMarkerRecords = useMemo<Marker[]>(() => {
+    if (!liveMarkers || liveMarkers.length === 0) {
+      return [];
+    }
+    return liveMarkers.map((marker) => ({
+      id: marker.id,
+      mapId: session.mapId,
+      label: marker.label,
+      x: Number.isFinite(marker.x) ? marker.x : 0,
+      y: Number.isFinite(marker.y) ? marker.y : 0,
+      color: marker.color ?? undefined,
+      iconKey: marker.iconKey ?? undefined,
+      notes: marker.notes ?? undefined,
+      visibleAtStart: true,
+      kind: 'point',
+    }));
+  }, [liveMarkers, session.mapId]);
+
+  const displayMarkers = useMemo(() => {
+    const baseMarkers = markers ?? [];
+    if (sessionMarkerRecords.length === 0) {
+      return baseMarkers;
+    }
+    return [...baseMarkers, ...sessionMarkerRecords];
+  }, [markers, sessionMarkerRecords]);
 
   const regionOverlays = useMemo(
     () =>
@@ -176,7 +206,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   const markerShapes = useMemo(
     () =>
-      (markers ?? []).map((marker) => {
+      displayMarkers.map((marker) => {
         const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
         const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
         const label = marker.label ?? 'Marker';
@@ -195,7 +225,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           },
         };
       }),
-    [markers, viewHeight, viewWidth],
+    [displayMarkers, viewHeight, viewWidth],
   );
 
   const [expandedRegionIds, setExpandedRegionIds] = useState<Set<string>>(() => new Set());
@@ -226,8 +256,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   }, [regions]);
 
   const sortedMarkers = useMemo(() => {
-    return [...(markers ?? [])].sort((a, b) => a.label.localeCompare(b.label));
-  }, [markers]);
+    return [...displayMarkers].sort((a, b) => a.label.localeCompare(b.label));
+  }, [displayMarkers]);
 
   const regionNamesById = useMemo(() => {
     const map = new Map<string, string>();
@@ -239,12 +269,22 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   const handleRevealRegion = useCallback(
     (region: Region) => {
-      if (!onRevealRegion) return;
+      if (!onRevealRegions) return;
       const confirmReveal = window.confirm(`Reveal "${region.name}" to players?`);
       if (!confirmReveal) return;
-      onRevealRegion(region);
+      onRevealRegions([region.id]);
     },
-    [onRevealRegion],
+    [onRevealRegions],
+  );
+
+  const handleHideRegion = useCallback(
+    (region: Region) => {
+      if (!onHideRegions) return;
+      const confirmHide = window.confirm(`Hide "${region.name}" from players?`);
+      if (!confirmHide) return;
+      onHideRegions([region.id]);
+    },
+    [onHideRegions],
   );
 
   const totalVisibleAtStart = useMemo(() => regions.filter((region) => region.visibleAtStart).length, [regions]);
@@ -424,7 +464,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               height={viewHeight}
               regions={regions}
               revealedRegionIds={playerRevealedRegionIds}
-              markers={markers}
+              markers={displayMarkers}
             />
           )}
         </div>
@@ -464,12 +504,23 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                           ? 'text-amber-500 dark:text-amber-300'
                           : 'text-slate-500 dark:text-slate-400';
                       const regionColor = normalizeHexColor(region.color);
-                      const revealButtonEnabled = Boolean(onRevealRegion) && !revealed;
-                      const revealButtonClasses = revealButtonEnabled
-                        ? 'w-full rounded-full border border-amber-400/70 bg-amber-300/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30'
-                        : revealed
-                          ? 'w-full cursor-not-allowed rounded-full border border-emerald-400/50 bg-emerald-300/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200'
+                      const canReveal = Boolean(onRevealRegions) && !revealed;
+                      const canHide = Boolean(onHideRegions) && revealed;
+                      const revealButtonLabel = revealed
+                        ? canHide
+                          ? 'Hide from Players'
+                          : 'Already Revealed'
+                        : 'Reveal to Players';
+                      const revealButtonClasses = revealed
+                        ? canHide
+                          ? 'w-full rounded-full border border-rose-400/70 bg-rose-200/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-rose-700 transition hover:bg-rose-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/60 dark:bg-rose-400/20 dark:text-rose-100 dark:hover:bg-rose-400/30'
+                          : 'w-full cursor-not-allowed rounded-full border border-emerald-400/50 bg-emerald-300/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200'
+                        : canReveal
+                          ? 'w-full rounded-full border border-amber-400/70 bg-amber-300/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30'
                           : 'w-full cursor-not-allowed rounded-full border border-slate-300/60 bg-slate-200/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500';
+                      const handleRegionAction = revealed
+                        ? () => handleHideRegion(region)
+                        : () => handleRevealRegion(region);
                       return (
                         <div
                           key={region.id}
@@ -557,10 +608,10 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                               <button
                                 type="button"
                                 className={revealButtonClasses}
-                                onClick={() => handleRevealRegion(region)}
-                                disabled={!revealButtonEnabled}
+                                onClick={handleRegionAction}
+                                disabled={!canReveal && !canHide}
                               >
-                                {revealed ? 'Already Revealed' : 'Reveal to Players'}
+                                {revealButtonLabel}
                               </button>
                             </div>
                           )}
