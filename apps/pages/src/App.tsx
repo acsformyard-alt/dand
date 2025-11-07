@@ -67,6 +67,7 @@ const App: React.FC = () => {
   const [showMapWizard, setShowMapWizard] = useState(false);
   const sessionSocketRef = useRef<WebSocket | null>(null);
   const [sessionRevealedRegionIds, setSessionRevealedRegionIds] = useState<string[]>([]);
+  const [sessionRevealedMarkerIds, setSessionRevealedMarkerIds] = useState<string[]>([]);
   const [sessionLiveMarkers, setSessionLiveMarkers] = useState<SessionLiveMarker[]>([]);
 
   useEffect(() => {
@@ -200,6 +201,7 @@ const App: React.FC = () => {
 
     if (!activeSession) {
       setSessionRevealedRegionIds([]);
+      setSessionRevealedMarkerIds([]);
       setSessionLiveMarkers([]);
       const existing = sessionSocketRef.current;
       if (existing) {
@@ -236,6 +238,14 @@ const App: React.FC = () => {
     let isActive = true;
 
     const parseRegionIds = (value: unknown): string[] => {
+      if (!Array.isArray(value)) {
+        return [];
+      }
+      const filtered = value.filter((entry): entry is string => typeof entry === 'string');
+      return Array.from(new Set(filtered));
+    };
+
+    const parseMarkerIds = (value: unknown): string[] => {
       if (!Array.isArray(value)) {
         return [];
       }
@@ -290,6 +300,9 @@ const App: React.FC = () => {
       const revealed = parseRegionIds(payload?.revealedRegions);
       setSessionRevealedRegionIds(revealed);
 
+      const revealedMarkers = parseMarkerIds(payload?.revealedMarkers);
+      setSessionRevealedMarkerIds(revealedMarkers);
+
       const markersPayload = payload?.markers;
       if (markersPayload && typeof markersPayload === 'object') {
         const normalized = Object.values(markersPayload as Record<string, unknown>)
@@ -317,6 +330,24 @@ const App: React.FC = () => {
         return;
       }
       setSessionRevealedRegionIds((current) => current.filter((id) => !regionIds.includes(id)));
+    };
+
+    const handleMarkersRevealed = (markerIds: string[]) => {
+      if (!markerIds.length) {
+        return;
+      }
+      setSessionRevealedMarkerIds((current) => {
+        const next = new Set(current);
+        markerIds.forEach((id) => next.add(id));
+        return Array.from(next);
+      });
+    };
+
+    const handleMarkersHidden = (markerIds: string[]) => {
+      if (!markerIds.length) {
+        return;
+      }
+      setSessionRevealedMarkerIds((current) => current.filter((id) => !markerIds.includes(id)));
     };
 
     const handleMarkerUpsert = (marker: SessionLiveMarker) => {
@@ -361,6 +392,12 @@ const App: React.FC = () => {
           break;
         case 'regionsHidden':
           handleRegionsHidden(parseRegionIds(payload.regionIds));
+          break;
+        case 'markersRevealed':
+          handleMarkersRevealed(parseMarkerIds(payload.markerIds));
+          break;
+        case 'markersHidden':
+          handleMarkersHidden(parseMarkerIds(payload.markerIds));
           break;
         case 'markerAdded':
         case 'markerUpdated': {
@@ -497,6 +534,20 @@ const App: React.FC = () => {
     },
     [sendSessionMessage, setStatusMessage],
   );
+
+  const handleRevealMarkers = useCallback(
+    (markerIds: string[]) => {
+      if (markerIds.length === 0) {
+        return;
+      }
+      const success = sendSessionMessage({ type: 'revealMarkers', markerIds });
+      if (!success) {
+        setStatusMessage('Unable to send marker reveal update. Please check the session connection.');
+      }
+    },
+    [sendSessionMessage, setStatusMessage],
+  );
+
 
   const handleCreateCampaign = async (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -817,6 +868,7 @@ const App: React.FC = () => {
     setActiveSession(null);
     setSessionMode('dm');
     setSessionRevealedRegionIds([]);
+    setSessionRevealedMarkerIds([]);
     setSessionLiveMarkers([]);
     const socket = sessionSocketRef.current;
     if (socket) {
@@ -850,6 +902,7 @@ const App: React.FC = () => {
       setStatusMessage('Session ended');
       setActiveSession(null);
       setSessionRevealedRegionIds([]);
+      setSessionRevealedMarkerIds([]);
       setSessionLiveMarkers([]);
       const socket = sessionSocketRef.current;
       if (socket) {
@@ -879,6 +932,7 @@ const App: React.FC = () => {
     setActiveSession(null);
     setLobbySessions([]);
     setSessionRevealedRegionIds([]);
+    setSessionRevealedMarkerIds([]);
     setSessionLiveMarkers([]);
     if (sessionSocketRef.current) {
       try {
@@ -931,6 +985,7 @@ const App: React.FC = () => {
                 regions={regions}
                 markers={markers}
                 revealedRegionIds={sessionRevealedRegionIds}
+                revealedMarkerIds={sessionRevealedMarkerIds}
                 liveMarkers={sessionLiveMarkers}
                 onLeave={handleLeaveSession}
               />
@@ -958,9 +1013,11 @@ const App: React.FC = () => {
                 regions={regions}
                 markers={markers}
                 revealedRegionIds={sessionRevealedRegionIds}
+                revealedMarkerIds={sessionRevealedMarkerIds}
                 liveMarkers={sessionLiveMarkers}
                 onRevealRegions={handleRevealRegions}
                 onHideRegions={handleHideRegions}
+                onRevealMarkers={handleRevealMarkers}
                 onSaveSnapshot={handleSaveSession}
                 onEndSession={handleEndSession}
                 onLeave={handleLeaveSession}
