@@ -265,7 +265,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
     }`;
 
   return (
-    <div className="relative flex min-h-[540px] w-full flex-1 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+    <div className="relative flex h-full min-h-[540px] w-full max-h-screen flex-1 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
       <header className="flex h-12 items-center justify-between border-b border-white/30 bg-white/40 px-4 text-[11px] uppercase tracking-[0.35em] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60">
         <div className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
           <span className="text-[10px] font-semibold tracking-[0.4em] text-slate-600 dark:text-slate-400">DM SESSION</span>
@@ -428,7 +428,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             />
           )}
         </div>
-        <aside className="flex min-h-0 flex-[1] flex-col border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
+        <aside className="flex min-h-0 flex-[1] flex-col overflow-hidden border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">
             <button type="button" className={tabButtonClasses('rooms')} onClick={() => setActiveTab('rooms')}>
               Rooms
