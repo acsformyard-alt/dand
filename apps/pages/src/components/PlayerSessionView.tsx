@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { MapRecord, Marker, Region, SessionRecord } from '../types';
+import type { MapRecord, Marker, Region, SessionLiveMarker, SessionRecord } from '../types';
 import PlayerView from './PlayerView';
 
 interface PlayerSessionViewProps {
@@ -13,6 +13,7 @@ interface PlayerSessionViewProps {
   regions: Region[];
   revealedRegionIds?: string[] | null;
   markers?: Marker[] | null;
+  liveMarkers?: SessionLiveMarker[] | null;
   revealedMarkerIds?: string[] | null;
   onLeave?: () => void;
 }
@@ -28,9 +29,12 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
   regions,
   revealedRegionIds,
   markers,
+  liveMarkers,
   revealedMarkerIds,
   onLeave,
 }) => {
+  const resolvedMapId = map?.id ?? session.mapId;
+
   const playerRevealedRegionIds = useMemo(
     () =>
       revealedRegionIds && revealedRegionIds.length > 0
@@ -38,6 +42,26 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
         : regions.filter((region) => region.visibleAtStart).map((region) => region.id),
     [regions, revealedRegionIds],
   );
+
+  const combinedMarkers = useMemo(() => {
+    const baseMarkers = markers ?? [];
+    const sessionMarkers = (liveMarkers ?? []).map<Marker>((marker) => ({
+      id: marker.id,
+      mapId: resolvedMapId,
+      label: marker.label,
+      x: Number.isFinite(marker.x) ? marker.x : 0,
+      y: Number.isFinite(marker.y) ? marker.y : 0,
+      color: marker.color ?? undefined,
+      iconKey: marker.iconKey ?? undefined,
+      notes: marker.notes ?? undefined,
+      visibleAtStart: true,
+      kind: 'point',
+    }));
+    if (sessionMarkers.length === 0) {
+      return baseMarkers;
+    }
+    return [...baseMarkers, ...sessionMarkers];
+  }, [liveMarkers, markers, resolvedMapId]);
 
   const resolvedCampaignName = campaignName ?? session.campaignName ?? 'Unknown Campaign';
   const resolvedMapName = mapName ?? session.mapName ?? map?.name ?? 'Unknown Map';
@@ -89,7 +113,7 @@ const PlayerSessionView: React.FC<PlayerSessionViewProps> = ({
             height={mapHeight ?? map?.height ?? undefined}
             regions={regions}
             revealedRegionIds={playerRevealedRegionIds}
-            markers={markers}
+            markers={combinedMarkers}
             revealedMarkerIds={revealedMarkerIds}
           />
         </div>

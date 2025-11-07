@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DMSessionViewer from './components/DMSessionViewer';
 import PlayerSessionView from './components/PlayerSessionView';
 import MapMaskCanvas from './components/MapMaskCanvas';
@@ -15,6 +15,7 @@ import type {
   Region,
   SessionRecord,
   User,
+  SessionLiveMarker,
 } from './types';
 
 const getMapMetadataString = (map: MapRecord | null, key: string) => {
@@ -64,6 +65,9 @@ const App: React.FC = () => {
   const [newCampaignPublic, setNewCampaignPublic] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showMapWizard, setShowMapWizard] = useState(false);
+  const sessionSocketRef = useRef<WebSocket | null>(null);
+  const [sessionRevealedRegionIds, setSessionRevealedRegionIds] = useState<string[]>([]);
+  const [sessionLiveMarkers, setSessionLiveMarkers] = useState<SessionLiveMarker[]>([]);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -190,6 +194,250 @@ const App: React.FC = () => {
   }, [fetchMapsForSelectedCampaign]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!activeSession) {
+      setSessionRevealedRegionIds([]);
+      setSessionLiveMarkers([]);
+      const existing = sessionSocketRef.current;
+      if (existing) {
+        try {
+          existing.close();
+        } catch (err) {
+          console.error('Failed to close previous session WebSocket', err);
+        }
+        sessionSocketRef.current = null;
+      }
+      return;
+    }
+
+    if (typeof WebSocket === 'undefined') {
+      console.warn('WebSocket is not available in this environment.');
+      return;
+    }
+
+    const params: Record<string, string | undefined> = {
+      role: sessionMode,
+      name: user?.displayName ?? undefined,
+    };
+    const socketUrl = apiClient.buildWebSocketUrl(activeSession.id, params);
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(socketUrl);
+    } catch (err) {
+      console.error('Failed to connect to session WebSocket', err);
+      return;
+    }
+
+    sessionSocketRef.current = socket;
+    let isActive = true;
+
+    const parseRegionIds = (value: unknown): string[] => {
+      if (!Array.isArray(value)) {
+        return [];
+      }
+      const filtered = value.filter((entry): entry is string => typeof entry === 'string');
+      return Array.from(new Set(filtered));
+    };
+
+    const clampNormalized = (value: unknown): number => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return 0;
+      }
+      if (numeric <= 0) {
+        return 0;
+      }
+      if (numeric >= 1) {
+        return 1;
+      }
+      return numeric;
+    };
+
+    const normalizeLiveMarker = (value: unknown): SessionLiveMarker | null => {
+      if (!value || typeof value !== 'object') {
+        return null;
+      }
+      const candidate = value as Record<string, unknown>;
+      const id = candidate.id;
+      if (typeof id !== 'string') {
+        return null;
+      }
+      const labelRaw = candidate.label;
+      const label =
+        typeof labelRaw === 'string' && labelRaw.trim().length > 0 ? labelRaw : 'Marker';
+      const color = typeof candidate.color === 'string' ? candidate.color : null;
+      const iconKey = typeof candidate.iconKey === 'string' ? candidate.iconKey : null;
+      const notes = typeof candidate.notes === 'string' ? candidate.notes : null;
+      return {
+        id,
+        label,
+        x: clampNormalized(candidate.x),
+        y: clampNormalized(candidate.y),
+        color,
+        iconKey,
+        notes,
+      };
+    };
+
+    const applyStatePayload = (payload: Record<string, unknown> | undefined) => {
+      if (!isActive) {
+        return;
+      }
+      const revealed = parseRegionIds(payload?.revealedRegions);
+      setSessionRevealedRegionIds(revealed);
+
+      const markersPayload = payload?.markers;
+      if (markersPayload && typeof markersPayload === 'object') {
+        const normalized = Object.values(markersPayload as Record<string, unknown>)
+          .map(normalizeLiveMarker)
+          .filter((marker): marker is SessionLiveMarker => Boolean(marker));
+        setSessionLiveMarkers(normalized);
+      } else {
+        setSessionLiveMarkers([]);
+      }
+    };
+
+    const handleRegionsRevealed = (regionIds: string[]) => {
+      if (!regionIds.length) {
+        return;
+      }
+      setSessionRevealedRegionIds((current) => {
+        const next = new Set(current);
+        regionIds.forEach((id) => next.add(id));
+        return Array.from(next);
+      });
+    };
+
+    const handleRegionsHidden = (regionIds: string[]) => {
+      if (!regionIds.length) {
+        return;
+      }
+      setSessionRevealedRegionIds((current) => current.filter((id) => !regionIds.includes(id)));
+    };
+
+    const handleMarkerUpsert = (marker: SessionLiveMarker) => {
+      setSessionLiveMarkers((current) => {
+        const existingIndex = current.findIndex((entry) => entry.id === marker.id);
+        if (existingIndex === -1) {
+          return [...current, marker];
+        }
+        const next = [...current];
+        next[existingIndex] = marker;
+        return next;
+      });
+    };
+
+    const handleMarkerRemoval = (markerId: string) => {
+      setSessionLiveMarkers((current) => current.filter((marker) => marker.id !== markerId));
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (!isActive) {
+        return;
+      }
+      const raw = typeof event.data === 'string' ? event.data : '';
+      if (!raw) {
+        return;
+      }
+      let message: Record<string, unknown>;
+      try {
+        message = JSON.parse(raw) as Record<string, unknown>;
+      } catch (err) {
+        console.error('Failed to parse session WebSocket message', err);
+        return;
+      }
+      const type = typeof message.type === 'string' ? message.type : '';
+      const payload = (message.payload ?? {}) as Record<string, unknown>;
+      switch (type) {
+        case 'state':
+          applyStatePayload(payload);
+          break;
+        case 'regionsRevealed':
+          handleRegionsRevealed(parseRegionIds(payload.regionIds));
+          break;
+        case 'regionsHidden':
+          handleRegionsHidden(parseRegionIds(payload.regionIds));
+          break;
+        case 'markerAdded':
+        case 'markerUpdated': {
+          const marker = normalizeLiveMarker(payload.marker ?? (message as any).marker);
+          if (marker) {
+            handleMarkerUpsert(marker);
+          }
+          break;
+        }
+        case 'markerRemoved': {
+          const markerId =
+            typeof payload.markerId === 'string'
+              ? payload.markerId
+              : typeof (message as Record<string, unknown>).markerId === 'string'
+                ? (message as Record<string, unknown>).markerId
+                : null;
+          if (markerId) {
+            handleMarkerRemoval(markerId);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    const handleOpen = () => {
+      if (!isActive) {
+        return;
+      }
+      const displayName = user?.displayName?.trim();
+      const name =
+        displayName && displayName.length > 0
+          ? displayName
+          : sessionMode === 'dm'
+            ? 'Dungeon Master'
+            : 'Player';
+      try {
+        socket.send(
+          JSON.stringify({
+            type: 'join',
+            role: sessionMode,
+            name,
+          }),
+        );
+      } catch (err) {
+        console.error('Failed to send session join message', err);
+      }
+    };
+
+    socket.addEventListener('message', handleMessage);
+    socket.addEventListener('open', handleOpen);
+    socket.addEventListener('error', (event) => {
+      console.error('Session WebSocket error', event);
+    });
+    socket.addEventListener('close', () => {
+      if (sessionSocketRef.current === socket) {
+        sessionSocketRef.current = null;
+      }
+    });
+
+    return () => {
+      isActive = false;
+      socket.removeEventListener('message', handleMessage);
+      socket.removeEventListener('open', handleOpen);
+      try {
+        socket.close();
+      } catch (err) {
+        console.error('Failed to close session WebSocket', err);
+      }
+      if (sessionSocketRef.current === socket) {
+        sessionSocketRef.current = null;
+      }
+    };
+  }, [activeSession?.id, sessionMode, user?.displayName]);
+
+  useEffect(() => {
     const loadMapDetails = async () => {
       if (!selectedMap) return;
       try {
@@ -209,6 +457,46 @@ const App: React.FC = () => {
       setActiveView('manage');
     }
   }, [activeView, selectedCampaign]);
+
+  const sendSessionMessage = useCallback((message: unknown) => {
+    const socket = sessionSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      socket.send(JSON.stringify(message));
+      return true;
+    } catch (err) {
+      console.error('Failed to send session WebSocket message', err);
+      return false;
+    }
+  }, []);
+
+  const handleRevealRegions = useCallback(
+    (regionIds: string[]) => {
+      if (regionIds.length === 0) {
+        return;
+      }
+      const success = sendSessionMessage({ type: 'revealRegions', regionIds });
+      if (!success) {
+        setStatusMessage('Unable to send reveal update. Please check the session connection.');
+      }
+    },
+    [sendSessionMessage, setStatusMessage],
+  );
+
+  const handleHideRegions = useCallback(
+    (regionIds: string[]) => {
+      if (regionIds.length === 0) {
+        return;
+      }
+      const success = sendSessionMessage({ type: 'hideRegions', regionIds });
+      if (!success) {
+        setStatusMessage('Unable to send hide update. Please check the session connection.');
+      }
+    },
+    [sendSessionMessage, setStatusMessage],
+  );
 
   const handleCreateCampaign = async (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -493,6 +781,8 @@ const App: React.FC = () => {
       const created = await apiClient.createSession({ campaignId: selectedCampaign.id, mapId: selectedMap.id, name });
       setActiveSession(created);
       setSessionMode('dm');
+      setSessionRevealedRegionIds([]);
+      setSessionLiveMarkers([]);
       await refreshLobby();
       setStatusMessage('Session started!');
     } catch (err) {
@@ -503,6 +793,8 @@ const App: React.FC = () => {
   const handleJoinSession = async (session: LobbySessionSummary) => {
     setActiveSession(session as SessionRecord);
     setSessionMode(session.hostId === user?.id ? 'dm' : 'player');
+    setSessionRevealedRegionIds([]);
+    setSessionLiveMarkers([]);
     if (!selectedMap || selectedMap.id !== session.mapId) {
       try {
         const map = await apiClient.getMap(session.mapId);
@@ -524,6 +816,17 @@ const App: React.FC = () => {
   const handleLeaveSession = () => {
     setActiveSession(null);
     setSessionMode('dm');
+    setSessionRevealedRegionIds([]);
+    setSessionLiveMarkers([]);
+    const socket = sessionSocketRef.current;
+    if (socket) {
+      try {
+        socket.close();
+      } catch (err) {
+        console.error('Failed to close session WebSocket', err);
+      }
+      sessionSocketRef.current = null;
+    }
   };
 
   const handleSaveSession = async () => {
@@ -546,6 +849,17 @@ const App: React.FC = () => {
       await apiClient.endSession(activeSession.id);
       setStatusMessage('Session ended');
       setActiveSession(null);
+      setSessionRevealedRegionIds([]);
+      setSessionLiveMarkers([]);
+      const socket = sessionSocketRef.current;
+      if (socket) {
+        try {
+          socket.close();
+        } catch (err) {
+          console.error('Failed to close session WebSocket', err);
+        }
+        sessionSocketRef.current = null;
+      }
       await refreshLobby();
     } catch (err) {
       setStatusMessage((err as Error).message);
@@ -564,6 +878,16 @@ const App: React.FC = () => {
     setMarkers([]);
     setActiveSession(null);
     setLobbySessions([]);
+    setSessionRevealedRegionIds([]);
+    setSessionLiveMarkers([]);
+    if (sessionSocketRef.current) {
+      try {
+        sessionSocketRef.current.close();
+      } catch (err) {
+        console.error('Failed to close session WebSocket', err);
+      }
+      sessionSocketRef.current = null;
+    }
     setActiveView('join');
     setJoinKey('');
     setJoinError(null);
@@ -606,6 +930,8 @@ const App: React.FC = () => {
                 mapHeight={activeSessionMap?.height}
                 regions={regions}
                 markers={markers}
+                revealedRegionIds={sessionRevealedRegionIds}
+                liveMarkers={sessionLiveMarkers}
                 onLeave={handleLeaveSession}
               />
             </div>
@@ -631,6 +957,10 @@ const App: React.FC = () => {
                 mapHeight={selectedMap?.height}
                 regions={regions}
                 markers={markers}
+                revealedRegionIds={sessionRevealedRegionIds}
+                liveMarkers={sessionLiveMarkers}
+                onRevealRegions={handleRevealRegions}
+                onHideRegions={handleHideRegions}
                 onSaveSnapshot={handleSaveSession}
                 onEndSession={handleEndSession}
                 onLeave={handleLeaveSession}

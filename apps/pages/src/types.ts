@@ -111,6 +111,16 @@ export interface SessionState {
   lastUpdated?: string;
 }
 
+export interface SessionLiveMarker {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  color?: string | null;
+  iconKey?: string | null;
+  notes?: string | null;
+}
+
 export interface LobbySessionSummary {
   id: string;
   name: string;
