@@ -316,7 +316,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           )}
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
+      <div className="flex min-h-0 h-full flex-1 overflow-hidden">
         <div className="relative min-h-0 h-full flex-[4] bg-slate-950/25">
           {viewMode === 'dm' ? (
             <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
