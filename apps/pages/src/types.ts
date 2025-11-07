@@ -105,6 +105,7 @@ export interface SessionState {
   name: string | null;
   status: string;
   revealedRegions: string[];
+  revealedMarkers: string[];
   markers: Record<string, Marker>;
   metadata: Record<string, unknown>;
   players: Array<{ id: string; role: string; name: string }>;

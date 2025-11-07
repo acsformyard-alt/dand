@@ -12,9 +12,11 @@ interface DMSessionViewerProps {
   regions: Region[];
   markers?: Marker[];
   revealedRegionIds?: string[];
+  revealedMarkerIds?: string[];
   liveMarkers?: SessionLiveMarker[];
   onRevealRegions?: (regionIds: string[]) => void;
   onHideRegions?: (regionIds: string[]) => void;
+  onRevealMarkers?: (markerIds: string[]) => void;
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
   onLeave?: () => void;
@@ -121,9 +123,11 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   regions,
   markers,
   revealedRegionIds,
+  revealedMarkerIds,
   liveMarkers,
   onRevealRegions,
   onHideRegions,
+  onRevealMarkers,
   onSaveSnapshot,
   onEndSession,
   onLeave,
@@ -243,6 +247,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   }, []);
 
   const revealedRegionsSet = useMemo(() => new Set(playerRevealedRegionIds), [playerRevealedRegionIds]);
+  const revealedMarkersSet = useMemo(() => new Set(revealedMarkerIds ?? []), [revealedMarkerIds]);
 
   const sortedRegions = useMemo(() => {
     return [...regions].sort((a, b) => {
@@ -285,6 +290,16 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
       onHideRegions([region.id]);
     },
     [onHideRegions],
+  );
+
+  const handleRevealMarker = useCallback(
+    (marker: Marker) => {
+      if (!onRevealMarkers) return;
+      const confirmReveal = window.confirm(`Reveal marker "${marker.label}" to players?`);
+      if (!confirmReveal) return;
+      onRevealMarkers([marker.id]);
+    },
+    [onRevealMarkers],
   );
 
   const totalVisibleAtStart = useMemo(() => regions.filter((region) => region.visibleAtStart).length, [regions]);
@@ -458,15 +473,16 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               })}
             </svg>
           ) : (
-            <PlayerView
-              mapImageUrl={mapImageUrl}
-              width={viewWidth}
-              height={viewHeight}
-              regions={regions}
-              revealedRegionIds={playerRevealedRegionIds}
-              markers={displayMarkers}
-            />
-          )}
+          <PlayerView
+            mapImageUrl={mapImageUrl}
+            width={viewWidth}
+            height={viewHeight}
+            regions={regions}
+            revealedRegionIds={playerRevealedRegionIds}
+            markers={displayMarkers}
+            revealedMarkerIds={revealedMarkerIds}
+          />
+        )}
         </div>
         <aside className="flex min-h-0 h-full flex-[1] flex-col overflow-hidden border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">
@@ -638,6 +654,29 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                       const iconDefinition = getMapMarkerIconDefinition(marker.iconKey);
                       const baseColor = resolveMarkerBaseColor(marker, iconDefinition);
                       const accent = getReadableMarkerColor(baseColor);
+                      const isVisibleAtStart = Boolean(marker.visibleAtStart);
+                      const isRevealed = isVisibleAtStart || revealedMarkersSet.has(marker.id);
+                      const statusLabel = isVisibleAtStart
+                        ? 'Visible at Start'
+                        : isRevealed
+                          ? 'Revealed'
+                          : 'Hidden';
+                      const statusColor = isVisibleAtStart
+                        ? 'text-amber-500 dark:text-amber-300'
+                        : isRevealed
+                          ? 'text-emerald-500 dark:text-emerald-300'
+                          : 'text-slate-500 dark:text-slate-400';
+                      const canRevealMarker = Boolean(onRevealMarkers) && !isVisibleAtStart && !isRevealed;
+                      const revealButtonLabel = isRevealed ? 'Already Revealed' : 'Reveal to Players';
+                      const revealButtonClasses = isRevealed
+                        ? 'w-full cursor-not-allowed rounded-full border border-emerald-400/50 bg-emerald-300/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200'
+                        : 'w-full rounded-full border border-amber-400/70 bg-amber-300/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30';
+                      const handleMarkerAction = () => {
+                        if (!canRevealMarker) {
+                          return;
+                        }
+                        handleRevealMarker(marker);
+                      };
                       const iconElement =
                         iconDefinition &&
                         React.cloneElement(iconDefinition.icon, {
@@ -656,6 +695,9 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                               </p>
                               <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
                                 {describeMarkerKind(marker)}
+                              </p>
+                              <p className={`text-[10px] uppercase tracking-[0.4em] ${statusColor}`}>
+                                {statusLabel}
                               </p>
                             </div>
                             <span
@@ -688,6 +730,12 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                               </dd>
                             </div>
                             <div className="flex flex-col gap-1">
+                              <dt>Currently Revealed</dt>
+                              <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
+                                {isRevealed ? 'Yes' : 'No'}
+                              </dd>
+                            </div>
+                            <div className="flex flex-col gap-1">
                               <dt>Linked Region</dt>
                               <dd className="text-xs font-semibold normal-case tracking-normal text-slate-800 dark:text-slate-100">
                                 {marker.regionId ? regionNamesById.get(marker.regionId) ?? marker.regionId : '—'}
@@ -706,6 +754,16 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                               </dd>
                             </div>
                           </dl>
+                          {!isVisibleAtStart && (
+                            <button
+                              type="button"
+                              className={revealButtonClasses}
+                              onClick={handleMarkerAction}
+                              disabled={!canRevealMarker}
+                            >
+                              {revealButtonLabel}
+                            </button>
+                          )}
                           {marker.notes && (
                             <div className="space-y-1">
                               <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">DM Notes</p>

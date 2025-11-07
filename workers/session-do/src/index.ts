@@ -18,6 +18,7 @@ interface SessionData {
   name: string | null;
   status: string;
   revealedRegions: string[];
+  revealedMarkers: string[];
   markers: Record<string, SessionMarker>;
   metadata: Record<string, unknown>;
   lastUpdated: string;
@@ -70,6 +71,7 @@ export class SessionHub {
     name: null,
     status: 'idle',
     revealedRegions: [],
+    revealedMarkers: [],
     markers: {},
     metadata: {},
     lastUpdated: new Date().toISOString(),
@@ -82,6 +84,15 @@ export class SessionHub {
       const stored = await this.state.storage.get<SessionData>('state');
       if (stored) {
         this.data = stored;
+        if (!Array.isArray(this.data.revealedRegions)) {
+          this.data.revealedRegions = [];
+        }
+        if (!Array.isArray(this.data.revealedMarkers)) {
+          this.data.revealedMarkers = [];
+        }
+        if (!this.data.markers || typeof this.data.markers !== 'object') {
+          this.data.markers = {};
+        }
       }
     });
   }
@@ -115,6 +126,7 @@ export class SessionHub {
     this.data.name = (body.name as string) || null;
     this.data.status = 'active';
     this.data.revealedRegions = [];
+    this.data.revealedMarkers = [];
     this.data.markers = {};
     this.data.metadata = (body.metadata as Record<string, unknown>) || {};
     this.data.lastUpdated = new Date().toISOString();
@@ -134,6 +146,9 @@ export class SessionHub {
       };
       if (!Array.isArray(this.data.revealedRegions)) {
         this.data.revealedRegions = [];
+      }
+      if (!Array.isArray(this.data.revealedMarkers)) {
+        this.data.revealedMarkers = [];
       }
       if (!this.data.markers || typeof this.data.markers !== 'object') {
         this.data.markers = {};
@@ -206,6 +221,14 @@ export class SessionHub {
       return;
     }
 
+    const parseIdList = (value: unknown): string[] => {
+      if (!Array.isArray(value)) {
+        return [];
+      }
+      const filtered = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+      return Array.from(new Set(filtered));
+    };
+
     switch (data.type) {
       case 'join':
         if (typeof (data as any).name === 'string') {
@@ -241,6 +264,32 @@ export class SessionHub {
             this.data.lastUpdated = new Date().toISOString();
             await this.persist();
             await this.broadcast({ type: 'regionsHidden', payload: { regionIds } });
+          }
+        }
+        break;
+      }
+      case 'revealMarkers': {
+        const markerIds = parseIdList((data as any).markerIds);
+        if (markerIds.length) {
+          const newIds = markerIds.filter((id) => !this.data.revealedMarkers.includes(id));
+          if (newIds.length) {
+            this.data.revealedMarkers = [...this.data.revealedMarkers, ...newIds];
+            this.data.lastUpdated = new Date().toISOString();
+            await this.persist();
+            await this.broadcast({ type: 'markersRevealed', payload: { markerIds: newIds } });
+          }
+        }
+        break;
+      }
+      case 'hideMarkers': {
+        const markerIds = parseIdList((data as any).markerIds);
+        if (markerIds.length) {
+          const remaining = this.data.revealedMarkers.filter((id) => !markerIds.includes(id));
+          if (remaining.length !== this.data.revealedMarkers.length) {
+            this.data.revealedMarkers = remaining;
+            this.data.lastUpdated = new Date().toISOString();
+            await this.persist();
+            await this.broadcast({ type: 'markersHidden', payload: { markerIds } });
           }
         }
         break;
@@ -306,6 +355,7 @@ export class SessionHub {
       name: this.data.name,
       status: this.data.status,
       revealedRegions: [...(this.data.revealedRegions || [])],
+      revealedMarkers: [...(this.data.revealedMarkers || [])],
       markers: this.data.markers,
       metadata: this.data.metadata || {},
       players: Array.from(this.presence.values()).map((p) => ({ id: p.id, role: p.role, name: p.name })),
