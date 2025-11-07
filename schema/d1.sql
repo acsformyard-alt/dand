@@ -62,11 +62,18 @@ CREATE TABLE IF NOT EXISTS markers (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Reveal workflow tables
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-    map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
-    host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    campaign_id TEXT NOT NULL
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE,
+    map_id TEXT NOT NULL
+        REFERENCES maps(id)
+        ON DELETE CASCADE,
+    host_id TEXT NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     current_state TEXT,
@@ -76,17 +83,27 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS reveals (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
-    actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    session_id TEXT NOT NULL
+        REFERENCES sessions(id)
+        ON DELETE CASCADE,
+    region_id TEXT NOT NULL
+        REFERENCES regions(id)
+        ON DELETE CASCADE,
+    actor_id TEXT
+        REFERENCES users(id)
+        ON DELETE SET NULL,
     revealed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     hidden_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS session_markers (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    marker_id TEXT REFERENCES markers(id) ON DELETE SET NULL,
+    session_id TEXT NOT NULL
+        REFERENCES sessions(id)
+        ON DELETE CASCADE,
+    marker_id TEXT
+        REFERENCES markers(id)
+        ON DELETE SET NULL,
     label TEXT,
     x REAL NOT NULL,
     y REAL NOT NULL,
@@ -96,6 +113,8 @@ CREATE TABLE IF NOT EXISTS session_markers (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- End reveal workflow tables
 
 CREATE TABLE IF NOT EXISTS assets (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
