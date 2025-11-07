@@ -316,8 +316,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           )}
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="relative min-h-0 flex-[4] bg-slate-950/25">
+      <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
+        <div className="relative min-h-0 h-full flex-[4] bg-slate-950/25">
           {viewMode === 'dm' ? (
             <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-full w-full">
               <defs>
@@ -428,7 +428,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             />
           )}
         </div>
-        <aside className="flex min-h-0 flex-[1] flex-col overflow-hidden border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
+        <aside className="flex min-h-0 h-full flex-[1] flex-col overflow-hidden border-l border-white/30 bg-white/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/50">
           <div className="flex">
             <button type="button" className={tabButtonClasses('rooms')} onClick={() => setActiveTab('rooms')}>
               Rooms
