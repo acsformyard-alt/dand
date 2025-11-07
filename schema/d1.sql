@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS session_markers (
         REFERENCES markers(id)
         ON DELETE SET NULL,
     label TEXT,
-    x REAL NOT NULL,
-    y REAL NOT NULL,
+    x REAL NOT NULL DEFAULT 0,
+    y REAL NOT NULL DEFAULT 0,
     color TEXT,
     icon_key TEXT,
     metadata TEXT,
