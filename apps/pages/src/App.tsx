@@ -581,6 +581,11 @@ const App: React.FC = () => {
     setShowMapWizard(true);
   };
 
+  const handleEditMap = () => {
+    if (!selectedCampaign || !selectedMap) return;
+    setShowMapWizard(true);
+  };
+
   const handleCloseMapWizard = () => {
     setShowMapWizard(false);
   };
@@ -1273,6 +1278,14 @@ const App: React.FC = () => {
                       onClick={handleBackToManage}
                     >
                       Campaign List
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-sky-400/70 bg-sky-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-sky-700 transition hover:bg-sky-200/60 dark:border-sky-400/40 dark:bg-sky-500/20 dark:text-sky-100 dark:hover:bg-sky-500/30"
+                      onClick={handleEditMap}
+                      disabled={!selectedMap}
+                    >
+                      Edit Map
                     </button>
                     <button
                       type="button"
