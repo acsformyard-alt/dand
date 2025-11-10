@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reveal Torch Animation</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      #canvas {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="canvas" aria-label="Reveal torch animation"></div>
+    <script>
+      (function () {
+        const CDNS = {
+          pixi: [
+            'https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.8.9/pixi.min.js',
+            'https://unpkg.com/pixi.js@4.8.9/dist/pixi.min.js',
+            'https://cdn.jsdelivr.net/npm/pixi.js@4.8.9/dist/pixi.min.js',
+          ],
+          filters: [
+            'https://cdnjs.cloudflare.com/ajax/libs/pixi-filters/1.0.8/filters.min.js',
+            'https://unpkg.com/pixi-filters@1.0.8/dist/pixi-filters.min.js',
+            'https://cdn.jsdelivr.net/npm/pixi-filters@1.0.8/dist/pixi-filters.min.js',
+          ],
+          gsap: [
+            'https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js',
+            'https://unpkg.com/gsap@2.1.3/TweenMax.min.js',
+            'https://cdn.jsdelivr.net/npm/gsap@2.1.3/TweenMax.min.js',
+          ],
+          gsapPixi: [
+            'https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/plugins/PixiPlugin.min.js',
+            'https://unpkg.com/gsap@2.1.3/src/minified/plugins/PixiPlugin.min.js',
+            'https://cdn.jsdelivr.net/npm/gsap@2.1.3/src/minified/plugins/PixiPlugin.min.js',
+          ],
+          gsapEase: [
+            'https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/easing/EasePack.min.js',
+            'https://unpkg.com/gsap@2.1.3/src/minified/easing/EasePack.min.js',
+            'https://cdn.jsdelivr.net/npm/gsap@2.1.3/src/minified/easing/EasePack.min.js',
+          ],
+        };
+
+        function loadOne(url) {
+          return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.async = false;
+            script.onload = () => resolve(url);
+            script.onerror = () => reject(new Error('Failed ' + url));
+            document.head.appendChild(script);
+          });
+        }
+
+        async function loadFromList(urls) {
+          let lastErr;
+          for (const url of urls) {
+            try {
+              await loadOne(url);
+              return url;
+            } catch (error) {
+              lastErr = error;
+            }
+          }
+          throw lastErr || new Error('All CDN attempts failed');
+        }
+
+        async function boot() {
+          try {
+            await loadFromList(CDNS.pixi);
+            await loadFromList(CDNS.filters);
+            await loadFromList(CDNS.gsap);
+            await loadFromList(CDNS.gsapPixi);
+            await loadFromList(CDNS.gsapEase);
+            main();
+          } catch (error) {
+            console.error(error);
+          }
+        }
+
+        function createVoidFilter(PIXI) {
+          const Filters = PIXI.filters || {};
+          try {
+            if (Filters.VoidFilter) return new Filters.VoidFilter();
+            return new PIXI.Filter(undefined, undefined);
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function main() {
+          if (typeof PIXI === 'undefined') return;
+
+          const PIXI_NS = PIXI;
+          const Filters = PIXI_NS.filters || {};
+          const HasAdvancedBloom = !!Filters.AdvancedBloomFilter;
+          const HasBloom = !!Filters.BloomFilter;
+
+          class Ember {
+            constructor(colors, app, pixelate) {
+              this.emberBlobs = [];
+              this.embers = new PIXI_NS.Container();
+              if (pixelate && Filters.PixelateFilter) {
+                this.embers.filters = [new Filters.PixelateFilter()];
+              }
+              colors.map((color) => {
+                const circle = new PIXI_NS.Graphics();
+                circle.lineStyle(0);
+                circle.beginFill(color, 1);
+                circle.drawCircle(0, 0, 10);
+                circle.endFill();
+                this.emberBlobs.push(app.renderer.generateTexture(circle));
+              });
+              this._interval = setInterval(() => {
+                this.addEmber();
+              }, 300);
+            }
+            stoke() {
+              const amount = 40 + Math.round(Math.random() * 20);
+              for (let index = 0; index < amount; index += 1) {
+                this.addEmber();
+              }
+            }
+            burst(n) {
+              for (let index = 0; index < n; index += 1) {
+                this.addEmber();
+              }
+            }
+            makeBlob() {
+              const texture = this.emberBlobs[Math.floor(Math.random() * this.emberBlobs.length)];
+              const blob = new PIXI_NS.Sprite(texture);
+              blob.anchor.set(0.5);
+              const scaleScale = Math.random();
+              blob.scale.set(0.4 * scaleScale, 0.5 * scaleScale);
+              return blob;
+            }
+            addEmber() {
+              const time = this.time * (0.3 + Math.random() * 0.6);
+              let blob = this.makeBlob();
+              this.embers.addChild(blob);
+              const bezier = [
+                { x: Math.random() * 100 - 50, y: -100 },
+                { x: Math.random() * 200 - 100, y: -100 + Math.random() * -20 },
+                { x: Math.random() * 200 - 100, y: -100 + Math.random() * -50 },
+                { x: Math.random() * 200 - 100, y: -200 + Math.random() * -50 },
+                { x: Math.random() * 300 - 150, y: -250 + Math.random() * -100 },
+                { x: Math.random() * 500 - 250, y: -500 + Math.random() * -150 },
+              ];
+              TweenMax.to(blob, time / 2, { delay: time / 2, ease: Power1.easeOut, alpha: 0 });
+              TweenMax.to(blob.position, time, {
+                ease: Power1.easeOut,
+                bezier,
+                onComplete: () => {
+                  if (blob && blob.parent) blob.parent.removeChild(blob);
+                  blob = null;
+                },
+              });
+            }
+            get time() {
+              return 2 + Math.random() * 1.5;
+            }
+            destroy() {
+              if (this._interval) clearInterval(this._interval);
+            }
+          }
+
+          class Smoke {
+            constructor(app) {
+              this.app = app;
+              this.container = new PIXI_NS.Container();
+              const g = new PIXI_NS.Graphics();
+              g.beginFill(0xffffff, 0.18);
+              g.drawCircle(0, 0, 20);
+              g.endFill();
+              this.texture = app.renderer.generateTexture(g);
+              this._interval = null;
+            }
+            addWisp() {
+              const s = new PIXI_NS.Sprite(this.texture);
+              s.anchor.set(0.5);
+              s.tint = 0xcfcfcf;
+              s.alpha = 0.0;
+              s.scale.set(0.6 + Math.random() * 0.6);
+              s.position.set(Math.random() * 60 - 30, -30 + (Math.random() * 20 - 10));
+              this.container.addChild(s);
+              const rise = 180 + Math.random() * 140;
+              const drift = Math.random() * 80 - 40;
+              const rot = Math.random() * 0.6 - 0.3;
+              const t = 2.6 + Math.random() * 1.2;
+              TweenMax.to(s, 0.35, { alpha: 0.35, ease: Power1.easeOut });
+              TweenMax.to(s, t, {
+                pixi: {
+                  x: s.x + drift,
+                  y: s.y - rise,
+                  rotation: rot,
+                  scaleX: s.scale.x * 1.3,
+                  scaleY: s.scale.y * 1.3,
+                },
+                ease: Power1.easeOut,
+                onComplete: () => {
+                  if (s && s.parent) s.parent.removeChild(s);
+                },
+              });
+              TweenMax.to(s, 0.8, { delay: t - 0.8, alpha: 0, ease: Power1.easeIn });
+            }
+            puff(n) {
+              for (let index = 0; index < n; index += 1) {
+                this.addWisp();
+              }
+            }
+            start() {
+              if (this._interval) return;
+              this._interval = setInterval(() => {
+                this.puff(2 + Math.floor(Math.random() * 2));
+              }, 250);
+            }
+            stop() {
+              if (this._interval) {
+                clearInterval(this._interval);
+                this._interval = null;
+              }
+            }
+          }
+
+          class Fire {
+            constructor(color, app, pixelate) {
+              this.flame = new PIXI_NS.Container();
+              this.cutout = new PIXI_NS.Container();
+              this.fire = new PIXI_NS.Container();
+              this.flame.addChild(this.fire);
+              this.flame.addChild(this.cutout);
+              this.fire.alpha = 0.7;
+              const circle = new PIXI_NS.Graphics();
+              circle.lineStyle(0);
+              circle.beginFill(color, 1);
+              circle.drawCircle(0, 0, 35);
+              circle.endFill();
+              this.fireBlob = app.renderer.generateTexture(circle);
+              const cutoutCircle = new PIXI_NS.Graphics();
+              cutoutCircle.lineStyle(0);
+              cutoutCircle.beginFill(0x000000, 1);
+              cutoutCircle.drawCircle(0, 0, 40);
+              cutoutCircle.endFill();
+              this.cutoutBlob = app.renderer.generateTexture(cutoutCircle);
+              const filters = {
+                bloom: HasAdvancedBloom
+                  ? new PIXI_NS.filters.AdvancedBloomFilter(0.45, 0.5, 0.5)
+                  : HasBloom
+                  ? new PIXI_NS.filters.BloomFilter()
+                  : null,
+                pixel: pixelate && PIXI_NS.filters.PixelateFilter ? new PIXI_NS.filters.PixelateFilter() : createVoidFilter(PIXI_NS),
+                void: createVoidFilter(PIXI_NS),
+              };
+              this.flame.filters = [filters.bloom, filters.pixel, filters.void].filter(Boolean);
+              try {
+                if (this.flame.filters && this.flame.filters.length) {
+                  this.flame.filters[this.flame.filters.length - 1].blendMode = PIXI_NS.BLEND_MODES.SCREEN;
+                }
+              } catch (error) {
+                // noop
+              }
+              this._interval = setInterval(() => {
+                this.addFlame();
+                this.addCutout(Math.random() > 0.5);
+              }, 50);
+            }
+            makeBlob(texture) {
+              const blob = new PIXI_NS.Sprite(texture);
+              blob.anchor.set(0.5);
+              return blob;
+            }
+            addCutout(left) {
+              const time = this.time * (0.7 + Math.random() * 0.2);
+              let blob = this.makeBlob(this.cutoutBlob);
+              this.cutout.addChild(blob);
+              const scale = [1, 0.75 + Math.random() * 1];
+              blob.position.x = (130 + Math.random() * 50) * (left ? -1 : 1);
+              const targetX = (5 + Math.random() * 60) * (left ? -1 : 1);
+              blob.scale.set(scale[0]);
+              TweenMax.to(blob, time, {
+                ease: Power1.easeIn,
+                pixi: { x: targetX, y: -270, scaleX: scale[1], scaleY: scale[1] },
+                onComplete: () => {
+                  if (blob && blob.parent) blob.parent.removeChild(blob);
+                  blob = null;
+                },
+              });
+            }
+            addFlame() {
+              const time = this.time;
+              let blob = this.makeBlob(this.fireBlob);
+              this.fire.addChild(blob);
+              const scale = [1.2 + Math.random(), 0.5 + Math.random()];
+              const bezier = [
+                { x: 0, y: 0 },
+                { x: Math.random() * 100 - 50, y: Math.random() * -20 },
+                { x: Math.random() * 100 - 50, y: Math.random() * -50 - 50 },
+                { x: 0, y: -150 + Math.random() * -100 },
+              ];
+              blob.scale.set(scale[0]);
+              TweenMax.to(blob, time, { ease: Power1.easeIn, bezier, ease: Power0.easeOut });
+              TweenMax.to(blob, time, {
+                pixi: { scaleX: scale[1], scaleY: scale[1] },
+                onComplete: () => {
+                  if (blob && blob.parent) blob.parent.removeChild(blob);
+                  blob = null;
+                },
+              });
+            }
+            get time() {
+              return 1.8 + Math.random() * 0.8;
+            }
+            set y(value) {
+              this.flame.position.y = value;
+            }
+            set x(value) {
+              this.flame.position.x = value;
+            }
+            set scale(value) {
+              this.flame.scale.set(value);
+            }
+            destroy() {
+              if (this._interval) clearInterval(this._interval);
+            }
+          }
+
+          class Torch {
+            constructor(app) {
+              this.container = new PIXI_NS.Container();
+              const wood = new PIXI_NS.Graphics();
+              wood.beginFill(0x6b3e1e, 1);
+              const cone = new PIXI_NS.Polygon([-36, 0, 36, 0, 20, 220, -20, 220]);
+              wood.drawPolygon(cone);
+              wood.endFill();
+
+              const band = new PIXI_NS.Graphics();
+              band.beginFill(0x3b2314, 1);
+              band.drawRoundedRect(-44, 6, 88, 18, 6);
+              band.endFill();
+
+              const head = new PIXI_NS.Graphics();
+              head.beginFill(0x2b1b12, 1);
+              head.drawRoundedRect(-44, -10, 88, 20, 6);
+              head.endFill();
+
+              const grain = new PIXI_NS.Graphics();
+              const streakColor = 0x4f2b14;
+              const streaks = 8 + Math.floor(Math.random() * 4);
+              for (let index = 0; index < streaks; index += 1) {
+                const x = -28 + Math.random() * 56;
+                const y0 = 8 + Math.random() * 12;
+                const y1 = 210 + Math.random() * 6;
+                const cx1 = x + (Math.random() * 10 - 5);
+                const cx2 = x + (Math.random() * 10 - 5);
+                grain.lineStyle(2, streakColor, 0.22);
+                grain.moveTo(x, y0);
+                grain.bezierCurveTo(cx1, (y0 + y1) / 2 - 40, cx2, (y0 + y1) / 2 + 40, x, y1);
+                if (Math.random() < 0.35) {
+                  const kx = x + (Math.random() * 8 - 4);
+                  const ky = y0 + Math.random() * (y1 - y0 - 40) + 20;
+                  grain.lineStyle(0);
+                  grain.beginFill(streakColor, 0.18);
+                  grain.drawCircle(kx, ky, 3 + Math.random() * 2);
+                  grain.endFill();
+                }
+              }
+
+              const emberDots = new PIXI_NS.Container();
+              const emberColors = [0x7a1a10, 0xa8320c, 0xcc5500, 0x8a2c12];
+              const dotG = new PIXI_NS.Graphics();
+              dotG.beginFill(0xffffff, 1);
+              dotG.drawCircle(0, 0, 2);
+              dotG.endFill();
+              const dotTexture = app.renderer.generateTexture(dotG);
+              const count = 16 + Math.floor(Math.random() * 6);
+              for (let index = 0; index < count; index += 1) {
+                const sprite = new PIXI_NS.Sprite(dotTexture);
+                sprite.anchor.set(0.5);
+                sprite.tint = emberColors[Math.floor(Math.random() * emberColors.length)];
+                sprite.alpha = 0.45 + Math.random() * 0.25;
+                sprite.x = Math.random() * 72 - 36;
+                sprite.y = -6 + (Math.random() * 8 - 4);
+                emberDots.addChild(sprite);
+              }
+              this._emberDotCount = count;
+              this._streakCount = streaks;
+
+              this.container.addChild(wood, band, head, grain, emberDots);
+            }
+          }
+
+          class Stage {
+            constructor(canvas, pixelate, background) {
+              this.flames = [];
+              const width = canvas.clientWidth || 320;
+              const height = canvas.clientHeight || 320;
+              this.app = new PIXI_NS.Application(width, height, {
+                antialias: true,
+                backgroundColor: background ? 0x0f0f0f : 0x11111d,
+                transparent: true,
+              });
+              canvas.appendChild(this.app.view);
+              this.app.view.style.width = '100%';
+              this.app.view.style.height = '100%';
+              this.stage = new PIXI_NS.Container();
+              this.flamesContainer = new PIXI_NS.Container();
+              this.app.stage.addChild(this.stage);
+              this.stage.addChild(this.flamesContainer);
+              this.flamesContainer.scale.set(0.75);
+
+              const torch = new Torch(this.app);
+              this._torch = torch;
+              torch.container.position.set(0, 36);
+              this.flamesContainer.addChild(torch.container);
+
+              const ember = new Ember([0xfe9c00, 0xfea600, 0xe27100], this.app, pixelate);
+              this._ember = ember;
+              this.flamesContainer.addChild(ember.embers);
+
+              const smoke = new Smoke(this.app);
+              this._smoke = smoke;
+              this.flamesContainer.addChild(smoke.container);
+
+              const flames = [
+                { color: 0xe23b00, scale: 1, offset: -30 },
+                { color: 0xfe8200, scale: 1, offset: -10 },
+                { color: 0xfbe416, scale: 0.9, offset: 10 },
+                { color: 0xfdfdb4, scale: 0.7, offset: 30 },
+              ];
+              const BASE_FLAME_SCALE_MULT = 0.5;
+              flames.map((settings) => {
+                const fire = new Fire(settings.color, this.app, pixelate);
+                this.flames.push(fire);
+                fire.y = settings.offset;
+                fire.scale = settings.scale * BASE_FLAME_SCALE_MULT;
+                fire.flame.pivot.set(0, 10);
+                this.flamesContainer.addChild(fire.flame);
+              });
+
+              const edgeMask = new PIXI_NS.Graphics();
+              edgeMask.beginFill(0xffffff, 1);
+              edgeMask.drawRoundedRect(-460, -780, 920, 1280, 140);
+              edgeMask.endFill();
+              this.flamesContainer.addChild(edgeMask);
+              this.flamesContainer.mask = edgeMask;
+              this._edgeMask = edgeMask;
+
+              this.onResize = () => {
+                const currentWidth = canvas.clientWidth || width;
+                const currentHeight = canvas.clientHeight || height;
+                this.app.renderer.resize(currentWidth, currentHeight);
+                this.stage.position.x = currentWidth / 2;
+                this.stage.position.y = currentHeight * 0.8;
+              };
+
+              this.onResize();
+              this._flameNodes = this.flames.map((fire) => fire.flame);
+              this._origScales = this._flameNodes.map((node) => ({ x: node.scale.x, y: node.scale.y }));
+              const nodesForStoke = this._flameNodes.slice(0, this._flameNodes.length - 1);
+              this.stokeAnimation = new TimelineMax();
+              this.stokeAnimation.to(nodesForStoke, 0.3, {
+                ease: Power2.easeOut,
+                pixi: { scaleY: 1.2, scaleX: 1.15 },
+              });
+              this.stokeAnimation.to(nodesForStoke, 1.4, {
+                ease: Bounce.easeOut,
+                pixi: { scaleY: 1, scaleX: 1 },
+              });
+              this.stokeAnimation.stop();
+
+              this._resizeListener = () => this.onResize();
+              window.addEventListener('resize', this._resizeListener);
+              this._clickListener = () => {
+                ember.stoke();
+                this.stokeAnimation.restart();
+              };
+              window.addEventListener('click', this._clickListener);
+            }
+            destroy() {
+              window.removeEventListener('resize', this._resizeListener);
+              window.removeEventListener('click', this._clickListener);
+              this._ember?.destroy();
+              this.flames.forEach((fire) => fire.destroy());
+              if (this.app) {
+                this.app.destroy(true, { children: true, texture: true, baseTexture: true });
+              }
+            }
+          }
+
+          const stage = new Stage(document.getElementById('canvas'));
+          window.__stageInstance = stage;
+
+          function tweenFlames(mult, alpha, dur) {
+            const nodes = stage._flameNodes;
+            const orig = stage._origScales;
+            for (let index = 0; index < nodes.length; index += 1) {
+              const node = nodes[index];
+              const base = orig[index];
+              TweenMax.to(node.scale, dur, {
+                ease: Power1.easeOut,
+                x: base.x * mult,
+                y: base.y * mult,
+              });
+              TweenMax.to(node, dur, { ease: Power1.easeOut, alpha });
+            }
+          }
+
+          function startDim() {
+            const smoke = stage._smoke;
+            tweenFlames(0.01, 0.0, 0.18);
+            smoke.puff(6);
+            smoke.start();
+          }
+
+          function stopDim() {
+            const smoke = stage._smoke;
+            tweenFlames(1.0, 1.0, 0.25);
+            smoke.stop();
+            smoke.puff(3);
+          }
+
+          function startBurn() {
+            const nodes = stage._flameNodes;
+            const orig = stage._origScales;
+            const ember = stage._ember;
+            for (let index = 0; index < nodes.length; index += 1) {
+              const node = nodes[index];
+              const base = orig[index];
+              TweenMax.to(node.scale, 0.28, {
+                ease: Power1.easeOut,
+                x: base.x * 2.3,
+                y: base.y * 2.3,
+              });
+              TweenMax.to(node, 0.18, { ease: Power1.easeOut, alpha: 1.0 });
+              TweenMax.to(node.scale, 0.6, {
+                delay: 0.28,
+                ease: Power2.easeOut,
+                x: base.x * 2.5,
+                y: base.y * 2.5,
+              });
+            }
+            ember.burst(50);
+            if (!stage._burnInterval) {
+              stage._burnInterval = setInterval(() => {
+                ember.burst(12);
+              }, 200);
+            }
+          }
+
+          function stopBurn() {
+            if (stage._burnInterval) {
+              clearInterval(stage._burnInterval);
+              stage._burnInterval = null;
+            }
+            tweenFlames(1.0, 1.0, 0.25);
+          }
+
+          function cleanup() {
+            stopBurn();
+            stopDim();
+            stage.destroy();
+          }
+
+          window.__revealTorchController = {
+            startDim,
+            stopDim,
+            startBurn,
+            stopBurn,
+            cleanup,
+          };
+
+          const notifyReady = () => {
+            if (window.parent) {
+              window.parent.postMessage({ type: 'reveal-torch-ready' }, '*');
+            }
+          };
+          notifyReady();
+
+          window.addEventListener('message', (event) => {
+            if (event.origin && event.origin !== window.location.origin) return;
+            const data = event.data || {};
+            switch (data.type) {
+              case 'dim-start':
+                startDim();
+                break;
+              case 'dim-stop':
+                stopDim();
+                break;
+              case 'burn-start':
+                startBurn();
+                break;
+              case 'burn-stop':
+                stopBurn();
+                break;
+              case 'cleanup':
+                cleanup();
+                break;
+              default:
+                break;
+            }
+          });
+
+          window.addEventListener('beforeunload', cleanup);
+        }
+
+        boot();
+      })();
+    </script>
+  </body>
+</html>
