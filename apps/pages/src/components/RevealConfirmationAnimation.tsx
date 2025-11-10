@@ -167,8 +167,9 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   const HasAdvancedBloom = Boolean(Filters.AdvancedBloomFilter);
   const HasBloom = Boolean(Filters.BloomFilter);
 
-  const createVoidFilter = () => {
+  const createAlphaFilter = () => {
     try {
+      if (Filters.AlphaFilter) return new Filters.AlphaFilter();
       if (Filters.VoidFilter) return new Filters.VoidFilter();
       return new PIXI.Filter(undefined, undefined);
     } catch (error) {
@@ -368,8 +369,8 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
           : HasBloom
           ? new PIXI.filters.BloomFilter()
           : null,
-        pixel: pixelate && PIXI.filters.PixelateFilter ? new PIXI.filters.PixelateFilter() : createVoidFilter(),
-        void: createVoidFilter(),
+        pixel: pixelate && PIXI.filters.PixelateFilter ? new PIXI.filters.PixelateFilter() : createAlphaFilter(),
+        void: createAlphaFilter(),
       };
       this.flame.filters = [filters.bloom, filters.pixel, filters.void].filter(Boolean);
       try {
