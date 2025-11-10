@@ -200,7 +200,11 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         parseCssColor(style?.backgroundColor) ??
         parseCssColor(style?.background);
       if (parsed) {
-        accumulated = compositeOver(parsed, accumulated);
+        if (accumulated.a <= 0) {
+          accumulated = parsed;
+        } else {
+          accumulated = compositeOver(accumulated, parsed);
+        }
         if (accumulated.a >= 0.999) {
           break;
         }
@@ -209,7 +213,10 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     }
 
     if (accumulated.a < 0.999) {
-      accumulated = compositeOver(defaultColor, accumulated);
+      accumulated =
+        accumulated.a <= 0
+          ? defaultColor
+          : compositeOver(accumulated, defaultColor);
     }
 
     return rgbaToNumber(accumulated);
