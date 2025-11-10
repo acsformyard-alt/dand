@@ -181,6 +181,30 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     return null;
   }
 
+  const killTweens = (target: any): void => {
+    if (!target || !TweenMax?.killTweensOf) return;
+    if (Array.isArray(target)) {
+      target.forEach(killTweens);
+      return;
+    }
+
+    try {
+      TweenMax.killTweensOf(target);
+    } catch (error) {
+      // ignore tween cleanup errors
+    }
+
+    const position = target && target.position;
+    if (position && position !== target) {
+      killTweens(position);
+    }
+
+    const scale = target && target.scale;
+    if (scale && scale !== target) {
+      killTweens(scale);
+    }
+  };
+
   const resolveBackgroundColor = (element: Nullable<HTMLElement>): number => {
     const defaultColor: RGBAColor = {
       r: (DEFAULT_BACKGROUND_COLOR >> 16) & 0xff,
@@ -316,6 +340,8 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         window.clearInterval(this._interval);
         this._interval = null;
       }
+      killTweens(this.embers);
+      killTweens(this.embers?.children ?? []);
     }
 
     set y(value: number) {
@@ -365,6 +391,8 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         window.clearInterval(this._interval);
         this._interval = null;
       }
+      killTweens(this.container);
+      killTweens(this.container?.children ?? []);
     }
 
     private addWisp() {
@@ -504,6 +532,11 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         window.clearInterval(this._interval);
         this._interval = null;
       }
+      killTweens(this.fire);
+      killTweens(this.cutout);
+      killTweens(this.flame);
+      killTweens(this.fire?.children ?? []);
+      killTweens(this.cutout?.children ?? []);
     }
   }
 
@@ -671,12 +704,21 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
       this._ember?.destroy();
       this._smoke?.stop();
       this.flames.forEach((fire) => fire.destroy());
+      killTweens(this.stage);
+      killTweens(this.stage?.children ?? []);
+      killTweens(this.flamesContainer);
+      killTweens(this.flamesContainer?.children ?? []);
+      killTweens(this._flameNodes);
+      killTweens(this._flameNodes.map((node) => node?.scale));
       if (this.app) {
         this.app.destroy(true, { children: true, texture: true, baseTexture: true });
       }
       while (this.host.firstChild) {
         this.host.removeChild(this.host.firstChild);
       }
+      this.flames = [];
+      this._flameNodes = [];
+      this._origScales = [];
     }
   }
 
@@ -689,10 +731,14 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   const tweenFlames = (mult: number, alpha: number, dur: number) => {
     nodes.forEach((node: any, index: number) => {
       const base = orig[index];
+      killTweens(node.scale);
+      killTweens(node);
       TweenMax.to(node.scale, dur, { ease: Power1.easeOut, x: base.x * mult, y: base.y * mult });
       TweenMax.to(node, dur, { ease: Power1.easeOut, alpha });
     });
   };
+
+  let burnInterval: Nullable<number> = null;
 
   const dimHandlers = {
     enter: () => {
@@ -711,20 +757,22 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     enter: () => {
       nodes.forEach((node: any, index: number) => {
         const base = orig[index];
+        killTweens(node.scale);
+        killTweens(node);
         TweenMax.to(node.scale, 0.25, { ease: Power1.easeOut, x: base.x * 1.25, y: base.y * 1.25 });
         TweenMax.to(node, 0.18, { ease: Power1.easeOut, alpha: 1 });
       });
       ember.burst(50);
-      if (!stage['_burnInterval']) {
-        stage['_burnInterval'] = window.setInterval(() => {
+      if (burnInterval == null) {
+        burnInterval = window.setInterval(() => {
           ember.burst(12);
         }, 200);
       }
     },
     leave: () => {
-      if (stage['_burnInterval']) {
-        window.clearInterval(stage['_burnInterval']);
-        stage['_burnInterval'] = null;
+      if (burnInterval != null) {
+        window.clearInterval(burnInterval);
+        burnInterval = null;
       }
       tweenFlames(1, 1, 0.25);
     },
@@ -732,9 +780,9 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
 
   return {
     destroy: () => {
-      if (stage['_burnInterval']) {
-        window.clearInterval(stage['_burnInterval']);
-        stage['_burnInterval'] = null;
+      if (burnInterval != null) {
+        window.clearInterval(burnInterval);
+        burnInterval = null;
       }
       stage.destroy();
     },
@@ -774,10 +822,15 @@ const RevealConfirmationAnimation: React.FC<RevealConfirmationAnimationProps> = 
         if (isCancelled) return;
         const nextHost = containerRef.current;
         if (!nextHost) return;
-        const createdStage = createTorchStage(nextHost);
-        if (!createdStage) return;
-        stageRef.current = createdStage;
-        setStageReady(true);
+        try {
+          const createdStage = createTorchStage(nextHost);
+          if (!createdStage) return;
+          stageRef.current = createdStage;
+          setStageReady(true);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to create reveal torch stage', error);
+        }
       });
     };
 
