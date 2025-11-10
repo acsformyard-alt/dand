@@ -3,6 +3,7 @@ import type { Marker, Region, SessionLiveMarker, SessionRecord } from '../types'
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
 import { getMapMarkerIconDefinition, type MapMarkerIconDefinition } from './mapMarkerIcons';
+import RevealConfirmationAnimation from './RevealConfirmationAnimation';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -139,6 +140,16 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
   const [pendingReveal, setPendingReveal] = useState<PendingRevealAction | null>(null);
+  const [keepHiddenButton, setKeepHiddenButton] = useState<HTMLButtonElement | null>(null);
+  const [revealButton, setRevealButton] = useState<HTMLButtonElement | null>(null);
+
+  const keepHiddenButtonRef = useCallback((node: HTMLButtonElement | null) => {
+    setKeepHiddenButton(node);
+  }, []);
+
+  const revealButtonRef = useCallback((node: HTMLButtonElement | null) => {
+    setRevealButton(node);
+  }, []);
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
@@ -379,7 +390,10 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             <div className="flex min-h-[320px] flex-col">
               <div className="space-y-4">
                 <p className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
-                <p className="text-5xl" aria-hidden="true">🙂</p>
+                <RevealConfirmationAnimation
+                  keepHiddenButton={keepHiddenButton}
+                  revealButton={revealButton}
+                />
                 <h3
                   id="dm-reveal-confirm-title"
                   className="text-3xl font-black uppercase tracking-[0.25em] text-slate-900 dark:text-white"
@@ -393,6 +407,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
               <div className="mt-auto flex items-center justify-center gap-10">
                 <button
                   type="button"
+                  ref={keepHiddenButtonRef}
                   onClick={cancelPendingReveal}
                   className="rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
                 >
@@ -400,6 +415,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 </button>
                 <button
                   type="button"
+                  ref={revealButtonRef}
                   onClick={confirmPendingReveal}
                   className="rounded-full border border-amber-400/70 bg-amber-300/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
                 >
