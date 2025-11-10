@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Marker, Region, SessionLiveMarker, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
@@ -17,6 +17,7 @@ interface DMSessionViewerProps {
   onRevealRegions?: (regionIds: string[]) => void;
   onHideRegions?: (regionIds: string[]) => void;
   onRevealMarkers?: (markerIds: string[]) => void;
+  onEditMap?: () => void;
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
   onLeave?: () => void;
@@ -24,6 +25,16 @@ interface DMSessionViewerProps {
 
 type ViewMode = 'dm' | 'player';
 type SidebarTab = 'rooms' | 'markers' | 'other';
+
+type PendingReveal =
+  | {
+      type: 'region';
+      target: Region;
+    }
+  | {
+      type: 'marker';
+      target: Marker;
+    };
 
 const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -128,12 +139,14 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   onRevealRegions,
   onHideRegions,
   onRevealMarkers,
+  onEditMap,
   onSaveSnapshot,
   onEndSession,
   onLeave,
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
+  const [pendingReveal, setPendingReveal] = useState<PendingReveal | null>(null);
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
@@ -272,12 +285,30 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
     return map;
   }, [regions]);
 
+  const dismissPendingReveal = useCallback(() => {
+    setPendingReveal(null);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingReveal) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        dismissPendingReveal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [dismissPendingReveal, pendingReveal]);
+
   const handleRevealRegion = useCallback(
     (region: Region) => {
       if (!onRevealRegions) return;
-      const confirmReveal = window.confirm(`Reveal "${region.name}" to players?`);
-      if (!confirmReveal) return;
-      onRevealRegions([region.id]);
+      setPendingReveal({ type: 'region', target: region });
     },
     [onRevealRegions],
   );
@@ -295,12 +326,47 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const handleRevealMarker = useCallback(
     (marker: Marker) => {
       if (!onRevealMarkers) return;
-      const confirmReveal = window.confirm(`Reveal marker "${marker.label}" to players?`);
-      if (!confirmReveal) return;
-      onRevealMarkers([marker.id]);
+      setPendingReveal({ type: 'marker', target: marker });
     },
     [onRevealMarkers],
   );
+
+  const handleConfirmReveal = useCallback(() => {
+    if (!pendingReveal) {
+      return;
+    }
+    if (pendingReveal.type === 'region') {
+      onRevealRegions?.([pendingReveal.target.id]);
+    } else {
+      onRevealMarkers?.([pendingReveal.target.id]);
+    }
+    dismissPendingReveal();
+  }, [dismissPendingReveal, onRevealMarkers, onRevealRegions, pendingReveal]);
+
+  const handleEditMapFromPrompt = useCallback(() => {
+    if (onEditMap) {
+      onEditMap();
+    }
+    dismissPendingReveal();
+  }, [dismissPendingReveal, onEditMap]);
+
+  const revealPromptTitle = pendingReveal
+    ? pendingReveal.type === 'region'
+      ? `Reveal ${pendingReveal.target.name}?`
+      : `Reveal marker ${pendingReveal.target.label}?`
+    : '';
+
+  const revealPromptBody = pendingReveal
+    ? pendingReveal.type === 'region'
+      ? `Confirm that you want to reveal the following region to the players: ${pendingReveal.target.name}.`
+      : `Confirm that you want to reveal the following marker to the players: ${pendingReveal.target.label}.`
+    : '';
+
+  const revealPromptBadgeLabel = pendingReveal
+    ? pendingReveal.type === 'region'
+      ? pendingReveal.target.name
+      : pendingReveal.target.label
+    : '';
 
   const totalVisibleAtStart = useMemo(() => regions.filter((region) => region.visibleAtStart).length, [regions]);
   const totalMarkersVisibleAtStart = useMemo(
@@ -863,6 +929,57 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
           </div>
         </aside>
       </div>
+      {pendingReveal && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reveal-confirmation-title"
+            className="flex w-full max-w-xl flex-col gap-6 rounded-3xl border border-white/70 bg-white/80 p-8 shadow-2xl shadow-amber-500/20 ring-1 ring-white/60 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/80 dark:shadow-black/50 dark:ring-slate-700/70"
+          >
+            <header className="space-y-3 text-center">
+              <p className="text-[11px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
+              <h2
+                id="reveal-confirmation-title"
+                className="text-2xl font-semibold uppercase tracking-[0.3em] text-slate-900 dark:text-white"
+              >
+                {revealPromptTitle}
+              </h2>
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{revealPromptBody}</p>
+            </header>
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-amber-300/70 bg-amber-200/40 p-6 text-center dark:border-amber-400/40 dark:bg-amber-400/10">
+              <span className="rounded-full border border-amber-400/70 bg-amber-300/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-slate-900 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100">
+                {revealPromptBadgeLabel}
+              </span>
+              <p className="text-[11px] uppercase tracking-[0.35em] text-amber-700 dark:text-amber-200">Animated reveal preview</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={dismissPendingReveal}
+                className="rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
+              >
+                Back to Session
+              </button>
+              <button
+                type="button"
+                onClick={handleEditMapFromPrompt}
+                disabled={!onEditMap}
+                className="rounded-full border border-emerald-400/70 bg-emerald-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 transition hover:bg-emerald-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:bg-emerald-500/30"
+              >
+                Edit Map
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReveal}
+                className="rounded-full border border-amber-400/70 bg-amber-300/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+              >
+                Reveal to Players
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

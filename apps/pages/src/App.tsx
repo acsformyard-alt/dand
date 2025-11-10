@@ -864,7 +864,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLeaveSession = () => {
+  const handleLeaveSession = useCallback(() => {
     setActiveSession(null);
     setSessionMode('dm');
     setSessionRevealedRegionIds([]);
@@ -879,7 +879,47 @@ const App: React.FC = () => {
       }
       sessionSocketRef.current = null;
     }
-  };
+  }, []);
+
+  const handleEditMapFromSession = useCallback(() => {
+    if (!activeSession) {
+      return;
+    }
+    const sessionCampaignId = activeSession.campaignId;
+    const sessionMapId = activeSession.mapId;
+    const campaignRecord =
+      (selectedCampaign && selectedCampaign.id === sessionCampaignId ? selectedCampaign : null) ||
+      campaigns.find((entry) => entry.id === sessionCampaignId) ||
+      null;
+
+    if (!campaignRecord) {
+      setStatusMessage('Unable to locate the campaign for this session. Please return to the admin panel to edit the map.');
+      return;
+    }
+
+    const mapRecord =
+      (selectedMap && selectedMap.id === sessionMapId ? selectedMap : null) ||
+      maps.find((entry) => entry.id === sessionMapId) ||
+      null;
+
+    handleLeaveSession();
+    setSelectedCampaign(campaignRecord);
+    setActiveView('admin');
+    setSelectedMap(mapRecord ?? null);
+    setShowMapWizard(true);
+  }, [
+    activeSession,
+    campaigns,
+    handleLeaveSession,
+    maps,
+    selectedCampaign,
+    selectedMap,
+    setActiveView,
+    setSelectedCampaign,
+    setSelectedMap,
+    setShowMapWizard,
+    setStatusMessage,
+  ]);
 
   const handleSaveSession = async () => {
     if (!activeSession) return;
@@ -1018,6 +1058,7 @@ const App: React.FC = () => {
                 onRevealRegions={handleRevealRegions}
                 onHideRegions={handleHideRegions}
                 onRevealMarkers={handleRevealMarkers}
+                onEditMap={handleEditMapFromSession}
                 onSaveSnapshot={handleSaveSession}
                 onEndSession={handleEndSession}
                 onLeave={handleLeaveSession}
