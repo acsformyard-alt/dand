@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Marker, Region, SessionLiveMarker, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
 import { getMapMarkerIconDefinition, type MapMarkerIconDefinition } from './mapMarkerIcons';
+import { RevealTorchAnimation, type RevealTorchHandle } from './RevealTorchAnimation';
 
 interface DMSessionViewerProps {
   session: SessionRecord;
@@ -139,6 +140,14 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
   const [pendingReveal, setPendingReveal] = useState<PendingRevealAction | null>(null);
+  const torchRef = useRef<RevealTorchHandle | null>(null);
+
+  useEffect(() => {
+    if (!pendingReveal) {
+      torchRef.current?.dimStop();
+      torchRef.current?.burnStop();
+    }
+  }, [pendingReveal]);
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
@@ -379,7 +388,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             <div className="flex min-h-[320px] flex-col">
               <div className="space-y-4">
                 <p className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
-                <p className="text-5xl" aria-hidden="true">🙂</p>
+                <RevealTorchAnimation ref={torchRef} />
                 <h3
                   id="dm-reveal-confirm-title"
                   className="text-3xl font-black uppercase tracking-[0.25em] text-slate-900 dark:text-white"
@@ -394,6 +403,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 <button
                   type="button"
                   onClick={cancelPendingReveal}
+                  onMouseEnter={() => torchRef.current?.dimStart()}
+                  onMouseLeave={() => torchRef.current?.dimStop()}
                   className="rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
                 >
                   Keep Hidden
@@ -401,6 +412,8 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 <button
                   type="button"
                   onClick={confirmPendingReveal}
+                  onMouseEnter={() => torchRef.current?.burnStart()}
+                  onMouseLeave={() => torchRef.current?.burnStop()}
                   className="rounded-full border border-amber-400/70 bg-amber-300/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
                 >
                   Reveal to Players
