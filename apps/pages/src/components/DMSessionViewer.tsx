@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Marker, Region, SessionLiveMarker, SessionRecord } from '../types';
 import { computeRoomMaskCentroid, encodeRoomMaskToDataUrl, roomMaskHasCoverage } from '../utils/roomMask';
 import PlayerView from './PlayerView';
@@ -115,6 +115,10 @@ const describeMarkerKind = (marker: Marker) => {
   return 'Point Marker';
 };
 
+type PendingRevealAction =
+  | { kind: 'region'; region: Region }
+  | { kind: 'marker'; marker: Marker };
+
 const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   session,
   mapImageUrl,
@@ -134,6 +138,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
+  const [pendingReveal, setPendingReveal] = useState<PendingRevealAction | null>(null);
 
   const viewWidth = mapWidth ?? 1000;
   const viewHeight = mapHeight ?? 1000;
@@ -275,9 +280,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const handleRevealRegion = useCallback(
     (region: Region) => {
       if (!onRevealRegions) return;
-      const confirmReveal = window.confirm(`Reveal "${region.name}" to players?`);
-      if (!confirmReveal) return;
-      onRevealRegions([region.id]);
+      setPendingReveal({ kind: 'region', region });
     },
     [onRevealRegions],
   );
@@ -295,12 +298,55 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   const handleRevealMarker = useCallback(
     (marker: Marker) => {
       if (!onRevealMarkers) return;
-      const confirmReveal = window.confirm(`Reveal marker "${marker.label}" to players?`);
-      if (!confirmReveal) return;
-      onRevealMarkers([marker.id]);
+      setPendingReveal({ kind: 'marker', marker });
     },
     [onRevealMarkers],
   );
+
+  useEffect(() => {
+    if (!pendingReveal) return undefined;
+    if (typeof window === 'undefined') return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPendingReveal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pendingReveal]);
+
+  const confirmPendingReveal = useCallback(() => {
+    if (!pendingReveal) return;
+    if (pendingReveal.kind === 'region') {
+      onRevealRegions?.([pendingReveal.region.id]);
+    } else {
+      onRevealMarkers?.([pendingReveal.marker.id]);
+    }
+    setPendingReveal(null);
+  }, [onRevealMarkers, onRevealRegions, pendingReveal]);
+
+  const cancelPendingReveal = useCallback(() => {
+    setPendingReveal(null);
+  }, []);
+
+  const pendingRevealTitle = useMemo(() => {
+    if (!pendingReveal) return '';
+    if (pendingReveal.kind === 'region') {
+      return `Reveal room "${pendingReveal.region.name}"?`;
+    }
+    return `Reveal marker "${pendingReveal.marker.label}"?`;
+  }, [pendingReveal]);
+
+  const pendingRevealDescription = useMemo(() => {
+    if (!pendingReveal) return '';
+    if (pendingReveal.kind === 'region') {
+      return `Confirm that you want to reveal the following region to the players: ${pendingReveal.region.name}.`;
+    }
+    return `Confirm that you want to reveal the following marker to the players: ${pendingReveal.marker.label}.`;
+  }, [pendingReveal]);
 
   const totalVisibleAtStart = useMemo(() => regions.filter((region) => region.visibleAtStart).length, [regions]);
   const totalMarkersVisibleAtStart = useMemo(
@@ -321,6 +367,49 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
 
   return (
     <div className="relative flex h-full min-h-[540px] w-full max-h-screen flex-1 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+      {pendingReveal && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/70 px-6 py-8 backdrop-blur-xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dm-reveal-confirm-title"
+            aria-describedby="dm-reveal-confirm-description"
+            className="w-full max-w-xl rounded-3xl border border-white/60 bg-white/80 p-8 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/85"
+          >
+            <div className="flex min-h-[320px] flex-col">
+              <div className="space-y-4">
+                <p className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
+                <p className="text-5xl" aria-hidden="true">🙂</p>
+                <h3
+                  id="dm-reveal-confirm-title"
+                  className="text-3xl font-black uppercase tracking-[0.25em] text-slate-900 dark:text-white"
+                >
+                  {pendingRevealTitle}
+                </h3>
+                <p id="dm-reveal-confirm-description" className="text-sm text-slate-600 dark:text-slate-300">
+                  {pendingRevealDescription}
+                </p>
+              </div>
+              <div className="mt-auto flex items-center justify-center gap-10">
+                <button
+                  type="button"
+                  onClick={cancelPendingReveal}
+                  className="rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
+                >
+                  Keep Hidden
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPendingReveal}
+                  className="rounded-full border border-amber-400/70 bg-amber-300/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+                >
+                  Reveal to Players
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="flex h-12 items-center justify-between border-b border-white/30 bg-white/40 px-4 text-[11px] uppercase tracking-[0.35em] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60">
         <div className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
           <span className="text-[10px] font-semibold tracking-[0.4em] text-slate-600 dark:text-slate-400">DM SESSION</span>
