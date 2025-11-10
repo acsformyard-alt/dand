@@ -99,6 +99,8 @@ const ensureTorchDependencies = () => {
   return torchDependencyPromise;
 };
 
+const DEFAULT_BACKGROUND_COLOR = 0x11111d;
+
 const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   const global = window as any;
   const PIXI = global.PIXI;
@@ -109,6 +111,57 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   if (!PIXI || !TweenMax || !Power0 || !Power1 || !Power2) {
     return null;
   }
+
+  const parseCssColorToNumber = (value: Nullable<string>): number | null => {
+    if (!value) return null;
+    const color = value.trim();
+    if (!color || color === 'transparent') return null;
+    const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      let hex = hexMatch[1];
+      if (hex.length === 3) {
+        hex = hex
+          .split('')
+          .map((char) => char + char)
+          .join('');
+      }
+      return Number.parseInt(hex, 16);
+    }
+    const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+    if (rgbMatch) {
+      const alpha = rgbMatch[4] !== undefined ? Number.parseFloat(rgbMatch[4]) : 1;
+      if (!Number.isFinite(alpha) || alpha <= 0) {
+        return null;
+      }
+      const r = Number.parseInt(rgbMatch[1], 10);
+      const g = Number.parseInt(rgbMatch[2], 10);
+      const b = Number.parseInt(rgbMatch[3], 10);
+      if ([r, g, b].some((n) => Number.isNaN(n))) {
+        return null;
+      }
+      return (Math.max(0, Math.min(255, r)) << 16)
+        + (Math.max(0, Math.min(255, g)) << 8)
+        + Math.max(0, Math.min(255, b));
+    }
+    return null;
+  };
+
+  const resolveBackgroundColor = (element: Nullable<HTMLElement>): number => {
+    if (!element) return DEFAULT_BACKGROUND_COLOR;
+    const style = window.getComputedStyle(element);
+    const parsed =
+      parseCssColorToNumber(style?.backgroundColor) ??
+      parseCssColorToNumber(style?.background);
+    if (parsed !== null) {
+      return parsed;
+    }
+    if (element.parentElement && element.parentElement !== element) {
+      return resolveBackgroundColor(element.parentElement);
+    }
+    return DEFAULT_BACKGROUND_COLOR;
+  };
+
+  const backgroundColor = resolveBackgroundColor(canvasHost);
 
   const Filters = PIXI.filters || {};
   const HasAdvancedBloom = Boolean(Filters.AdvancedBloomFilter);
@@ -305,7 +358,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
       this.fireBlob = app.renderer.generateTexture(circle);
       const cutoutCircle = new PIXI.Graphics();
       cutoutCircle.lineStyle(0);
-      cutoutCircle.beginFill(0x000000, 1);
+      cutoutCircle.beginFill(backgroundColor, 1);
       cutoutCircle.drawCircle(0, 0, 40);
       cutoutCircle.endFill();
       this.cutoutBlob = app.renderer.generateTexture(cutoutCircle);
@@ -345,6 +398,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     private addCutout(left: boolean) {
       const time = this.time * (0.7 + Math.random() * 0.2);
       let blob = this.makeBlob(this.cutoutBlob);
+      blob.tint = backgroundColor;
       this.cutout.addChild(blob);
       const scale = [1, 0.75 + Math.random() * 1];
       blob.position.x = (130 + Math.random() * 50) * (left ? -1 : 1);
@@ -476,7 +530,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
       this.app = new PIXI.Application(width, height, {
         antialias: true,
         transparent: !background,
-        backgroundColor: background ? 0x11111d : 0x000000,
+        backgroundColor,
       });
       canvas.appendChild(this.app.view);
       this.stage = new PIXI.Container();
@@ -591,14 +645,8 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     enter: () => {
       nodes.forEach((node: any, index: number) => {
         const base = orig[index];
-        TweenMax.to(node.scale, 0.28, { ease: Power1.easeOut, x: base.x * 2.3, y: base.y * 2.3 });
+        TweenMax.to(node.scale, 0.25, { ease: Power1.easeOut, x: base.x * 1.25, y: base.y * 1.25 });
         TweenMax.to(node, 0.18, { ease: Power1.easeOut, alpha: 1 });
-        TweenMax.to(node.scale, 0.6, {
-          delay: 0.28,
-          ease: Power2.easeOut,
-          x: base.x * 2.5,
-          y: base.y * 2.5,
-        });
       });
       ember.burst(50);
       if (!stage['_burnInterval']) {
