@@ -155,6 +155,8 @@ const compositeOver = (top: RGBAColor, bottom: RGBAColor): RGBAColor => {
 const rgbaToNumber = (value: RGBAColor) =>
   (clamp255(value.r) << 16) + (clamp255(value.g) << 8) + clamp255(value.b);
 
+const numberToCssColor = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
+
 const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   const global = window as any;
   const PIXI = global.PIXI;
@@ -563,17 +565,20 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     private host: HTMLElement;
     private resizeObserver: Nullable<ResizeObserver>;
 
-    constructor(canvas: HTMLElement, pixelate = false, background = false) {
+    constructor(canvas: HTMLElement, pixelate = false) {
       this.host = canvas;
       const width = canvas.clientWidth || 320;
       const height = canvas.clientHeight || 320;
       this.app = new PIXI.Application(width, height, {
         antialias: true,
-        transparent: !background,
+        transparent: false,
         backgroundColor,
       });
       canvas.appendChild(this.app.view);
-      this.app.view.style.backgroundColor = '#000000';
+      const backgroundCss = numberToCssColor(backgroundColor);
+      this.app.renderer.backgroundColor = backgroundColor;
+      this.app.view.style.backgroundColor = backgroundCss;
+      this.host.style.backgroundColor = backgroundCss;
       this.stage = new PIXI.Container();
       this.flamesContainer = new PIXI.Container();
       this.app.stage.addChild(this.stage);
@@ -655,7 +660,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     }
   }
 
-  const stage = new Stage(canvasHost, false, false);
+  const stage = new Stage(canvasHost, false);
   const nodes = stage._flameNodes;
   const orig = stage._origScales;
   const ember = stage._ember;
