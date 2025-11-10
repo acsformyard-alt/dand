@@ -376,7 +376,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             aria-describedby="dm-reveal-confirm-description"
             className="w-full max-w-xl rounded-3xl border border-white/60 bg-white/80 p-8 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/85"
           >
-            <div className="flex min-h-[320px] flex-col justify-between gap-8">
+            <div className="flex min-h-[320px] flex-col">
               <div className="space-y-4">
                 <p className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
                 <p className="text-5xl" aria-hidden="true">🙂</p>
@@ -390,7 +390,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                   {pendingRevealDescription}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="mt-auto flex items-center justify-between">
                 <button
                   type="button"
                   onClick={cancelPendingReveal}
