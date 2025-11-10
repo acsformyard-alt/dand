@@ -20,7 +20,6 @@ interface DMSessionViewerProps {
   onSaveSnapshot?: () => void;
   onEndSession?: () => void;
   onLeave?: () => void;
-  onEditMap?: () => void;
 }
 
 type ViewMode = 'dm' | 'player';
@@ -136,7 +135,6 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
   onSaveSnapshot,
   onEndSession,
   onLeave,
-  onEditMap,
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('dm');
   const [activeTab, setActiveTab] = useState<SidebarTab>('rooms');
@@ -334,16 +332,6 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
     setPendingReveal(null);
   }, []);
 
-  const handleEditMapFromConfirmation = useCallback(() => {
-    setPendingReveal(null);
-    onEditMap?.();
-  }, [onEditMap]);
-
-  const pendingRevealName = useMemo(() => {
-    if (!pendingReveal) return '';
-    return pendingReveal.kind === 'region' ? pendingReveal.region.name : pendingReveal.marker.label;
-  }, [pendingReveal]);
-
   const pendingRevealTitle = useMemo(() => {
     if (!pendingReveal) return '';
     if (pendingReveal.kind === 'region') {
@@ -391,6 +379,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
             <div className="flex min-h-[320px] flex-col justify-between gap-8">
               <div className="space-y-4">
                 <p className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">Reveal Confirmation</p>
+                <p className="text-5xl" aria-hidden="true">🙂</p>
                 <h3
                   id="dm-reveal-confirm-title"
                   className="text-3xl font-black uppercase tracking-[0.25em] text-slate-900 dark:text-white"
@@ -400,11 +389,6 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                 <p id="dm-reveal-confirm-description" className="text-sm text-slate-600 dark:text-slate-300">
                   {pendingRevealDescription}
                 </p>
-                <div className="flex min-h-[160px] items-center justify-center rounded-2xl border border-amber-400/60 bg-amber-200/30 text-center shadow-inner dark:border-amber-400/40 dark:bg-amber-400/10">
-                  <span className="px-6 text-lg font-semibold uppercase tracking-[0.4em] text-amber-700 dark:text-amber-100">
-                    {pendingRevealName}
-                  </span>
-                </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button
@@ -413,18 +397,6 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                   className="rounded-full border border-slate-300/70 bg-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-amber-400/70 hover:text-amber-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-amber-400/70 dark:hover:text-amber-200"
                 >
                   Keep Hidden
-                </button>
-                <button
-                  type="button"
-                  onClick={handleEditMapFromConfirmation}
-                  disabled={!onEditMap}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                    onEditMap
-                      ? 'border border-rose-400/70 bg-rose-200/40 text-rose-700 hover:bg-rose-200/60 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30'
-                      : 'cursor-not-allowed border border-slate-300/40 bg-slate-200/40 text-slate-400 opacity-70 dark:border-slate-700/40 dark:bg-slate-800/40 dark:text-slate-500'
-                  }`}
-                >
-                  Edit Map
                 </button>
                 <button
                   type="button"
