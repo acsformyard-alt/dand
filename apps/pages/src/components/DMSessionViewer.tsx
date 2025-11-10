@@ -390,7 +390,7 @@ const DMSessionViewer: React.FC<DMSessionViewerProps> = ({
                   {pendingRevealDescription}
                 </p>
               </div>
-              <div className="mt-auto flex items-center justify-between">
+              <div className="mt-auto flex items-center justify-center gap-10">
                 <button
                   type="button"
                   onClick={cancelPendingReveal}
