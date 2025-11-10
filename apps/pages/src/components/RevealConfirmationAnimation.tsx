@@ -105,8 +105,6 @@ type RGBAColor = { r: number; g: number; b: number; a: number };
 
 const clamp255 = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
 
-const numberToCssColor = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
-
 const parseCssColor = (value: Nullable<string>): RGBAColor | null => {
   if (!value) return null;
   const color = value.trim();
@@ -575,7 +573,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         backgroundColor,
       });
       canvas.appendChild(this.app.view);
-      this.app.view.style.backgroundColor = numberToCssColor(backgroundColor);
+      this.app.view.style.backgroundColor = '#000000';
       this.stage = new PIXI.Container();
       this.flamesContainer = new PIXI.Container();
       this.app.stage.addChild(this.stage);
