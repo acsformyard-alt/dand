@@ -101,6 +101,62 @@ const ensureTorchDependencies = () => {
 
 const DEFAULT_BACKGROUND_COLOR = 0x11111d;
 
+type RGBAColor = { r: number; g: number; b: number; a: number };
+
+const clamp255 = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+
+const numberToCssColor = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
+
+const parseCssColor = (value: Nullable<string>): RGBAColor | null => {
+  if (!value) return null;
+  const color = value.trim();
+  if (!color || color === 'transparent' || color === 'none') return null;
+  const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    if (hex.length === 3) {
+      hex = hex
+        .split('')
+        .map((char) => char + char)
+        .join('');
+    }
+    const int = Number.parseInt(hex, 16);
+    return {
+      r: (int >> 16) & 0xff,
+      g: (int >> 8) & 0xff,
+      b: int & 0xff,
+      a: 1,
+    };
+  }
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+  if (rgbMatch) {
+    const r = clamp255(Number.parseInt(rgbMatch[1], 10));
+    const g = clamp255(Number.parseInt(rgbMatch[2], 10));
+    const b = clamp255(Number.parseInt(rgbMatch[3], 10));
+    const alphaRaw = rgbMatch[4] !== undefined ? Number.parseFloat(rgbMatch[4]) : 1;
+    const a = Math.max(0, Math.min(1, Number.isFinite(alphaRaw) ? alphaRaw : 1));
+    if (a <= 0) {
+      return null;
+    }
+    return { r, g, b, a };
+  }
+  return null;
+};
+
+const compositeOver = (top: RGBAColor, bottom: RGBAColor): RGBAColor => {
+  const a = top.a + bottom.a * (1 - top.a);
+  if (a <= 0) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+  const r = (top.r * top.a + bottom.r * bottom.a * (1 - top.a)) / a;
+  const g = (top.g * top.a + bottom.g * bottom.a * (1 - top.a)) / a;
+  const b = (top.b * top.a + bottom.b * bottom.a * (1 - top.a)) / a;
+  return { r, g, b, a };
+};
+
+const rgbaToNumber = (value: RGBAColor) =>
+  (clamp255(value.r) << 16) + (clamp255(value.g) << 8) + clamp255(value.b);
+
 const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
   const global = window as any;
   const PIXI = global.PIXI;
@@ -112,53 +168,38 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
     return null;
   }
 
-  const parseCssColorToNumber = (value: Nullable<string>): number | null => {
-    if (!value) return null;
-    const color = value.trim();
-    if (!color || color === 'transparent') return null;
-    const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-    if (hexMatch) {
-      let hex = hexMatch[1];
-      if (hex.length === 3) {
-        hex = hex
-          .split('')
-          .map((char) => char + char)
-          .join('');
-      }
-      return Number.parseInt(hex, 16);
-    }
-    const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
-    if (rgbMatch) {
-      const alpha = rgbMatch[4] !== undefined ? Number.parseFloat(rgbMatch[4]) : 1;
-      if (!Number.isFinite(alpha) || alpha <= 0) {
-        return null;
-      }
-      const r = Number.parseInt(rgbMatch[1], 10);
-      const g = Number.parseInt(rgbMatch[2], 10);
-      const b = Number.parseInt(rgbMatch[3], 10);
-      if ([r, g, b].some((n) => Number.isNaN(n))) {
-        return null;
-      }
-      return (Math.max(0, Math.min(255, r)) << 16)
-        + (Math.max(0, Math.min(255, g)) << 8)
-        + Math.max(0, Math.min(255, b));
-    }
-    return null;
-  };
-
   const resolveBackgroundColor = (element: Nullable<HTMLElement>): number => {
-    if (!element) return DEFAULT_BACKGROUND_COLOR;
-    const style = window.getComputedStyle(element);
-    const parsed =
-      parseCssColorToNumber(style?.backgroundColor) ??
-      parseCssColorToNumber(style?.background);
-    if (parsed !== null) {
-      return parsed;
+    const defaultColor: RGBAColor = {
+      r: (DEFAULT_BACKGROUND_COLOR >> 16) & 0xff,
+      g: (DEFAULT_BACKGROUND_COLOR >> 8) & 0xff,
+      b: DEFAULT_BACKGROUND_COLOR & 0xff,
+      a: 1,
+    };
+
+    let node: Nullable<HTMLElement> = element ?? null;
+    const visited = new Set<HTMLElement>();
+    let accumulated: RGBAColor = { r: 0, g: 0, b: 0, a: 0 };
+
+    while (node && !visited.has(node)) {
+      visited.add(node);
+      const style = window.getComputedStyle(node);
+      const parsed =
+        parseCssColor(style?.backgroundColor) ??
+        parseCssColor(style?.background);
+      if (parsed) {
+        accumulated = compositeOver(parsed, accumulated);
+        if (accumulated.a >= 0.999) {
+          break;
+        }
+      }
+      node = node.parentElement && node.parentElement !== node ? node.parentElement : null;
     }
-    if (element.parentElement && element.parentElement !== element) {
-      return resolveBackgroundColor(element.parentElement);
+
+    if (accumulated.a < 0.999) {
+      accumulated = compositeOver(defaultColor, accumulated);
     }
-    return DEFAULT_BACKGROUND_COLOR;
+
+    return rgbaToNumber(accumulated);
   };
 
   const backgroundColor = resolveBackgroundColor(canvasHost);
@@ -534,6 +575,7 @@ const createTorchStage = (canvasHost: HTMLElement): TorchStage | null => {
         backgroundColor,
       });
       canvas.appendChild(this.app.view);
+      this.app.view.style.backgroundColor = numberToCssColor(backgroundColor);
       this.stage = new PIXI.Container();
       this.flamesContainer = new PIXI.Container();
       this.app.stage.addChild(this.stage);
