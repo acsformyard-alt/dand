@@ -138,6 +138,19 @@ const parseCssColor = (value: Nullable<string>): RGBAColor | null => {
     }
     return { r, g, b, a };
   }
+
+  const modernRgbMatch = color.match(/rgba?\(\s*(\d+)\s+(\d+)\s+(\d+)(?:\s*\/\s*([\d.]+))?\s*\)/i);
+  if (modernRgbMatch) {
+    const r = clamp255(Number.parseInt(modernRgbMatch[1], 10));
+    const g = clamp255(Number.parseInt(modernRgbMatch[2], 10));
+    const b = clamp255(Number.parseInt(modernRgbMatch[3], 10));
+    const alphaRaw = modernRgbMatch[4] !== undefined ? Number.parseFloat(modernRgbMatch[4]) : 1;
+    const a = Math.max(0, Math.min(1, Number.isFinite(alphaRaw) ? alphaRaw : 1));
+    if (a <= 0) {
+      return null;
+    }
+    return { r, g, b, a };
+  }
   return null;
 };
 
