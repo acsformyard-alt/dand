@@ -757,17 +757,35 @@ const RevealConfirmationAnimation: React.FC<RevealConfirmationAnimationProps> = 
 
   useEffect(() => {
     let isCancelled = false;
+    let rafId: number | null = null;
+
+    const createStage = () => {
+      if (isCancelled) return;
+      const host = containerRef.current;
+      if (!host) return;
+
+      if (stageRef.current) {
+        stageRef.current.destroy();
+        stageRef.current = null;
+      }
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        if (isCancelled) return;
+        const nextHost = containerRef.current;
+        if (!nextHost) return;
+        const createdStage = createTorchStage(nextHost);
+        if (!createdStage) return;
+        stageRef.current = createdStage;
+        setStageReady(true);
+      });
+    };
 
     ensureTorchDependencies()
       .then(() => {
         if (isCancelled) return;
-        if (stageRef.current) return;
-        const host = containerRef.current;
-        if (!host) return;
-        const createdStage = createTorchStage(host);
-        if (!createdStage) return;
-        stageRef.current = createdStage;
-        setStageReady(true);
+        setStageReady(false);
+        createStage();
       })
       .catch(() => {
         // Ignore loading errors; animation is purely decorative.
@@ -775,10 +793,14 @@ const RevealConfirmationAnimation: React.FC<RevealConfirmationAnimationProps> = 
 
     return () => {
       isCancelled = true;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       if (stageRef.current) {
         stageRef.current.destroy();
         stageRef.current = null;
       }
+      setStageReady(false);
     };
   }, []);
 
