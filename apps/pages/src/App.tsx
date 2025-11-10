@@ -881,6 +881,30 @@ const App: React.FC = () => {
     }
   };
 
+  const handleEditMapFromSession = () => {
+    const session = activeSession;
+    const campaignToUse =
+      selectedCampaign ?? (session ? campaigns.find((entry) => entry.id === session.campaignId) ?? null : null);
+    const mapToUse = selectedMap ?? (session ? maps.find((entry) => entry.id === session.mapId) ?? null : null);
+
+    handleLeaveSession();
+
+    if (campaignToUse) {
+      setSelectedCampaign(campaignToUse);
+    }
+    if (mapToUse) {
+      setSelectedMap(mapToUse);
+    }
+
+    setActiveView('admin');
+
+    if (campaignToUse) {
+      setShowMapWizard(true);
+    } else {
+      setStatusMessage('Select or load a campaign before editing maps.');
+    }
+  };
+
   const handleSaveSession = async () => {
     if (!activeSession) return;
     setLoading(true);
@@ -1021,6 +1045,7 @@ const App: React.FC = () => {
                 onSaveSnapshot={handleSaveSession}
                 onEndSession={handleEndSession}
                 onLeave={handleLeaveSession}
+                onEditMap={handleEditMapFromSession}
               />
             </div>
           </div>
