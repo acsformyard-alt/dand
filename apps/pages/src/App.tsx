@@ -154,7 +154,6 @@ const App: React.FC = () => {
     apiClient.setToken(response.token);
     setToken(response.token);
     setUser(response.user);
-    setStatusMessage('Welcome back!');
     setActiveView('join');
     await refreshCampaigns(response.token);
     await refreshLobby();
@@ -1035,132 +1034,133 @@ const App: React.FC = () => {
       <div aria-hidden className="pointer-events-none absolute -top-32 right-12 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/20 animate-float-slow" />
       <div aria-hidden className="pointer-events-none absolute bottom-[-10rem] left-[-6rem] h-96 w-96 rounded-full bg-orange-300/20 blur-[120px] dark:bg-orange-500/20 animate-float-slow" />
       <div className="relative isolate min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 md:flex-row md:items-start md:gap-8">
-          <aside className="flex flex-col gap-6 rounded-3xl border border-white/60 bg-white/70 p-6 shadow-2xl shadow-amber-500/20 backdrop-blur-xl md:w-72 dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+        <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6">
+          <header className="flex flex-col gap-4 rounded-3xl border border-white/60 bg-white/70 px-6 py-5 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Mission Control</p>
-              <h2 className="mt-3 text-2xl font-black uppercase tracking-wide text-slate-900 dark:text-white">Command Deck</h2>
+              <p className="text-xs uppercase tracking-[0.5em] text-amber-600 dark:text-amber-200">Campaign Hub</p>
+              <h1 className="text-3xl font-black uppercase tracking-wide text-slate-900 dark:text-white">TableTorch Control Center</h1>
             </div>
-            <div className="rounded-2xl border border-white/60 bg-white/60 p-4 shadow-lg shadow-amber-500/20 dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-              <p className="text-xs uppercase tracking-[0.5em] text-slate-600 dark:text-slate-400">Logged in</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{user.displayName}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Ready for launch</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-2xl border border-white/60 bg-white/60 px-4 py-2 text-left shadow dark:border-slate-800/70 dark:bg-slate-950/70">
+                <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Signed in</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{user.displayName}</p>
+              </div>
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-200/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                aria-pressed={theme === 'dark'}
+              >
+                <span aria-hidden>{theme === 'dark' ? '🌙' : '🌞'}</span>
+                {themeLabel}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
             </div>
-            <nav className="space-y-3">
-              <button className={navButtonClasses('join')} onClick={() => setActiveView('join')}>
-                <span>Join Campaign</span>
-                <span className="text-[10px] tracking-[0.4em] text-slate-800/70 transition group-hover:text-slate-900/90 dark:text-amber-200/80 dark:group-hover:text-amber-100">START</span>
-              </button>
-              <button className={navButtonClasses('manage')} onClick={() => setActiveView('manage')}>
-                <span>Manage Campaigns</span>
-                <span className="text-[10px] tracking-[0.4em] text-slate-800/70 transition group-hover:text-slate-900/90 dark:text-amber-200/80 dark:group-hover:text-amber-100">HANGAR</span>
-              </button>
-              <button className={navButtonClasses('create')} onClick={() => setActiveView('create')}>
-                <span>Create Campaign</span>
-                <span className="text-[10px] tracking-[0.4em] text-slate-800/70 transition group-hover:text-slate-900/90 dark:text-amber-200/80 dark:group-hover:text-amber-100">NEW</span>
-              </button>
-            </nav>
-            <div className="mt-auto space-y-2 text-xs text-slate-600 dark:text-slate-400">
-              <p>Need a room code? Ask your DM to share their campaign key.</p>
-              <p>Switch tabs to manage, create, or join adventures.</p>
-            </div>
-          </aside>
-          <section className="flex-1 space-y-6">
-            <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/60 bg-white/70 px-6 py-4 shadow-xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+          </header>
+          <div className="grid flex-1 gap-6 lg:grid-cols-[18rem,1fr]">
+            <aside className="flex flex-col gap-4 rounded-3xl border border-white/60 bg-white/70 p-6 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
               <div>
-                <p className="text-xs uppercase tracking-[0.5em] text-amber-600 dark:text-amber-200">Campaign Control</p>
-                <h1 className="text-3xl font-black uppercase tracking-wide text-slate-900 dark:text-white">TableTorch</h1>
+                <p className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Workspace</p>
+                <h2 className="mt-2 text-lg font-black uppercase tracking-wide text-slate-900 dark:text-white">Campaign Actions</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Switch tabs to jump between joining, managing, or creating adventures.</p>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-200/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-200/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  aria-pressed={theme === 'dark'}
-                >
-                  <span aria-hidden>{theme === 'dark' ? '🌙' : '🌞'}</span>
-                  {themeLabel}
-                </button>
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-rose-400/70 bg-rose-200/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 transition hover:bg-rose-200/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-100 dark:hover:bg-rose-500/30"
-                  onClick={handleLogout}
-                >
-                  Logout
-                </button>
-              </div>
-            </header>
-            {statusMessage && (
-              <div className="rounded-3xl border border-amber-300/60 bg-amber-200/40 px-5 py-3 text-sm text-amber-900 shadow-lg shadow-amber-500/20 backdrop-blur-xl dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100">
-                {statusMessage}
-              </div>
-            )}
-            <div className="flex-1 rounded-3xl border border-white/60 bg-white/75 p-6 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-            {activeView === 'join' && (
-              <div className="space-y-6">
-                <h2 className="text-3xl font-black uppercase tracking-wide text-slate-900 dark:text-white">Join Campaign</h2>
-                <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
-                  Enter the campaign key provided by your Dungeon Master to hop into their room.
-                </p>
-                <form onSubmit={handleJoinByKey} className="space-y-4">
-                  <label className="block text-xs uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
-                    Campaign Key
-                    <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                      <input
-                        value={joinKey}
-                        onChange={(event) => setJoinKey(event.target.value)}
-                        placeholder="e.g. A1B2C3"
-                        className="flex-1 rounded-xl border border-white/70 bg-white/60 px-4 py-3 text-sm uppercase tracking-[0.3em] text-slate-900 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:border-slate-800/70 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-amber-400 dark:focus:ring-amber-400/30"
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-xl border border-amber-400/70 bg-amber-300/80 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-                      >
-                        Join Room
-                      </button>
-                    </div>
-                  </label>
-                  {joinError && <p className="text-xs font-semibold text-rose-500 dark:text-rose-300">{joinError}</p>}
-                </form>
-                <div className="rounded-2xl border border-white/60 bg-white/60 p-4 shadow-lg shadow-amber-500/10 dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Active Rooms</h3>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-600 transition hover:text-amber-700 dark:text-amber-200 dark:hover:text-amber-100"
-                      onClick={refreshLobby}
-                    >
-                      Refresh
-                    </button>
+              <nav className="space-y-2">
+                <button className={navButtonClasses('join')} onClick={() => setActiveView('join')}>
+                  <div className="flex flex-col">
+                    <span>Join Campaign</span>
+                    <span className="text-[10px] font-normal uppercase tracking-[0.3em] text-slate-700 transition group-hover:text-slate-900 dark:text-amber-200/80 dark:group-hover:text-amber-100">Enter a key or pick a room</span>
                   </div>
-                  <ul className="max-h-48 space-y-2 overflow-y-auto pr-1 text-sm">
-                    {lobbySessions.map((session) => (
-                      <li key={session.id} className="rounded-xl border border-white/60 bg-white/60 p-3 shadow dark:border-slate-800/70 dark:bg-slate-950/60">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-slate-900 dark:text-white">{session.name}</p>
-                            <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Key: {session.id}</p>
-                          </div>
+                </button>
+                <button className={navButtonClasses('manage')} onClick={() => setActiveView('manage')}>
+                  <div className="flex flex-col">
+                    <span>Manage Campaigns</span>
+                    <span className="text-[10px] font-normal uppercase tracking-[0.3em] text-slate-700 transition group-hover:text-slate-900 dark:text-amber-200/80 dark:group-hover:text-amber-100">Browse maps and sessions</span>
+                  </div>
+                </button>
+                <button className={navButtonClasses('create')} onClick={() => setActiveView('create')}>
+                  <div className="flex flex-col">
+                    <span>Create Campaign</span>
+                    <span className="text-[10px] font-normal uppercase tracking-[0.3em] text-slate-700 transition group-hover:text-slate-900 dark:text-amber-200/80 dark:group-hover:text-amber-100">Spin up a new world</span>
+                  </div>
+                </button>
+              </nav>
+            </aside>
+            <section className="flex-1 space-y-4">
+              {statusMessage && (
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 dark:text-amber-200">{statusMessage}</p>
+              )}
+              <div className="flex-1 rounded-3xl border border-white/60 bg-white/75 p-6 shadow-2xl shadow-amber-500/20 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+                {activeView === 'join' && (
+                  <div className="space-y-6">
+                    <h2 className="text-3xl font-black uppercase tracking-wide text-slate-900 dark:text-white">Join Campaign</h2>
+                    <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
+                      Enter the campaign key provided by your Dungeon Master to hop into their room.
+                    </p>
+                    <form onSubmit={handleJoinByKey} className="space-y-4">
+                      <label className="block text-xs uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">
+                        Campaign Key
+                        <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                          <input
+                            value={joinKey}
+                            onChange={(event) => setJoinKey(event.target.value)}
+                            placeholder="e.g. A1B2C3"
+                            className="flex-1 rounded-xl border border-white/70 bg-white/60 px-4 py-3 text-sm uppercase tracking-[0.3em] text-slate-900 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:border-slate-800/70 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-amber-400 dark:focus:ring-amber-400/30"
+                          />
                           <button
-                            type="button"
-                            className="rounded-lg border border-amber-400/70 bg-amber-300/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
-                            onClick={() => handleJoinSession(session)}
+                            type="submit"
+                            className="rounded-xl border border-amber-400/70 bg-amber-300/80 px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
                           >
-                            Join
+                            Join Room
                           </button>
                         </div>
-                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                          Campaign: {session.campaignName ?? 'Unknown'} • Map: {session.mapName ?? 'Unknown'}
-                        </p>
-                      </li>
-                    ))}
-                    {lobbySessions.length === 0 && (
-                      <li className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
-                        No active rooms yet.
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-            )}
+                      </label>
+                      {joinError && <p className="text-xs font-semibold text-rose-500 dark:text-rose-300">{joinError}</p>}
+                    </form>
+                    <div className="rounded-2xl border border-white/60 bg-white/60 p-4 shadow-lg shadow-amber-500/10 dark:border-slate-800/70 dark:bg-slate-950/70 dark:shadow-black/40">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-xs uppercase tracking-[0.4em] text-slate-600 dark:text-slate-400">Active Rooms</h3>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-600 transition hover:text-amber-700 dark:text-amber-200 dark:hover:text-amber-100"
+                          onClick={refreshLobby}
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                      <ul className="max-h-48 space-y-2 overflow-y-auto pr-1 text-sm">
+                        {lobbySessions.map((session) => (
+                          <li key={session.id} className="rounded-xl border border-white/60 bg-white/60 p-3 shadow dark:border-slate-800/70 dark:bg-slate-950/60">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="font-semibold text-slate-900 dark:text-white">{session.name}</p>
+                                <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400">Key: {session.id}</p>
+                              </div>
+                              <button
+                                type="button"
+                                className="rounded-lg border border-amber-400/70 bg-amber-300/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-900 transition hover:bg-amber-300/90 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100 dark:hover:bg-amber-400/30"
+                                onClick={() => handleJoinSession(session)}
+                              >
+                                Join
+                              </button>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                              Campaign: {session.campaignName ?? 'Unknown'} • Map: {session.mapName ?? 'Unknown'}
+                            </p>
+                          </li>
+                        ))}
+                        {lobbySessions.length === 0 && (
+                          <li className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+                            No active rooms yet.
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
             {activeView === 'manage' && (
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1433,7 +1433,8 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-        </section>
+            </section>
+          </div>
         {showMapWizard && selectedCampaign && (
           <MapCreationWizard
             campaign={selectedCampaign}
