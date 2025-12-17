@@ -3,7 +3,7 @@
 This glossary summarises the major UI building blocks that power the TableTorch demo app. Use these shared names when coordinating future updates or documentation. Each entry calls out the component, its purpose, and where it lives.
 
 ## Application Shell & Landing
-- **App Shell** – Handles authentication state, campaign/map/session loading, and switches between DM, player, creation, and admin views. `apps/pages/src/App.tsx`
+- **Control Center Shell** – Handles authentication state, campaign/map/session loading, and switches between DM, player, creation, and admin views. It renders the post-login dashboard chrome (header, campaign actions sidebar, status stripe) plus the Join/Manage/Create tabs. `apps/pages/src/App.tsx`
 - **Landing Experience** – Marketing hero, feature grid, and authentication prompt that greet unauthenticated visitors. `apps/pages/src/components/LandingPage.tsx`
   - **Hero Header** – Top banner with logo lockup and theme toggle button. `LandingPage.tsx`
   - **Feature Highlight Grid** – Two-column card grid that lists key product selling points. `LandingPage.tsx`
